@@ -508,14 +508,14 @@ function vAccueil(root){
 /* ---------- Tâches ---------- */
 function vTaches(root){
   const who = S.ui.tWho || S.me || "Gabriel";
-  const list = who === "Terminées" ? null : S.d.tasks.filter(t => (who === "Tous" || t.who === who) && (!t.done || t.doneAt === today()));
+  const list = who === "Terminées" ? null : S.d.tasks.filter(t => (who === "Tous" || t.who === who) && !t.done);
   const counts = Object.fromEntries(OWNERS.map(p => [p, openTasks().filter(t => t.who === p).length])); counts["Tous"] = openTasks().length; counts["Terminées"] = S.d.tasks.filter(t => t.done).length;
-  root.appendChild(head("Tâches", "Une tâche, une seule personne. Les tâches cochées passent dans Terminées le lendemain.", [addBtn("Ajouter une tâche", () => editTask({}))]));
-  const f = el("div","filters"); f.appendChild(chipBar(OWNERS.concat(["Tous","Terminées"]).map(p => [p,p]), who, v => { S.ui.tWho = v; remember(); render(); }, counts)); root.appendChild(f);
+  root.appendChild(head("Tâches", "Une tâche, une seule personne. Une tâche cochée part dans les archives.", [addBtn("Ajouter une tâche", () => editTask({}))]));
+  const f = el("div","filters"); f.appendChild(chipBar(OWNERS.concat(["Tous","Terminées"]).map(p => [p, p === "Terminées" ? "Archives" : p]), who, v => { S.ui.tWho = v; remember(); render(); }, counts)); root.appendChild(f);
   if (who === "Terminées"){
     const done = S.d.tasks.filter(t => t.done).sort((a,b) => (b.doneAt||"").localeCompare(a.doneAt||""));
     const {w, tb} = table(["Terminée le","Personne","Client","Tâche","Note",""]);
-    if (!done.length) root.appendChild(el("p","empty","Aucune tâche terminée."));
+    if (!done.length) root.appendChild(el("p","empty","Aucune tâche archivée."));
     done.forEach(t => { const tr = el("tr","row done"); tr.onclick = () => openTask(t); td(tr, fmtFR(t.doneAt),"nw"); td(tr, t.who); td(tr, clientTag(t.client),"nw"); td(tr, t.title,"ttl w"); td(tr, el("div","note",t.note)); const b = btn("Rouvrir","sm", e => { e.stopPropagation(); patch("tasks", t.id, {done:false, doneAt:""}); }); b.disabled = !writable(); td(tr, b); tb.appendChild(tr); });
     root.appendChild(w); return;
   }
@@ -528,7 +528,7 @@ function vTaches(root){
     rows.forEach(t => {
       const n = t.done ? 0 : lateDays(t.date);
       const tr = el("tr","row"+(t.done ? " done" : "")+(lateClass(n) ? " r"+lateClass(n) : "")); tr.onclick = () => openTask(t);
-      td(tr, checkbox(t.done, v => patch("tasks", t.id, {done:v, doneAt: v ? today() : ""}).then(() => v && toast("Tâche faite."))));
+      td(tr, checkbox(t.done, v => patch("tasks", t.id, {done:v, doneAt: v ? today() : ""}).then(() => v && toast("Tâche faite, rangée dans les archives."))));
       td(tr, clientTag(t.client),"nw hm"); mo(td(tr, t.title,"ttl w"), [t.client, n ? n+" j de retard" : ""].filter(Boolean).join(", ")); td(tr, t.date ? fmtD(t.date) : "—","nw"); td(tr, n ? n+" j" : "","nw hm"); td(tr, el("div","note",t.note),"hm");
       if (who === "Tous") td(tr, t.who,"nw");
       tb.appendChild(tr);
@@ -742,23 +742,16 @@ function vAgenda(root){
   const next = btn("›","icon", () => step(1)); next.setAttribute("aria-label","Période suivante");
   root.appendChild(head(title, "Agenda de l’agence", [prev, btn("Aujourd’hui","", () => { S.ui.agSel = t0; S.ui.agCursor = null; render(); }), next,
     segm([["month","Mois"],["week","Semaine"],["list","Liste"]], v, x => { S.ui.agView = x; remember(); render(); }), addBtn("Ajouter", () => newOnDay(S.ui.agSel))]));
-  /* Filtres */
-  const f = el("div","filters");
-  const g1 = el("div","fgroup"); g1.appendChild(el("label","flabel","Client")); const sel = el("select","pick"); sel.id = "ag-client"; g1.querySelector("label").htmlFor = "ag-client";
-  [["","Tous les clients"]].concat(clientNames().map(n => [n,n])).forEach(([val,l]) => { const o = el("option",null,l); o.value = val; sel.appendChild(o); }); sel.value = S.ui.agClient; sel.onchange = () => { S.ui.agClient = sel.value; if (sel.value === AGENCE && !S.ui.agLayers.includes("posts")) S.ui.agLayers = S.ui.agLayers.concat("posts"); remember(); render(); }; g1.appendChild(sel); f.appendChild(g1);
-  const g2 = el("div","fgroup"); g2.appendChild(el("span","flabel","Qui")); g2.appendChild(chipBar([["","Tous"]].concat(PEOPLE.map(p => [p,p])), S.ui.agWho, x => { S.ui.agWho = x; remember(); render(); })); f.appendChild(g2);
-  const qb = btn("Tournages, tous clients","", () => { S.ui.agClient = ""; S.ui.agWho = ""; S.ui.agLayers = ["events"]; S.ui.agTypes = ["Tournage"]; remember(); render(); }); qb.classList.add("right"); f.appendChild(qb);
+  /* Filtres : quatre menus déroulants */
+  const f = el("div","filters ag-f");
+  const dd = (id, label, opts, val, on) => { const g = el("div","fgroup"); const lb = el("label","flabel",label); lb.htmlFor = id; const s = el("select","pick"); s.id = id;
+    opts.forEach(([v,l]) => { const o = el("option",null,l); o.value = v; s.appendChild(o); }); s.value = val; s.onchange = () => { on(s.value); remember(); render(); }; g.append(lb, s); f.appendChild(g); };
+  dd("ag-client","Client", [["","Tous les clients"]].concat(clientNames().map(n => [n,n])), S.ui.agClient, x => { S.ui.agClient = x; if (x === AGENCE && !S.ui.agLayers.includes("posts")) S.ui.agLayers = S.ui.agLayers.concat("posts"); });
+  dd("ag-who","Qui", [["","Tout le monde"]].concat(PEOPLE.map(p => [p,p])), S.ui.agWho, x => { S.ui.agWho = x; });
+  const allL = LAYERS.map(x => x[0]);
+  dd("ag-layer","Afficher", [["","Tout"]].concat(LAYERS), S.ui.agLayers.length === 1 ? S.ui.agLayers[0] : "", x => { S.ui.agLayers = x ? [x] : allL.slice(); if (x !== "events") S.ui.agTypes = EV_TYPES.slice(); });
+  if (S.ui.agLayers.includes("events")) dd("ag-type","Type", [["","Tous les types"]].concat(EV_TYPES.map(t => [t,t])), S.ui.agTypes.length === 1 ? S.ui.agTypes[0] : "", x => { S.ui.agTypes = x ? [x] : EV_TYPES.slice(); });
   root.appendChild(f);
-  const f2 = el("div","filters"); f2.style.paddingTop = "0";
-  const g3 = el("div","fgroup lay"); g3.appendChild(el("span","flabel","Calques"));
-  LAYERS.forEach(([k,l]) => { const b = el("button","chip"); const sw = el("span","sw "+({tasks:"k-task",cevents:"k-cevent",posts:"k-post",keydates:"k-keydate"}[k]||"")); b.append(sw, document.createTextNode(l)); b.setAttribute("aria-pressed", String(S.ui.agLayers.includes(k)));
-    b.onclick = () => { const on = S.ui.agLayers.includes(k); S.ui.agLayers = on ? S.ui.agLayers.filter(x => x !== k) : S.ui.agLayers.concat(k); remember(); render(); }; g3.appendChild(b); });
-  f2.appendChild(g3);
-  if (S.ui.agLayers.includes("events")){ const g4 = el("div","fgroup"); g4.appendChild(el("span","flabel","Type d’événement"));
-    EV_TYPES.forEach(t => { const b = el("button","chip",t); b.setAttribute("aria-pressed", String(S.ui.agTypes.includes(t) && S.ui.agTypes.length < EV_TYPES.length));
-      b.onclick = () => { const on = S.ui.agTypes.includes(t); if (on && S.ui.agTypes.length === 1) S.ui.agTypes = EV_TYPES.slice(); else if (S.ui.agTypes.length === EV_TYPES.length) S.ui.agTypes = [t]; else S.ui.agTypes = on ? S.ui.agTypes.filter(x => x !== t) : S.ui.agTypes.concat(t); remember(); render(); }; g4.appendChild(b); });
-    f2.appendChild(g4); }
-  root.appendChild(f2);
   const items = agendaItems(); const map = {}; items.forEach(i => (map[i.date] = map[i.date] || []).push(i));
   if (v === "month"){
     const dw = el("div","dow"); ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"].forEach(d => dw.appendChild(el("span",null,d)));
@@ -796,12 +789,6 @@ function vAgenda(root){
     days.forEach(k => { const d = parseISO(k); const row = el("div","lday"); const dd = el("div","ldate"); dd.append(el("b",null,fmtD(k)), el("span",null,dow(k)));
       const its = el("div","litems"); map[k].forEach(i => its.appendChild(lrow(i))); row.append(dd, its); root.appendChild(row); });
   }
-  /* Légende */
-  const lg = el("section","legend"); lg.setAttribute("aria-label","Légende des clients");
-  const present = new Set(items.map(i => i.client).filter(Boolean));
-  clientsAll().filter(c => present.has(c.name) || S.ui.agClient === c.name).forEach(c => { const b = el("button"); const dt = el("span","dot"); dt.style.setProperty("--c", c.color || colorOf(c.name)); b.append(dt, document.createTextNode(c.name)); b.setAttribute("aria-pressed", String(S.ui.agClient === c.name)); b.onclick = () => { S.ui.agClient = S.ui.agClient === c.name ? "" : c.name; remember(); render(); }; lg.appendChild(b); });
-  root.appendChild(lg);
-  root.appendChild(el("p","status", plural(items.length,"élément")+" avec ces filtres."));
   if (S.ui.agClient === AGENCE) agAgence(root, iso(new Date(y, m, 1)).slice(0,7));
 }
 /* Com de l'agence : ce qui était l'onglet Éditorial agence, affiché quand le filtre Client est sur Agence Gacolet */
