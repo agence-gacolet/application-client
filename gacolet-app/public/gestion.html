@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>Gacolet</title>
 <meta name="theme-color" content="#090908">
 <meta name="robots" content="noindex">
@@ -98,5 +98,8 @@
   };
 })();
 </script>
+<script>/* Pas de zoom au pincement ni au double appui : comportement d’une app */
+["gesturestart","gesturechange","gestureend"].forEach(t => document.addEventListener(t, e => e.preventDefault(), { passive: false }));
+document.addEventListener("touchmove", e => { if (e.touches && e.touches.length > 1) e.preventDefault(); }, { passive: false });</script>
 </body>
 </html>
