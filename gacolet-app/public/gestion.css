@@ -675,3 +675,39 @@ details.box[open] summary::after{content:"\2212"}
 .fi-chip{font-size:12.5px;color:var(--ink-2);white-space:nowrap}
 .fi-chip b{display:inline-block;min-width:22px;padding:1px 5px;margin-right:2px;border-radius:5px;background:var(--lemon);color:#0E0E0D;font-size:11px;text-align:center}
 .fi-tw .note{display:block;-webkit-line-clamp:unset;line-clamp:unset;overflow:visible;white-space:pre-wrap;min-width:160px;max-width:300px}
+/* Profil au clic sur une photo */
+.av-click{cursor:pointer}
+.av.av-click:hover{outline:2px solid var(--lemon);outline-offset:2px}
+.wa-name{cursor:pointer}
+.pf-modal{text-align:center;max-width:380px}
+.pf-modal .pf-av{margin:4px auto 14px;font-size:46px}
+.pf-modal h3{margin:0}
+.pf-role{margin:4px 0 14px;color:var(--muted);font-size:13.5px}
+.pf-dl{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;text-align:left;margin:0 auto 16px;max-width:300px;font-size:14px}
+.pf-dl dt{color:var(--muted)}
+.pf-dl dd{margin:0}
+.pf-dl a{color:var(--lemon)}
+.pf-modal .actions{justify-content:center}
+/* Pastilles clients adoucies */
+.av.av-soft{border:1px solid transparent;font-weight:700}
+.av-logo{border:1px solid var(--line-2)}
+/* Messages : trois points et menu */
+.wa-msgs{padding:14px 28px 18px}
+.wa-line{position:relative}
+.wa-line .wa-col .msg-a{display:none!important}
+.wa-dots{flex:none;align-self:center;width:28px;height:28px;border:0;border-radius:50%;background:none;color:var(--muted);display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;opacity:0;transition:opacity .12s}
+.wa-dots svg{width:18px;height:18px;fill:currentColor}
+.wa-line:hover .wa-dots,.wa-dots:focus-visible{opacity:1}
+.wa-dots:hover{background:#232321;color:var(--ink)}
+.wa-line.mine .wa-dots{order:-1}
+@media (hover:none),(max-width:900px){.wa-dots{opacity:.55}}
+.wa-menu{position:fixed;z-index:200;min-width:190px;display:flex;flex-direction:column;padding:6px;border-radius:12px;background:#1F1F1D;border:1px solid var(--line-2);box-shadow:0 12px 32px rgba(0,0,0,.5)}
+.wa-menu button{background:none;border:0;text-align:left;padding:9px 12px;border-radius:8px;color:var(--ink);font:inherit;font-size:14px;cursor:pointer}
+.wa-menu button:hover{background:#2A2A27}
+.wa-menu button.rm{color:#FF5A4E}
+.wa-fwd{font-size:11.5px;font-style:italic;opacity:.65}
+.fw-modal input[type=search]{width:100%;margin:6px 0 10px}
+.fw-list{display:flex;flex-direction:column;max-height:52vh;overflow:auto;margin:0 -6px 12px}
+.fw-row{display:flex;align-items:center;gap:12px;padding:8px 6px;border:0;border-radius:10px;background:none;color:var(--ink);font:inherit;font-size:14.5px;text-align:left;cursor:pointer}
+.fw-row:hover{background:#232321}
+@media (max-width:640px){.wa-msgs{padding:12px 10px 16px}}
