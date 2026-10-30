@@ -481,20 +481,18 @@ function vAccueil(root){
   else if (hr < 12) open = wd === 1 ? "Nouvelle semaine, le café d’abord." : wd === 5 ? "Dernière ligne droite avant le week-end." : "Le café d’abord, le reste suivra.";
   else if (hr < 14) open = "Une pause, puis on reprend tranquillement.";
   else if (hr < 18) open = "Encore un bel après-midi devant toi.";
-  else open = "La journée touche à sa fin.";
+  else open = "La journée touche à sa fin, beau travail.";
   const evTxt = e => (e.type === "Tournage" ? "tournage chez " : e.type === "Rendez-vous" ? "rendez-vous avec " : "") + e.client + (e.time ? " à " + fmtTime(e.time) : "");
   const joinFr = a => a.length < 2 ? a.join("") : a.slice(0, -1).join(", ") + " et " + a[a.length - 1];
   const parts = [];
   const evs = hr >= 18 || weekend ? evTomorrow : evToday;
   if (evs.length) parts.push((hr >= 18 || weekend ? "Demain, " : "Aujourd’hui, ") + joinFr(evs.slice(0, 2).map(evTxt)) + (evs.length > 2 ? ", et " + plural(evs.length - 2, "autre rendez-vous", "autres rendez-vous") : "") + ".");
-  const todo = [];
-  if (late.length) todo.push(plural(late.length, "tâche attend", "tâches attendent") + " depuis quelques jours");
-  else if (todayT.length) todo.push(plural(todayT.length, "tâche prévue", "tâches prévues") + " aujourd’hui");
-  if (me === "Matis" && ru.length) todo.push(plural(ru.length, "rush à monter", "rushs à monter"));
-  if (me === "Gabriel" && rel.length) todo.push(plural(rel.length, "relance à passer", "relances à passer"));
-  if (me === "Clara" && prep.length) todo.push(plural(prep.length, "temps fort à préparer", "temps forts à préparer"));
-  if (todo.length) { const s = joinFr(todo); parts.push(s.charAt(0).toUpperCase() + s.slice(1) + "."); }
-  else if (!evs.length) parts.push("Rien d’urgent, tu as de la marge.");
+  const first = late.concat(todayT)[0];
+  if (first) parts.push("Premier sur la liste : " + first.title.charAt(0).toLowerCase() + first.title.slice(1) + (first.client && first.client !== "Agence Gacolet" && first.client !== "Tous clients" ? " pour " + first.client : "") + ".");
+  if (me === "Matis" && ru.length) parts.push(ru.length > 1 ? "Des rushs t’attendent en salle de montage." : "Un rush t’attend en salle de montage.");
+  if (me === "Gabriel" && rel.length) parts.push("Quelques relances à passer quand tu as un moment.");
+  if (me === "Clara" && prep.length) parts.push(prep.length > 1 ? "Des temps forts clients à préparer." : "Un temps fort client à préparer.");
+  if (!first && !evs.length) parts.push("Rien d’urgent, tu as de la marge.");
   const w = el("section","welcome");
   const top = el("div","wl-top");
   const mk = document.createElementNS("http://www.w3.org/2000/svg","svg"); mk.setAttribute("viewBox","140 158 561 281"); mk.setAttribute("aria-hidden","true");
@@ -503,7 +501,7 @@ function vAccueil(root){
   w.appendChild(el("p","wl-say", open + " " + parts.join(" ")));
   const next = [];
   evs.forEach(e => next.push({a: e.time ? fmtTime(e.time) : (hr >= 18 || weekend ? "Demain" : "Aujourd’hui"), b: e.client, c: e.title || e.type, col: colorOf(e.client), go: () => openEvent(e)}));
-  late.concat(todayT.filter(t => !late.includes(t))).forEach(t => next.push({a: fmtD(t.date), b: t.title, c: t.client || "", col: colorOf(t.client), late: lateDays(t.date) > 0, go: () => openTask(t)}));
+  late.concat(todayT.filter(t => !late.includes(t))).forEach(t => next.push({a: fmtD(t.date), b: t.title, c: t.client || "", col: colorOf(t.client), late: false, go: () => openTask(t)}));
   if (next.length){
     const n = el("div","wl-next"); n.appendChild(el("h2","wl-h", hr >= 18 || weekend ? "Pour demain" : "Pour commencer"));
     next.slice(0, 4).forEach(x => { const r = el("button","hrow"+(x.late ? " late" : "")); r.style.setProperty("--c", x.col); r.appendChild(el("span","hd",x.a)); const m = el("span","hm2"); m.appendChild(el("b",null,x.b)); if (x.c) m.appendChild(el("span",null,x.c)); r.appendChild(m); r.appendChild(el("span","ht","")); r.onclick = x.go; n.appendChild(r); });
