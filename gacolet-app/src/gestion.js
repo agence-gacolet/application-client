@@ -98,7 +98,7 @@ module.exports = function (app, { db, wrap, root }) {
   // before : document actuel (ou null), after : document voulu (ou null pour une suppression), keys : champs modifiés
   function allowed(u, col, before, after, keys) {
     if (col === "messages") {
-      if (before && before.who !== u.name) return "Tu ne peux retirer que tes propres messages.";
+      if (before && before.who !== u.name && !(u.role === "owner" && !after)) return "Tu ne peux retirer que tes propres messages.";
       if (after && after.who !== u.name) return "Message refusé.";
       return "";
     }
