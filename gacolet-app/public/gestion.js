@@ -749,12 +749,13 @@ function vAgenda(root){
   let title = [MONTHS[m], String(y)];
   let monday, sunday;
   if (v === "week"){ const base = parseISO(S.ui.agSel); monday = new Date(base); monday.setDate(base.getDate()-((base.getDay()+6)%7)); sunday = new Date(monday); sunday.setDate(monday.getDate()+6);
-    title = ["Semaine du "+monday.getDate()+(monday.getMonth() !== sunday.getMonth() ? " "+MONTHS[monday.getMonth()] : ""), "au "+sunday.getDate()+" "+MONTHS[sunday.getMonth()]]; }
+    title = [monday.getDate()+(monday.getMonth() !== sunday.getMonth() ? " "+MONTHS[monday.getMonth()].slice(0,4)+"." : "")+" au "+sunday.getDate(), MONTHS[sunday.getMonth()]]; }
   const step = dir => { if (v === "week"){ S.ui.agSel = addDays(S.ui.agSel, 7*dir); const s = parseISO(S.ui.agSel); S.ui.agCursor = new Date(s.getFullYear(), s.getMonth(), 1); } else { S.ui.agCursor = new Date(y, m+dir, 1); const s = parseISO(S.ui.agSel); if (s.getMonth() !== S.ui.agCursor.getMonth() || s.getFullYear() !== S.ui.agCursor.getFullYear()) S.ui.agSel = iso(S.ui.agCursor); } render(); };
   const prev = btn("‹","icon", () => step(-1)); prev.setAttribute("aria-label","Période précédente");
   const next = btn("›","icon", () => step(1)); next.setAttribute("aria-label","Période suivante");
   root.appendChild(head(title, "Agenda de l’agence", [prev, btn("Aujourd’hui","", () => { S.ui.agSel = t0; S.ui.agCursor = null; render(); }), next,
     segm([["month","Mois"],["week","Semaine"],["list","Liste"]], v, x => { S.ui.agView = x; remember(); render(); }), addBtn("Ajouter", () => newOnDay(S.ui.agSel))]));
+  root.lastChild.classList.add("ag-head");
   /* Filtres : quatre menus déroulants */
   const f = el("div","filters ag-f");
   const dd = (id, label, opts, val, on) => { const g = el("div","fgroup"); const lb = el("label","flabel",label); lb.htmlFor = id; const s = el("select","pick"); s.id = id;
