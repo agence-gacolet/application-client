@@ -777,3 +777,10 @@ details.box[open] summary::after{content:"\2212"}
 /* Onglets clients Meta : sur plusieurs lignes, plus aérés */
 .mt-tabs{flex-wrap:wrap;overflow:visible;gap:8px;padding:16px 0 18px;margin:4px 0 20px}
 .mt-tabs button{padding:8px 14px}
+/* Salons vocaux */
+.wa-voice{cursor:default}
+.wa-vic{flex:none;width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#232321;color:var(--muted)}
+.wa-vic svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.wa-voice.live .wa-vic{background:color-mix(in srgb, var(--lemon) 18%, #141413);color:var(--lemon);box-shadow:0 0 0 2px color-mix(in srgb, var(--lemon) 40%, transparent)}
+.wa-voice .btn{flex:none;margin-left:auto}
+.wa-voice .wa-rtx{min-width:0;flex:1}
