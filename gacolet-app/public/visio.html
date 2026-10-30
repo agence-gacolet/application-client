@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Visio avec l’Agence Gacolet</title>
+<style>
+@font-face{font-family:"Bebas Neue";src:url("/fonts/bebas-neue.woff2") format("woff2");font-display:swap}
+:root{--bg:#0E0E0D;--surface:#191918;--line:#2A2A27;--ink:#F2F1EC;--muted:#9A9890;--lemon:#C6FF33}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 Inter,system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1180px;margin:0 auto;padding:28px 18px 120px}
+h1{font-family:"Bebas Neue",Impact,sans-serif;font-style:italic;font-weight:400;font-size:clamp(40px,7vw,68px);line-height:.95;margin:6px 0 6px}
+.k{color:var(--muted);font-size:13px;letter-spacing:.08em;text-transform:uppercase}
+.card{max-width:460px;margin:28px 0;padding:22px;border:1px solid var(--line);border-radius:16px;background:var(--surface)}
+label{display:grid;gap:6px;font-size:13px;font-weight:600;color:var(--muted);margin:0 0 14px}
+input{font:inherit;color:var(--ink);background:#232321;border:1px solid var(--line);border-radius:10px;padding:11px 13px}
+button{font:inherit;cursor:pointer}
+.go{background:var(--lemon);color:#0E0E0D;border:0;border-radius:10px;padding:11px 18px;font-weight:700}
+.muted{color:var(--muted)}
+.err{color:#FF7A6E}
+.wrap{display:grid;grid-template-columns:1fr 320px;gap:16px;margin-top:18px}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));align-content:start}
+.tile{position:relative;aspect-ratio:16/9;border-radius:14px;background:#1C1C1A;display:flex;align-items:center;justify-content:center;overflow:hidden;outline:3px solid transparent}
+.tile.talk{outline-color:var(--lemon)}
+.tile video{width:100%;height:100%;object-fit:contain;background:#000}
+.tile video.mirror{transform:scaleX(-1)}
+.av{width:84px;height:84px;border-radius:50%;background:#2A2A27;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:30px;color:var(--lemon)}
+.name{position:absolute;left:10px;bottom:10px;padding:4px 10px;border-radius:999px;background:rgba(0,0,0,.6);font-size:13px;font-weight:600}
+.ctl{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;gap:12px;padding:14px;background:linear-gradient(transparent,rgba(0,0,0,.85))}
+.b{width:52px;height:52px;border-radius:50%;border:0;background:#2A2A27;color:var(--ink);display:flex;align-items:center;justify-content:center}
+.b svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.b.on{background:var(--lemon);color:#0E0E0D}
+.b.warn{background:#3A1E1C;color:#FF5A4E}
+.b.end{background:#E5483D;color:#fff}
+.b.end svg{fill:currentColor;stroke:none}
+.chat{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:14px;background:var(--surface);min-height:360px;max-height:70vh}
+.chat h2{margin:0;padding:12px 14px;font-size:14px;border-bottom:1px solid var(--line)}
+.msgs{flex:1;overflow:auto;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.m{max-width:85%;padding:7px 10px;border-radius:12px;background:#232321;font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}
+.m b{display:block;font-size:12px;color:var(--lemon)}
+.m.mine{align-self:flex-end;background:var(--lemon);color:#0E0E0D}
+.chat form{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line)}
+.chat input{flex:1;min-width:0}
+@media (max-width:860px){.wrap{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main id="app">
+  <p class="k">Agence Gacolet</p>
+  <h1 id="title">Visio</h1>
+  <p class="muted" id="sub">Chargement…</p>
+</main>
+<script>
+(() => {
+  const TOK = new URLSearchParams(location.search).get("i") || "";
+  const $ = s => document.querySelector(s);
+  const el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; };
+  const api = async (m, p, b) => { const r = await fetch(p, { method: m, headers: { "Content-Type": "application/json", "X-GC-Guest": TOK }, body: b ? JSON.stringify(b) : undefined }); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || "Erreur " + r.status); return j; };
+  const ICO = {
+    mic:'<svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
+    micOff:'<svg viewBox="0 0 24 24"><path d="M15 9.3V6a3 3 0 0 0-5.7-1.3M9 9v2a3 3 0 0 0 4.6 2.5M5 11a7 7 0 0 0 11.3 5.5M19 11a7 7 0 0 1-.6 2.8M12 18v3M4 4l16 16"/></svg>',
+    cam:'<svg viewBox="0 0 24 24"><rect x="3" y="6.5" width="13" height="11" rx="2"/><path d="m16 10.5 5-3v9l-5-3"/></svg>',
+    screen:'<svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="12" rx="1.5"/><path d="M8 20h8M12 16.5V20M12 13V8M9.5 10.5 12 8l2.5 2.5"/></svg>',
+    leave:'<svg viewBox="0 0 24 24"><path d="M4.5 13.5c4.6-4 10.4-4 15 0l-1.8 2.3-3-1.2v-2.2a9 9 0 0 0-5.4 0v2.2l-3 1.2z"/></svg>'
+  };
+  const V = { room: "", pid: "", name: "", local: null, video: null, kind: "", muted: false, peers: new Map(), speak: {}, chat: [] };
+  let INFO = null;
+  const send = (to, data) => api("POST", "/api/rtc/g/signal", { room: V.room, pid: V.pid, to, data }).catch(() => {});
+  function peer(pid, name){
+    if (V.peers.has(pid)) return V.peers.get(pid);
+    const pc = new RTCPeerConnection({ iceServers: [{ urls: ["stun:stun.l.google.com:19302","stun:stun1.l.google.com:19302"] }] });
+    const P = { pid, name, pc, polite: V.pid > pid, makingOffer: false, ignoreOffer: false, stream: new MediaStream(), audio: el("audio"), vs: null };
+    P.audio.autoplay = true; P.audio.srcObject = P.stream; document.body.appendChild(P.audio);
+    V.local.getAudioTracks().forEach(t => pc.addTrack(t, V.local));
+    if (V.video) P.vs = pc.addTrack(V.video, V.local);
+    pc.ontrack = e => { if (!P.stream.getTracks().includes(e.track)) P.stream.addTrack(e.track); e.track.onended = e.track.onmute = e.track.onunmute = draw; P.stream.onremovetrack = draw; meter(pid, P.stream); draw(); };
+    pc.onicecandidate = e => { if (e.candidate) send(pid, { candidate: e.candidate }); };
+    pc.onnegotiationneeded = async () => { try { P.makingOffer = true; await pc.setLocalDescription(); send(pid, { description: pc.localDescription }); } catch(e){} finally { P.makingOffer = false; } };
+    V.peers.set(pid, P); draw(); return P;
+  }
+  async function signal(from, d){
+    const P = V.peers.get(from); if (!P) return; const pc = P.pc;
+    try {
+      if (d.description){ const coll = d.description.type === "offer" && (P.makingOffer || pc.signalingState !== "stable"); P.ignoreOffer = !P.polite && coll; if (P.ignoreOffer) return;
+        await pc.setRemoteDescription(d.description); if (d.description.type === "offer"){ await pc.setLocalDescription(); send(from, { description: pc.localDescription }); } }
+      else if (d.candidate){ try { await pc.addIceCandidate(d.candidate); } catch(e){ if (!P.ignoreOffer) throw e; } }
+    } catch(e){ console.warn(e); }
+  }
+  function drop(pid){ const P = V.peers.get(pid); if (!P) return; try { P.pc.close(); } catch(e){} P.audio.remove(); V.peers.delete(pid); draw(); }
+  async function poll(){
+    const room = V.room, pid = V.pid;
+    while (V.room === room && V.pid === pid){
+      try { const r = await api("GET", "/api/rtc/g/poll?room=" + room + "&pid=" + pid);
+        if (r.gone){ leave(true); break; }
+        for (const ev of r.events || []){
+          if (ev.type === "join") peer(ev.pid, ev.name);
+          else if (ev.type === "leave") drop(ev.pid);
+          else if (ev.type === "signal"){ if (V.peers.has(ev.from)) await signal(ev.from, ev.data); }
+          else if (ev.type === "chat"){ V.chat.push({ name: ev.name, text: ev.text }); drawChat(); }
+        }
+      } catch(e){ await new Promise(r => setTimeout(r, 2000)); }
+    }
+  }
+  let AC = null;
+  function meter(id, stream){
+    if (!stream.getAudioTracks().length) return;
+    try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); const an = AC.createAnalyser(); an.fftSize = 512; AC.createMediaStreamSource(stream).connect(an); const buf = new Uint8Array(an.frequencyBinCount);
+      const tick = () => { if (!V.room || (id !== "me" && !V.peers.has(id))) return; an.getByteFrequencyData(buf); let s = 0; for (const v of buf) s += v; const on = s / buf.length > 18 && !(id === "me" && V.muted);
+        if (on !== !!V.speak[id]){ V.speak[id] = on; document.querySelectorAll('[data-vc="' + id + '"]').forEach(x => x.classList.toggle("talk", on)); } setTimeout(tick, 200); }; tick(); } catch(e){}
+  }
+  async function video(kind){
+    if (V.kind === kind){ stopVideo(); return; }
+    let t; try { const st = kind === "screen" ? await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 } }) : await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } }); t = st.getVideoTracks()[0]; } catch(e){ return; }
+    if (V.video){ const o = V.video; V.local.removeTrack(o); V.local.addTrack(t); V.video = t; V.peers.forEach(P => { if (P.vs) P.vs.replaceTrack(t); else P.vs = P.pc.addTrack(t, V.local); }); o.stop(); }
+    else { V.video = t; V.local.addTrack(t); V.peers.forEach(P => { P.vs = P.pc.addTrack(t, V.local); }); }
+    V.kind = kind; t.onended = () => { if (V.video === t) stopVideo(); }; draw();
+  }
+  function stopVideo(){ if (!V.video) return; const t = V.video; V.video = null; V.kind = ""; V.peers.forEach(P => { if (P.vs){ try { P.pc.removeTrack(P.vs); } catch(e){} P.vs = null; } }); try { V.local.removeTrack(t); } catch(e){} t.stop(); draw(); }
+  function mute(){ V.muted = !V.muted; V.local.getAudioTracks().forEach(t => { t.enabled = !V.muted; }); draw(); }
+  async function leave(silent){
+    if (!V.room) return; const room = V.room, pid = V.pid; [...V.peers.keys()].forEach(drop);
+    if (V.local) V.local.getTracks().forEach(t => t.stop()); V.room = ""; V.pid = "";
+    if (!silent) api("POST", "/api/rtc/g/leave", { room, pid }).catch(() => {});
+    const a = $("#app"); a.textContent = ""; a.append(el("p","k","Agence Gacolet"), el("h1",null,"Merci"), el("p","muted","Vous avez quitté la visio. Vous pouvez fermer cette page ou rouvrir le lien pour revenir."));
+  }
+  const ini = n => String(n || "?").replace(/\(invité\)/, "").trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
+  function tile(id, name, stream, me){
+    const t = el("div","tile"); t.dataset.vc = id; if (V.speak[id]) t.classList.add("talk");
+    const v = stream && stream.getVideoTracks().find(x => x.readyState === "live" && !x.muted);
+    if (v){ const vid = el("video"); vid.autoplay = true; vid.playsInline = true; vid.muted = true; vid.srcObject = new MediaStream([v]); if (me && V.kind === "cam") vid.classList.add("mirror"); t.appendChild(vid); }
+    else t.appendChild(el("div","av", ini(name)));
+    t.appendChild(el("span","name", (me ? name.replace(/ \(invité\)$/, "") + " (vous)" : name) + (me && V.muted ? ", micro coupé" : ""))); return t;
+  }
+  function btn(ico, label, on, fn, cls){ const b = el("button","b" + (on ? " on" : "") + (cls ? " " + cls : "")); b.type = "button"; b.title = label; b.setAttribute("aria-label", label); b.innerHTML = ICO[ico]; b.onclick = fn; return b; }
+  function draw(){
+    const g = $("#grid"); if (!g) return; g.textContent = "";
+    g.appendChild(tile("me", V.name, V.local, true)); V.peers.forEach(P => g.appendChild(tile(P.pid, P.name, P.stream, false)));
+    $("#who").textContent = V.peers.size ? (V.peers.size + 1) + " personnes" : "En attente de l’agence…";
+    const c = $("#ctl"); c.textContent = "";
+    c.append(btn(V.muted ? "micOff" : "mic", V.muted ? "Activer le micro" : "Couper le micro", V.muted, mute, V.muted ? "warn" : ""), btn("cam", "Caméra", V.kind === "cam", () => video("cam")), btn("screen", "Partager l’écran", V.kind === "screen", () => video("screen")), btn("leave", "Quitter", false, () => leave(), "end"));
+  }
+  function drawChat(){ const box = $("#msgs"); if (!box) return; box.textContent = ""; if (!V.chat.length) box.appendChild(el("p","muted","Écrivez ici si le son ne passe pas, ou pour partager un lien."));
+    V.chat.forEach(m => { const d = el("div","m" + (m.mine ? " mine" : "")); if (!m.mine) d.appendChild(el("b",null,m.name)); d.appendChild(document.createTextNode(m.text)); box.appendChild(d); }); box.scrollTop = box.scrollHeight; }
+  async function join(name){
+    try { V.local = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
+    catch(e){ $("#err").textContent = "Le micro est refusé ou introuvable. Autorisez le micro dans votre navigateur, puis réessayez."; return; }
+    let r; try { r = await api("POST", "/api/rtc/g/join", { room: INFO.room, name }); } catch(e){ V.local.getTracks().forEach(t => t.stop()); $("#err").textContent = e.message; return; }
+    Object.assign(V, { room: INFO.room, pid: r.pid, name: r.name });
+    const a = $("#app"); a.textContent = "";
+    const hd = el("div"); hd.append(el("p","k","Agence Gacolet"), el("h1",null,INFO.label), el("p","muted")); hd.lastChild.id = "who"; a.appendChild(hd);
+    const w = el("div","wrap"); const g = el("div","grid"); g.id = "grid";
+    const ch = el("section","chat"); ch.append(el("h2",null,"Discussion")); const ms = el("div","msgs"); ms.id = "msgs"; ch.appendChild(ms);
+    const f = el("form"); const inp = el("input"); inp.placeholder = "Votre message"; inp.maxLength = 2000; const sb = el("button","go","Envoyer"); f.append(inp, sb);
+    f.onsubmit = async e => { e.preventDefault(); const t = inp.value.trim(); if (!t) return; inp.value = ""; V.chat.push({ name: V.name, text: t, mine: true }); drawChat(); try { await api("POST", "/api/rtc/g/chat", { room: V.room, pid: V.pid, text: t }); } catch(x){} };
+    ch.appendChild(f); w.append(g, ch); a.appendChild(w);
+    const c = el("div","ctl"); c.id = "ctl"; document.body.appendChild(c);
+    meter("me", V.local); (r.peers || []).forEach(p => peer(p.pid, p.name)); draw(); drawChat(); poll();
+  }
+  window.addEventListener("beforeunload", () => { if (V.room) fetch("/api/rtc/g/leave", { method: "POST", keepalive: true, headers: { "Content-Type": "application/json", "X-GC-Guest": TOK }, body: JSON.stringify({ room: V.room, pid: V.pid }) }).catch(() => {}); });
+  (async () => {
+    try { INFO = await api("GET", "/api/rtc/g/info"); }
+    catch(e){ $("#sub").textContent = e.message || "Lien d’invitation invalide."; return; }
+    $("#title").textContent = INFO.label; $("#sub").textContent = "Visio avec " + (INFO.by || "l’agence") + ". Le micro est demandé à l’entrée, la caméra reste coupée tant que vous ne l’activez pas.";
+    const c = el("form","card"); const l = el("label",null,"Votre nom"); const i = el("input"); i.required = true; i.maxLength = 40; i.autocomplete = "name"; i.placeholder = "Prénom et nom"; l.appendChild(i);
+    const b = el("button","go","Rejoindre la visio"); const er = el("p","err"); er.id = "err"; c.append(l, b, er);
+    c.onsubmit = e => { e.preventDefault(); if (!i.value.trim()) { i.focus(); return; } b.disabled = true; join(i.value.trim()).finally(() => { b.disabled = false; }); };
+    $("#app").appendChild(c); i.focus();
+  })();
+})();
+</script>
+</body>
+</html>
