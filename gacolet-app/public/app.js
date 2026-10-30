@@ -13,7 +13,9 @@ const hm = t => t ? t.replace(":"," h ") : "";
 const SERVICE = {com:"Réseaux sociaux", meta:"Publicité Facebook et Instagram"};
 
 /* ---------- API ---------- */
-let TOKEN = ls.get("gc-token");
+const APERCU = (() => { try { return new URLSearchParams(location.search).get("apercu") || ""; } catch(e){ return ""; } })();
+let TOKEN = APERCU || ls.get("gc-token");
+if (APERCU) document.addEventListener("DOMContentLoaded", () => { const b = el("div", null, "Aperçu de l’agence : vous voyez l’espace de ce client. Lecture seule."); b.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:999;padding:8px 16px;background:#C6FF33;color:#0E0E0D;font:600 13px Inter,system-ui,sans-serif;text-align:center"; document.body.appendChild(b); });
 async function api(path, opt = {}){
   const headers = Object.assign({}, opt.headers || {});
   if (TOKEN) headers.Authorization = "Bearer " + TOKEN;
@@ -21,7 +23,7 @@ async function api(path, opt = {}){
   if (body && !(body instanceof FormData)){ headers["Content-Type"] = "application/json"; body = JSON.stringify(body); }
   const r = await fetch(path, {method: opt.method || (body ? "POST" : "GET"), headers, body});
   const j = await r.json().catch(() => ({}));
-  if (r.status === 401 && TOKEN){ TOKEN = null; ls.del("gc-token"); start(); throw new Error(j.error || "Session expirée."); }
+  if (r.status === 401 && TOKEN){ TOKEN = null; if (!APERCU) ls.del("gc-token"); start(); throw new Error(j.error || "Session expirée."); }
   if (!r.ok) throw new Error(j.error || "Une erreur est survenue.");
   return j;
 }
