@@ -9,6 +9,10 @@ const COLLS = ["events", "tasks", "commercial", "campaigns", "rushes", "publicat
 
 module.exports = function (app, { db, wrap, admin, root }) {
   const okCol = c => COLLS.includes(c);
+  // Crée la table si besoin (au cas où le schéma n'a pas été appliqué au démarrage).
+  let ready = null;
+  const ensure = () => ready || (ready = db.run("CREATE TABLE IF NOT EXISTS docs (col VARCHAR(40) NOT NULL, id VARCHAR(120) NOT NULL, data MEDIUMTEXT NOT NULL, deleted INT NOT NULL DEFAULT 0, updated_at VARCHAR(30) NOT NULL, PRIMARY KEY (col, id))").catch(e => { ready = null; throw e; }));
+  app.use(["/api/g", "/api/g-import"], (req, res, next) => ensure().then(() => next(), e => res.status(500).json({ error: "Base indisponible.", detail: String(e.message || e).slice(0, 300) })));
   const okId = id => /^[\w.-]{1,120}$/.test(String(id || ""));
   const stamp = () => new Date().toISOString();
   const newId = () => Date.now().toString(36) + crypto.randomBytes(4).toString("hex");
