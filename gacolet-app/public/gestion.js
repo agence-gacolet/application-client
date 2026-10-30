@@ -478,16 +478,17 @@ function vAccueil(root){
   else if (hr < 18) say = wd === 5 ? "Encore quelques heures et c’est le week-end." : "Encore un bel après-midi devant toi.";
   else say = "La journée touche à sa fin. Beau travail aujourd’hui.";
   if (evs.length){ const e = evs[0]; const what = e.type === "Tournage" ? "tournage chez " + e.client : e.type === "Rendez-vous" ? "rendez-vous avec " + e.client : e.client; say += " " + (evening || weekend ? "Demain" : "Aujourd’hui") + ", " + what + (e.time ? " à " + fmtTime(e.time) : "") + "."; }
-  const nb = btn("Nouvelle tâche", "", () => editTask({who:me})); if (!writable()) nb.disabled = true;
-  const dl = fmtDL(t0); root.appendChild(head([hello, me], dl.charAt(0).toUpperCase()+dl.slice(1)+" "+t0.slice(0,4), [nb]));
-  root.appendChild(el("p","hsum say", say));
+  const W = el("section","welcome2");
+  const dl = fmtDL(t0); W.appendChild(el("p","w2-date", dl.charAt(0).toUpperCase()+dl.slice(1)));
+  const h1 = el("h1","w2-h"); h1.append(document.createTextNode(hello + " "), el("span", null, me)); W.appendChild(h1);
+  W.appendChild(el("p","w2-say", say));
   const dated = openTasks().filter(t => t.who === me && isISO(t.date)).sort((a,b) => a.date.localeCompare(b.date));
   const urgent = dated[0] || openTasks().filter(t => t.who === me)[0];
-  const s = el("section","hblock hstart"); s.appendChild(el("h2","hh", urgent ? "On commence par" : "Rien d’urgent"));
+  const s = el("div","w2-start"); s.appendChild(el("h2","hh", urgent ? "On commence par" : "Rien d’urgent"));
   const r = el("button","hrow go"); 
   if (urgent){ r.style.setProperty("--c", colorOf(urgent.client)); r.appendChild(el("span","hd", urgent.date ? fmtD(urgent.date) : "")); const m = el("span","hm2"); m.appendChild(el("b",null,urgent.title)); if (urgent.client && urgent.client !== AGENCE) m.appendChild(el("span",null,urgent.client)); r.appendChild(m); r.onclick = () => openTask(urgent); }
   else { r.appendChild(el("span","hd","")); const m = el("span","hm2"); m.appendChild(el("b",null,"Jeter un œil à l’agenda")); r.appendChild(m); r.onclick = () => go("agenda"); }
-  r.appendChild(el("span","ht","Y aller")); s.appendChild(r); root.appendChild(s);
+  r.appendChild(el("span","ht","Y aller")); s.appendChild(r); W.appendChild(s); root.appendChild(W);
 }
 
 /* ---------- Tâches ---------- */
