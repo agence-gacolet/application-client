@@ -90,6 +90,7 @@ module.exports = function (app, { db, wrap, root }) {
   const canWriteCol = (u, col) => u.role === "owner" || (ACCESS[u.role] && ACCESS[u.role].write.includes(col));
   function visible(u, col, d) {
     if (!canRead(u, col)) return false;
+    if (col === "messages" && String(d.ch || "").startsWith("dm:")) return String(d.ch).slice(3).split("|").includes(u.name);
     if (u.role === "owner") return true;
     if (col === "tasks") return d.who === u.name;
     if (col === "events") return Array.isArray(d.who) && d.who.includes(u.name);
@@ -100,6 +101,8 @@ module.exports = function (app, { db, wrap, root }) {
     if (col === "messages") {
       if (before && before.who !== u.name && !(u.role === "owner" && !after)) return "Tu ne peux retirer que tes propres messages.";
       if (after && after.who !== u.name) return "Message refusé.";
+      if (after && String(after.ch || "").startsWith("dm:") && !String(after.ch).slice(3).split("|").includes(u.name)) return "Conversation privée.";
+      if (before && !after && String(before.ch || "").startsWith("dm:") && before.who !== u.name) return "Conversation privée.";
       return "";
     }
     if (u.role === "owner") return "";
@@ -230,6 +233,18 @@ module.exports = function (app, { db, wrap, root }) {
       u = await db.one("SELECT * FROM users WHERE client_id = ? AND email = ?", [c.id, PREVIEW_MAIL]);
     }
     res.json({ url: "/?apercu=" + u.token });
+  }));
+
+  // ---------- GIF (GIPHY) ----------
+  app.get("/api/g-gifs", auth, wrap(async (req, res) => {
+    const key = process.env.GIPHY_KEY;
+    if (!key) return res.status(503).json({ error: "Les GIF ne sont pas encore activés : il manque la clé GIPHY sur le serveur." });
+    const q = String(req.query.q || "").trim().slice(0, 60);
+    const url = q ? "https://api.giphy.com/v1/gifs/search?api_key=" + encodeURIComponent(key) + "&q=" + encodeURIComponent(q) + "&limit=24&rating=pg-13&lang=fr"
+                  : "https://api.giphy.com/v1/gifs/trending?api_key=" + encodeURIComponent(key) + "&limit=24&rating=pg-13";
+    const r = await fetch(url); if (!r.ok) return res.status(502).json({ error: "GIPHY ne répond pas pour l’instant." });
+    const j = await r.json();
+    res.json({ gifs: (j.data || []).map(g => ({ id: g.id, title: g.title || "", url: g.images && g.images.fixed_height ? g.images.fixed_height.url : "", small: g.images && g.images.fixed_height_small ? g.images.fixed_height_small.url : "" })).filter(g => g.url) });
   }));
 
   // ---------- Données ----------
