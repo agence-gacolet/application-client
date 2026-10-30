@@ -804,17 +804,28 @@ function agAgence(root, m){
 
 /* ---------- Messagerie ---------- */
 const CHANNELS = [["general","Général"],["production","Production"],["reseaux","Réseaux sociaux"],["commercial","Commercial"]];
-function chName(k){ const c = CHANNELS.find(x => x[0] === k); return c ? c[1] : k.replace(/^c:/, ""); }
+function shootLabel(e){ return fmtD(e.date) + ", " + e.client; }
+function chName(k){ if (k.startsWith("t:")){ const e = S.d.events.find(x => x.id === k.slice(2)); return e ? "Tournage " + shootLabel(e) : "Tournage"; } const c = CHANNELS.find(x => x[0] === k); return c ? c[1] : k.replace(/^c:/, ""); }
 function vMessagerie(root){
   const me = S.me || "Gabriel";
-  const ch = S.ui.msgCh || "general";
-  root.appendChild(head("Messagerie", "L’équipe, par sujet et par client"));
+  const mode = S.ui.msgMode || "main";
+  const shoots = S.d.events.filter(e => e.type === "Tournage" && e.status !== "Annulé" && e.date >= addDays(today(), -14)).sort((a,b) => (a.date+(a.time||"")).localeCompare(b.date+(b.time||"")));
+  let ch = mode === "shoot" ? (S.ui.msgShoot || "") : (S.ui.msgCh || "general");
+  if (mode === "shoot" && !shoots.some(e => "t:"+e.id === ch)){ const nx = shoots.find(e => e.date >= today()) || shoots[0]; ch = nx ? "t:"+nx.id : ""; }
+  root.appendChild(head("Messagerie", mode === "shoot" ? "Un fil par tournage, pour tout caler au même endroit" : "L’équipe, par sujet et par client", [segm([["main","Principal"],["shoot","Tournage"]], mode, v => { S.ui.msgMode = v; remember(); render(); })]));
   const wrap = el("div","chat");
   const side = el("nav","chat-side");
   const last = {}; S.d.messages.forEach(m => { if (!last[m.ch] || m.at > last[m.ch]) last[m.ch] = m.at; });
-  const chBtn = (k, label) => { const b = el("button", null, label); b.setAttribute("aria-pressed", String(k === ch)); if (last[k] && k !== ch && last[k] > (S.ui["seen_"+k] || "")) b.classList.add("unread"); b.onclick = () => { S.ui.msgCh = k; S.ui["seen_"+k] = new Date().toISOString(); remember(); render(); }; side.appendChild(b); };
-  side.appendChild(el("span","chat-lab","Sujets")); CHANNELS.forEach(([k,l]) => chBtn(k, l));
-  side.appendChild(el("span","chat-lab","Clients")); clientNames().filter(n => n !== AGENCE).forEach(n => chBtn("c:"+n, n));
+  const chBtn = (k, label) => { const b = el("button", null, label); b.setAttribute("aria-pressed", String(k === ch)); if (last[k] && k !== ch && last[k] > (S.ui["seen_"+k] || "")) b.classList.add("unread"); b.onclick = () => { if (mode === "shoot") S.ui.msgShoot = k; else S.ui.msgCh = k; S.ui["seen_"+k] = new Date().toISOString(); remember(); render(); }; side.appendChild(b); };
+  if (mode === "shoot"){
+    const up = shoots.filter(e => e.date >= today()), past = shoots.filter(e => e.date < today()).reverse();
+    side.appendChild(el("span","chat-lab","À venir")); if (!up.length) side.appendChild(el("p","chat-none","Aucun tournage prévu.")); up.forEach(e => chBtn("t:"+e.id, shootLabel(e)));
+    if (past.length){ side.appendChild(el("span","chat-lab","Passés")); past.forEach(e => chBtn("t:"+e.id, shootLabel(e))); }
+  } else {
+    side.appendChild(el("span","chat-lab","Sujets")); CHANNELS.forEach(([k,l]) => chBtn(k, l));
+    side.appendChild(el("span","chat-lab","Clients")); clientNames().filter(n => n !== AGENCE).forEach(n => chBtn("c:"+n, n));
+  }
+  if (!ch){ wrap.appendChild(side); const em = el("section","chat-main"); em.appendChild(el("p","chat-empty","Aucun tournage dans l’agenda pour l’instant.")); wrap.appendChild(em); root.appendChild(wrap); return; }
   const main = el("section","chat-main");
   main.appendChild(el("h2","chat-title", chName(ch)));
   const list = el("div","chat-list"); list.id = "chat-list";
@@ -829,7 +840,7 @@ function vMessagerie(root){
     if (!grouped){ const hd = el("div","msg-h"); hd.append(el("b",null,m.who||""), el("span",null,md.getHours()+" h "+String(md.getMinutes()).padStart(2,"0"))); row.appendChild(hd); }
     row.appendChild(el("div","msg-t", m.text||""));
     const act = el("div","msg-a");
-    const tk = el("button",null,"En faire une tâche"); tk.onclick = () => editTask({who: me, title: (m.text||"").slice(0,120), client: ch.startsWith("c:") ? ch.slice(2) : ""}); act.appendChild(tk);
+    const tk = el("button",null,"En faire une tâche"); tk.onclick = () => editTask({who: me, title: (m.text||"").slice(0,120), client: ch.startsWith("c:") ? ch.slice(2) : ch.startsWith("t:") ? ((S.d.events.find(x => x.id === ch.slice(2))||{}).client || "") : ""}); act.appendChild(tk);
     if (m.who === me){ const del = el("button",null,"Supprimer"); del.onclick = () => remove("messages", m.id); act.appendChild(del); }
     row.appendChild(act);
     list.appendChild(row); prev = m;
