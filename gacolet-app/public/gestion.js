@@ -498,7 +498,13 @@ function vAccueil(root){
     tiles.push([S.d.commercial.filter(c => isISO(c.nextDate) && c.nextDate <= t0).length, "relances", () => go("commercial")]);
     tiles.push([S.d.campaigns.filter(c => c.status === "À lancer").length, "campagnes à lancer", () => go("campagnes")]);
   }
-  (MSG_ROLE[me] || []).forEach(md => { const n = unreadMode(md); if (n) tiles.push([n, md === "main" ? (n > 1 ? "messages équipe" : "message équipe") : (n > 1 ? "messages tournage" : "message tournage"), () => { S.ui.msgMode = md; remember(); go("messagerie"); }]); });
+  (MSG_ROLE[me] || []).forEach(md => { const pre = md === "shoot" ? "tg:" : "", chs = msgChannels(md);
+    const team = chs.filter(k => !k.startsWith(pre + "c:")), cli = chs.filter(k => k.startsWith(pre + "c:"));
+    const nt = team.reduce((n, k) => n + unreadIn(k), 0), nc = cli.reduce((n, k) => n + unreadIn(k), 0), fc = cli.find(k => unreadIn(k));
+    const open = k => () => { S.ui.msgMode = md; if (md === "shoot") S.ui.msgShoot = k; else S.ui.msgCh = k; remember(); go("messagerie"); };
+    const sfx = md === "shoot" ? ", tournage" : "";
+    if (nt) tiles.push([nt, (nt > 1 ? "messages équipe" : "message équipe") + sfx, open(team[0])]);
+    if (nc) tiles.push([nc, (nc > 1 ? "messages clients" : "message client") + sfx, open(fc)]); });
   tiles.push([myTasks, "tâches cette semaine", () => { S.ui.tWho = me; go("taches"); }]);
   W.appendChild(el("h2","w2-lab", hr >= 18 || weekend ? "Pour la suite" : "Ta journée en bref"));
   const s = el("div","w2-tiles");
@@ -844,8 +850,9 @@ async function recStart(ch){
     if (r.cancel || !r.chunks.length || dur < 1) return;
     const mime = (r.mr.mimeType || "audio/webm").split(";")[0];
     const file = new File(r.chunks, "vocal" + (mime.includes("mp4") ? ".m4a" : ".webm"), { type: mime });
+    let wave = null; try { wave = await peaksOf(file); } catch(e){}
     try { if (!S.assets) throw new Error("x"); toast("Envoi du vocal…"); const up = await S.assets.upload(file);
-      await save("messages", null, { ch: r.ch, text: "", audio: up.url, dur, who: S.me || "Gabriel", at: new Date().toISOString() }); }
+      await save("messages", null, Object.assign({ ch: r.ch, text: "", audio: up.url, dur, who: S.me || "Gabriel", at: new Date().toISOString() }, wave ? { wave } : {})); }
     catch(e){ toast("Le vocal n’a pas pu être envoyé."); }
   };
   REC = r; mr.start(1000);
@@ -853,7 +860,32 @@ async function recStart(ch){
   render();
 }
 function recStop(cancel){ if (!REC) return; REC.cancel = !!cancel; try { REC.mr.stop(); } catch(e){} }
-function audioFor(m){ let a = AUDIO_EL.get(m.id); if (!a){ a = document.createElement("audio"); a.controls = true; a.preload = "metadata"; a.src = m.audio; AUDIO_EL.set(m.id, a); } return a; }
+const fmtS = s => Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0");
+function wavePeaks(buf, n){ const d = buf.getChannelData(0), step = Math.max(1, Math.floor(d.length / n)), out = [];
+  for (let i = 0; i < n; i++){ let s = 0; for (let j = i * step; j < (i + 1) * step && j < d.length; j++) s += d[j] * d[j]; out.push(Math.sqrt(s / step)); }
+  const mx = Math.max(...out) || 1; return out.map(v => Math.round(v / mx * 100) / 100); }
+async function peaksOf(src){ const ab = src instanceof Blob ? await src.arrayBuffer() : await (await fetch(src)).arrayBuffer();
+  const C = window.AudioContext || window.webkitAudioContext; const ctx = new C();
+  try { const buf = await new Promise((res, rej) => ctx.decodeAudioData(ab, res, rej)); return wavePeaks(buf, 40); } finally { try { ctx.close(); } catch(e){} } }
+function audioFor(m){
+  let w = AUDIO_EL.get(m.id); if (w) return w;
+  const N = 40, PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>', PAUSE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>';
+  w = el("div","vw"); const a = document.createElement("audio"); a.preload = "metadata"; a.src = m.audio;
+  const play = el("button","vw-play"); play.type = "button"; play.setAttribute("aria-label","Écouter le vocal"); play.innerHTML = PLAY;
+  const bars = el("div","vw-bars"); for (let i = 0; i < N; i++) bars.appendChild(el("span"));
+  const tm = el("span","vw-time", fmtS(m.dur || 0));
+  const total = () => isFinite(a.duration) && a.duration > 0 ? a.duration : (m.dur || 1);
+  const setPeaks = pk => [...bars.children].forEach((b, i) => { b.style.height = (4 + Math.round((pk[i] == null ? .1 : pk[i]) * 26)) + "px"; });
+  setPeaks(m.wave || Array(N).fill(.15)); if (!m.wave) peaksOf(m.audio).then(setPeaks).catch(() => {});
+  let raf; const draw = () => { const k = Math.round(Math.min(1, a.currentTime / total()) * N); [...bars.children].forEach((b, i) => b.classList.toggle("on", i < k));
+    tm.textContent = fmtS(a.paused && a.currentTime === 0 ? (m.dur || 0) : a.currentTime); if (!a.paused) raf = requestAnimationFrame(draw); };
+  play.onclick = () => { if (a.paused){ document.querySelectorAll(".vw audio").forEach(x => { if (x !== a) x.pause(); }); a.play().catch(() => toast("Lecture impossible sur cet appareil.")); } else a.pause(); };
+  a.onplay = () => { play.innerHTML = PAUSE; w.classList.add("playing"); draw(); };
+  a.onpause = () => { play.innerHTML = PLAY; w.classList.remove("playing"); cancelAnimationFrame(raf); draw(); };
+  a.onended = () => { try { a.currentTime = 0; } catch(e){} draw(); };
+  bars.onclick = e => { const r = bars.getBoundingClientRect(); try { a.currentTime = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * total(); } catch(_){} draw(); };
+  w.append(play, bars, tm, a); AUDIO_EL.set(m.id, w); return w;
+}
 function vMessagerie(root){
   const me = S.me || "Gabriel";
   const mode = S.ui.msgMode || "main";
@@ -880,11 +912,11 @@ function vMessagerie(root){
     const grouped = prev && prev.who === m.who && (Date.parse(m.at) - Date.parse(prev.at)) < 5*60000;
     const row = el("div","msg"+(m.who === me ? " mine" : "")+(grouped ? " cont" : ""));
     if (!grouped){ const hd = el("div","msg-h"); hd.append(el("b",null,m.who||""), el("span",null,md.getHours()+" h "+String(md.getMinutes()).padStart(2,"0"))); row.appendChild(hd); }
-    if (m.audio){ const w = el("div","msg-audio"); w.appendChild(audioFor(m)); if (m.dur) w.appendChild(el("span","msg-dur", Math.floor(m.dur/60)+":"+String(m.dur%60).padStart(2,"0"))); row.appendChild(w); }
+    if (m.audio) row.appendChild(audioFor(m));
     else row.appendChild(el("div","msg-t", m.text||""));
     const act = el("div","msg-a");
     const tk = el("button",null,"En faire une tâche"); tk.onclick = () => editTask({who: me, title: (m.text||"Écouter le message vocal").slice(0,120), client: ch.replace(/^tg:/, "").startsWith("c:") ? ch.replace(/^tg:/, "").slice(2) : ""}); act.appendChild(tk);
-    if (m.who === me){ const del = el("button",null,"Supprimer"); del.onclick = () => remove("messages", m.id); act.appendChild(del); }
+    { const del = el("button",null,"Supprimer"); let armed = false; del.onclick = () => { if (!armed){ armed = true; del.textContent = "Confirmer la suppression"; del.classList.add("armed"); setTimeout(() => { armed = false; del.textContent = "Supprimer"; del.classList.remove("armed"); }, 3000); return; } AUDIO_EL.delete(m.id); remove("messages", m.id); }; act.appendChild(del); }
     row.appendChild(act);
     list.appendChild(row); prev = m;
   });
