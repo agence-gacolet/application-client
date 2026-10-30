@@ -876,7 +876,7 @@ function render(){
   try { RENDER[S.view](root); } catch(x){ root.appendChild(el("p","err","Affichage impossible : "+(x && x.message))); console.error(x); }
   if (S.canWrite === false) root.insertBefore(el("p","status","Consultation seule : demande à Gabriel l’accès Contributeur pour modifier."), root.firstChild);
   if (focusId){ const f = document.getElementById(focusId); if (f){ f.focus(); try { if (caret != null) f.setSelectionRange(caret, caret); } catch(e){} } }
-  document.title = "Gacolet Gestion";
+  document.title = "Gacolet";
 }
 
 /* ---------- Démarrage ---------- */
