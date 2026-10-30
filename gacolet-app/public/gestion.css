@@ -670,3 +670,8 @@ details.box[open] summary::after{content:"\2212"}
 .dm-list .wa-rtx small{font-size:12px;color:var(--muted)}
 @media (hover:none){.wa-col .msg-a{display:none}.wa-line.open .msg-a{display:flex}}
 @media (max-width:900px){.wa-col .msg-a{display:none}.wa-line.open .msg-a{display:flex}}
+/* Tableau clients */
+.fi-sv{display:flex;flex-direction:column;gap:4px;min-width:200px}
+.fi-chip{font-size:12.5px;color:var(--ink-2);white-space:nowrap}
+.fi-chip b{display:inline-block;min-width:22px;padding:1px 5px;margin-right:2px;border-radius:5px;background:var(--lemon);color:#0E0E0D;font-size:11px;text-align:center}
+.fi-tw .note{display:block;-webkit-line-clamp:unset;line-clamp:unset;overflow:visible;white-space:pre-wrap;min-width:160px;max-width:300px}
