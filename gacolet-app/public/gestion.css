@@ -362,3 +362,27 @@ details.box[open] summary::after{content:"\2212"}
 .brand:hover svg{transform:translateY(-2px)}
 .brand-sm{display:block;width:40px;height:auto;flex:none;fill:var(--lemon)}
 @media (max-width:900px){.mbar-me{margin-left:auto}}
+
+/* Accueil sobre */
+.hsum{margin:18px 0 0;font-size:16px;font-weight:600;color:var(--muted)}
+.hsum .late{color:var(--crit);font-weight:600}
+.home{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:56px;margin-top:36px}
+.hcol{display:flex;flex-direction:column;gap:40px;min-width:0}
+.hh{display:flex;align-items:baseline;gap:10px;margin:0 0 8px;font:400 28px/1 var(--display);font-style:italic;letter-spacing:.4px;text-transform:uppercase;color:var(--ink)}
+.hh span{font:600 13px/1 var(--text);font-style:normal;color:var(--muted);letter-spacing:0}
+.hrow{display:grid;grid-template-columns:64px minmax(0,1fr) auto;align-items:baseline;gap:14px;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);padding:13px 0 12px 12px;position:relative;border-radius:0}
+.hrow::before{content:"";position:absolute;left:0;top:14px;bottom:13px;width:2px;background:var(--c,var(--line-2))}
+.hrow:hover .hm2 b{color:var(--lemon)}
+.hrow .hd{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.hrow .hm2{min-width:0}
+.hrow .hm2 b{display:block;font-weight:700;font-size:15px;transition:color .12s;overflow-wrap:anywhere}
+.hrow .hm2 span{display:block;font-size:12.5px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hrow .ht{font-size:12px;color:var(--muted);white-space:nowrap}
+.hrow.late .ht,.hrow.late .hd{color:var(--crit)}
+.hday{font:400 19px/1 var(--display);font-style:italic;letter-spacing:.4px;text-transform:uppercase;color:var(--ink-2);margin:18px 0 0;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.hday:first-of-type{margin-top:4px}
+.hempty{color:var(--faint);font-size:13.5px;margin:10px 0 0}
+.hmore{margin-top:12px;align-self:flex-start;background:none;border:0;padding:0;font-size:13px;color:var(--muted);text-decoration:underline;text-underline-offset:3px}
+.hmore:hover{color:var(--ink)}
+.hblock{display:flex;flex-direction:column}
+@media (max-width:900px){.home{grid-template-columns:1fr;gap:36px;margin-top:24px}}
