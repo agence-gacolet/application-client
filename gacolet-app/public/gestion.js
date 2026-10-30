@@ -571,8 +571,13 @@ function vCommercial(root){
 /* ---------- Campagnes ---------- */
 function vCampagnes(root){
   root.appendChild(head("Campagnes", "Publicité Meta : le budget est payé par le client directement à Meta.", [addBtn("Nouvelle campagne", () => editCampaign({}))]));
+  const CATS = [["En cours","EN COURS"],["À lancer","À LANCER"],["Arrêtée","ARRÊTÉES"]];
+  const cur = CATS.some(c => c[0] === S.ui.cpStatus) ? S.ui.cpStatus : "";
+  { const f = el("div","filters ag-f"); const g = el("div","fgroup"); const lb = el("label","flabel","Statut"); lb.htmlFor = "cp-status"; const s = el("select","pick"); s.id = "cp-status";
+    [["","Toutes les campagnes"],["En cours","En cours"],["À lancer","À lancer"],["Arrêtée","Arrêtées"]].forEach(([v,l]) => { const n = v ? S.d.campaigns.filter(c => c.status === v).length : S.d.campaigns.length; const o = el("option",null,l+" ("+n+")"); o.value = v; s.appendChild(o); });
+    s.value = cur; s.onchange = () => { S.ui.cpStatus = s.value; remember(); render(); }; g.append(lb, s); f.appendChild(g); root.appendChild(f); }
   const {w, tb} = table(["Client","Statut","Budget","Lancée le","À savoir","Suivi"]);
-  [["En cours","EN COURS"],["À lancer","À LANCER"],["Arrêtée","ARRÊTÉES"]].forEach(([k,label]) => {
+  CATS.filter(c => !cur || c[0] === cur).forEach(([k,label]) => {
     const rows = S.d.campaigns.filter(c => c.status === k).sort((a,b) => (a.order||0)-(b.order||0)); if (!rows.length) return;
     band(tb, label, rows.length, 6);
     rows.forEach(c => { const tr = el("tr","row"); tr.onclick = () => editCampaign(c);
@@ -582,7 +587,7 @@ function vCampagnes(root){
       const l = linkNode(c.link, "Contacts"); if (l instanceof Node) l.onclick = e => e.stopPropagation(); td(tr, l);
       tb.appendChild(tr); });
   });
-  root.appendChild(S.d.campaigns.length ? w : el("p","empty","Aucune campagne pour l’instant."));
+  root.appendChild(S.d.campaigns.some(c => !cur || c.status === cur) ? w : el("p","empty", cur ? "Aucune campagne dans cette catégorie." : "Aucune campagne pour l’instant."));
 }
 
 /* ---------- Prêt à monter ---------- */
