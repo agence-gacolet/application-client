@@ -453,3 +453,11 @@ details.box[open] summary::after{content:"\2212"}
 @media (prefers-reduced-motion:reduce){.w2-date,.w2-h,.w2-say,.w2-start{animation:none}}
 @media (max-width:900px){.welcome2{min-height:calc(100vh - 200px)}.w2-say{font-size:17px}}
 .chat-none{margin:4px 10px;font-size:13px;color:var(--faint)}
+
+/* Accueil : résumés chiffrés */
+.w2-tiles{display:flex;flex-wrap:wrap;justify-content:center;gap:14px;margin-top:52px;animation:w2-in .8s .3s both}
+.w2-tile{min-width:170px;padding:22px 26px 20px;border:1px solid var(--line-2);border-radius:16px;background:var(--card);color:var(--ink);text-align:center;cursor:pointer;transition:border-color .2s,transform .2s}
+.w2-tile:hover{border-color:var(--lemon);transform:translateY(-2px)}
+.w2-tile b{display:block;font:italic 400 64px/.9 var(--display);color:var(--lemon)}
+.w2-tile span{display:block;margin-top:8px;font-size:13px;font-weight:600;color:var(--ink-2)}
+@media (max-width:640px){.w2-tile{min-width:0;flex:1 1 40%;padding:18px 14px}.w2-tile b{font-size:48px}}
