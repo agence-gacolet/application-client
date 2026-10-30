@@ -510,3 +510,9 @@ details.box[open] summary::after{content:"\2212"}
 .vw audio{display:none}
 @media (hover:none){.msg-a{display:flex}}
 .msg-a button.armed{color:#FF5A4E;text-decoration:none;font-weight:700}
+/* Menu : groupes */
+.navlab{display:block;margin:18px 10px 6px;font-size:10.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
+/* Messagerie : retirer */
+.msg-a button.rm{color:#FF5A4E;text-decoration:none;font-weight:600}
+.msg-a button.rm:hover{color:#FF7A70}
+.msg-a button.rm.armed{font-weight:700;text-decoration:underline}
