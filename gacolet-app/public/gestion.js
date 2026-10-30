@@ -5,7 +5,7 @@
 /* ---------- Constantes ---------- */
 const PEOPLE = ["Gabriel","Matis","Clara"];
 const OWNERS = ["Gabriel","Matis","Clara","À attribuer"];
-const POLES = [["00","00 DIRECTION & DIVERS"],["10","10 STRATÉGIE & CONSEIL"],["20","20 PRODUCTION"],["30","30 GRAPHISME & IMPRESSION"],["40","40 RÉSEAUX SOCIAUX"],["50","50 PUBLICITÉ"],["60","60 WEB & RÉFÉRENCEMENT"]];
+const POLES = [["00","DIRECTION & DIVERS"],["10","STRATÉGIE & CONSEIL"],["20","PRODUCTION"],["30","GRAPHISME & IMPRESSION"],["40","RÉSEAUX SOCIAUX"],["50","PUBLICITÉ"],["60","WEB & RÉFÉRENCEMENT"]];
 const POLE = Object.fromEntries(POLES);
 const EV_TYPES = ["Tournage","Éditorial","Maroudeur","Rendez-vous"];
 const EV_STATUS = ["Prévu","Fait","Annulé"];
