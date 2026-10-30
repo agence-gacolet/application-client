@@ -206,6 +206,8 @@ app.get("/api/admin/file/:name", admin, (req, res) => {
   res.download(path.join(UPLOADS, f), f, err => { if (err && !res.headersSent) res.status(404).end(); });
 });
 
+require("./src/setup")(app, { db, wrap });
+
 // ---------- Fichiers de l'application ----------
 app.get("/agence", (req, res) => res.sendFile(path.join(__dirname, "public", "agence.html")));
 app.use(express.static(path.join(__dirname, "public"), { maxAge: "1h", setHeaders: (res, p) => { if (/sw\.js$|\.html$/.test(p)) res.setHeader("Cache-Control", "no-cache"); } }));
