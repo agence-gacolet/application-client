@@ -1511,6 +1511,7 @@ function vMessagerie(root){
   if (REC && REC.ch === ch){
     const rb = el("div","rec"); const tm = el("b",null,recLabel()); tm.id = "rec-time"; rb.append(el("span","rec-dot"), el("span",null,"Enregistrement"), tm);
     const cb = btn("Annuler","", () => recStop(true)); const ok = btn("Envoyer le vocal","lemon", () => recStop(false));
+    cb.type = "button"; ok.type = "button";
     form.onsubmit = e => { e.preventDefault(); recStop(false); };
     bar.append(rb, cb, ok);
   } else { setBtn(); bar.append(fi, clip, gif, ta, go2); }
