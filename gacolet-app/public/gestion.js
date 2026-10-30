@@ -18,9 +18,10 @@ const MONTHS = ["janvier","février","mars","avril","mai","juin","juillet","aoû
 const DAYS = ["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"];
 const DEFAULT_COLORS = {"Agence Gacolet":"#1D1D1B","AR Climatisation":"#E8833A","Bonobo":"#2E9E5B","Delta Sud Formation":"#D6334A","Domaine Pagezi":"#7A1F3D","Flora Design":"#C25CC9","France Étanchéité":"#2F6FE4","Gaufrement Bon":"#E3B505","Hugo Maître Nageur":"#1BA6C9","Insolent":"#5C5C57","KR Thermolaquage":"#8C6239","La Vie La Construction":"#F06A1D","Le Petit Mas":"#6E8B3D","Locamex":"#E2559C","Meyer-Pic":"#3D4FB5","Only Clean":"#17A398","Paillotte Bassamoise":"#F2A93B","SOS Pare-Brise Codognan":"#9B2226","SOS Pare-Brise Vendargues":"#4A6C8C","Sport Défense":"#8E44AD","The New Me Montpellier":"#D98BA5","Total Habitat 360":"#6C7A2E"};
 const VIEWS = [
-  ["accueil","Accueil"],["agenda","Agenda"],["taches","Tâches"],["commercial","Commercial"],["campagnes","Campagnes"],
-  ["montage","Prêt à monter"],["publications","Publications"],["clients","Calendrier clients"],["messagerie","Messagerie"],["formation","Formation"]
+  ["accueil","Accueil"],["agenda","Agenda"],["taches","Tâches"],["messagerie","Messagerie"],["commercial","Commercial"],["clients","Calendrier clients"],
+  ["montage","Prêt à monter"],["publications","Publications"],["campagnes","Campagnes"],["formation","Formation"]
 ];
+const NAV_GROUPS = [["",["accueil"]],["Au quotidien",["agenda","taches","messagerie"]],["Clients",["commercial","clients"]],["Production",["montage","publications","campagnes"]],["Ressources",["formation"]]];
 const COLLS = ["events","tasks","commercial","campaigns","rushes","publications","clients","cevents","keydates","posts","edtodo","meta","messages","formations"];
 
 /* ---------- Outils ---------- */
@@ -921,7 +922,7 @@ function vMessagerie(root){
     else row.appendChild(el("div","msg-t", m.text||""));
     const act = el("div","msg-a");
     const tk = el("button",null,"En faire une tâche"); tk.onclick = () => editTask({who: me, title: (m.text||"Écouter le message vocal").slice(0,120), client: ch.replace(/^tg:/, "").startsWith("c:") ? ch.replace(/^tg:/, "").slice(2) : ""}); act.appendChild(tk);
-    { const del = el("button",null,"Supprimer"); let armed = false; del.onclick = () => { if (!armed){ armed = true; del.textContent = "Confirmer la suppression"; del.classList.add("armed"); setTimeout(() => { armed = false; del.textContent = "Supprimer"; del.classList.remove("armed"); }, 3000); return; } AUDIO_EL.delete(m.id); remove("messages", m.id); }; act.appendChild(del); }
+    if (m.who === me){ const del = el("button","rm","Retirer"); let armed = false; del.onclick = () => { if (!armed){ armed = true; del.textContent = "Confirmer"; del.classList.add("armed"); setTimeout(() => { armed = false; del.textContent = "Retirer"; del.classList.remove("armed"); }, 3000); return; } AUDIO_EL.delete(m.id); remove("messages", m.id); }; act.appendChild(del); }
     row.appendChild(act);
     list.appendChild(row); prev = m;
   });
@@ -1028,7 +1029,7 @@ function renderTabs(){
   const badge = { messagerie: unreadRole(), taches: openTasks().filter(t => t.who === me && lateDays(t.date) > 0).length, commercial: me === "Gabriel" ? S.d.commercial.filter(c => isISO(c.nextDate) && c.nextDate <= today()).length : 0 };
   const link = k => { const a = el("a"); a.href = "#"+k; a.appendChild(ico(k)); a.appendChild(el("span","lb", SHORT[k])); if (k === S.view) a.setAttribute("aria-current","page"); if (badge[k]) a.appendChild(el("span","n",String(badge[k]))); return a; };
   const n = $("#tabs"); n.textContent = "";
-  VIEWS.forEach(([k]) => { n.appendChild(link(k)); if (k === "commercial" || k === "clients") n.appendChild(el("span","navsep")); });
+  NAV_GROUPS.forEach(([lab, ks]) => { if (lab) n.appendChild(el("span","navlab",lab)); ks.forEach(k => n.appendChild(link(k))); });
   const m = $("#mtabs"); m.textContent = "";
   MOBILE_MAIN.forEach(k => m.appendChild(link(k)));
   const more = el("button","morebtn"); more.type = "button"; more.appendChild(ico("plus")); more.appendChild(el("span","lb","Plus"));
