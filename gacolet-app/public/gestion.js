@@ -18,17 +18,17 @@ const MONTHS = ["janvier","février","mars","avril","mai","juin","juillet","aoû
 const DAYS = ["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"];
 const DEFAULT_COLORS = {"Agence Gacolet":"#1D1D1B","AR Climatisation":"#E8833A","Bonobo":"#2E9E5B","Delta Sud Formation":"#D6334A","Domaine Pagezi":"#7A1F3D","Flora Design":"#C25CC9","France Étanchéité":"#2F6FE4","Gaufrement Bon":"#E3B505","Hugo Maître Nageur":"#1BA6C9","Insolent":"#5C5C57","KR Thermolaquage":"#8C6239","La Vie La Construction":"#F06A1D","Le Petit Mas":"#6E8B3D","Locamex":"#E2559C","Meyer-Pic":"#3D4FB5","Only Clean":"#17A398","Paillotte Bassamoise":"#F2A93B","SOS Pare-Brise Codognan":"#9B2226","SOS Pare-Brise Vendargues":"#4A6C8C","Sport Défense":"#8E44AD","The New Me Montpellier":"#D98BA5","Total Habitat 360":"#6C7A2E"};
 const VIEWS = [
-  ["accueil","Accueil"],["agenda","Agenda"],["taches","Tâches"],["messagerie","Messagerie"],["commercial","Commercial"],["clients","Calendrier clients"],
+  ["accueil","Accueil"],["agenda","Agenda"],["taches","Tâches"],["messagerie","Messagerie"],["vocal","Vocal"],["commercial","Commercial"],["clients","Calendrier clients"],
   ["montage","Prêt à monter"],["publications","Publications"],["campagnes","Campagnes"],["formation","Formation"],["parametres","Paramètres"],["fiches","Tableau clients"]
 ];
-const NAV_GROUPS = [["",["accueil"]],["Au quotidien",["agenda","taches","messagerie"]],["Gestion",["fiches","commercial","publications"]],["Meta",["campagnes"]],["Ressources",["formation"]],["Compte",["parametres"]]];
+const NAV_GROUPS = [["",["accueil"]],["Au quotidien",["agenda","taches","messagerie","vocal"]],["Gestion",["fiches","commercial","publications"]],["Meta",["campagnes"]],["Ressources",["formation"]],["Compte",["parametres"]]];
 /* Onglets fusionnés : le calendrier clients vit dans l’agenda, le montage dans les tâches. */
 const MERGED = { clients: ["agenda","agHub"], montage: ["taches","tHub"] };
 /* Rôles : ce que chaque siège voit. Le serveur applique les mêmes limites aux données. */
 const ROLE_LABEL = {owner:"Propriétaire", member:"Membre", commercial:"Commercial"};
 const ROLE_VIEWS = {
-  member: ["accueil","agenda","taches","messagerie","formation","parametres"],
-  commercial: ["accueil","agenda","taches","messagerie","commercial","clients","montage","publications","campagnes","formation","parametres"]
+  member: ["accueil","agenda","taches","messagerie","vocal","formation","parametres"],
+  commercial: ["accueil","agenda","taches","messagerie","vocal","commercial","clients","montage","publications","campagnes","formation","parametres"]
 };
 const canSee = k => !S.role || S.role === "owner" || (ROLE_VIEWS[S.role] || []).includes(k);
 const COLLS = ["events","tasks","commercial","campaigns","rushes","publications","clients","cevents","keydates","posts","edtodo","meta","messages","formations","msheets"];
@@ -1254,6 +1254,19 @@ async function joinVoice(room, label){
   window.open(url, "gacolet-voix-" + room);
   try { await save("messages", null, { ch: "voix", voice: room, who: me, text: "", at: new Date().toISOString() }); } catch(e){}
 }
+function vVocal(root){
+  const me = S.me || "Gabriel";
+  root.appendChild(head("Vocal", "Salons vocaux de l’agence : la visio, le partage d’écran et les réunions se lancent dans la fenêtre qui s’ouvre."));
+  const g = el("div","vx-grid");
+  VOICE.forEach(([k, l, sub]) => { const here = voiceHere(k), mine = here.includes(me);
+    const c = el("section","vx-card" + (here.length ? " live" : "")); const ic = el("span","wa-vic"); ic.innerHTML = HEADSET;
+    const hd = el("div","vx-hd"); const tt = el("div"); tt.append(el("h2",null,l), el("p","muted",sub)); hd.append(ic, tt); c.appendChild(hd);
+    const ppl = el("div","vx-ppl"); if (here.length) here.forEach(n => { const p = el("span","vx-p"); p.append(avatarEl(n, 28), el("span",null,n)); ppl.appendChild(p); }); else ppl.appendChild(el("span","muted","Personne pour l’instant")); c.appendChild(ppl);
+    const a = el("div","vx-act"); a.appendChild(btn(mine ? "Rouvrir la fenêtre" : "Rejoindre", "lemon", () => joinVoice(k, l))); if (mine) a.appendChild(btn("Quitter","", () => leaveVoice(k))); c.appendChild(a);
+    g.appendChild(c); });
+  root.appendChild(g);
+  root.appendChild(el("p","status","On arrive micro ouvert et caméra coupée. Les boutons en bas de la fenêtre activent la caméra et le partage d’écran. Le premier qui ouvre un salon peut devoir se connecter avec Google : c’est demandé par Jitsi, le service utilisé."));
+}
 async function leaveVoice(room){ try { await save("messages", null, { ch: "voix", voice: room, who: S.me || "Gabriel", text: "", left: true, at: new Date().toISOString() }); } catch(e){} }
 function vMessagerie(root){
   const me = S.me || "Gabriel";
@@ -1280,12 +1293,6 @@ function vMessagerie(root){
     side.appendChild(b);
   };
   side.appendChild(el("span","wa-lab","Équipe")); CHANNELS.forEach(([k,l]) => row(pre+k, l));
-  side.appendChild(el("span","wa-lab","Vocal"));
-  VOICE.forEach(([k, l, sub]) => { const here = voiceHere(k), mine = here.includes(me);
-    const b = el("div","wa-row wa-voice" + (here.length ? " live" : "")); const ic = el("span","wa-vic"); ic.innerHTML = HEADSET;
-    const tx = el("span","wa-rtx"); const t1 = el("span","wa-rtop"); t1.appendChild(el("b",null,l)); const t2 = el("span","wa-rbot"); t2.appendChild(el("span",null, here.length ? here.join(", ") + (here.length > 1 ? " sont" : " est") + " dans le salon" : sub)); tx.append(t1, t2);
-    const go = el("button","btn sm " + (mine ? "" : "lemon"), mine ? "Quitter" : "Rejoindre"); go.type = "button"; go.onclick = e => { e.stopPropagation(); mine ? leaveVoice(k) : joinVoice(k, l); };
-    b.append(ic, tx, go); side.appendChild(b); });
   if (mode !== "shoot"){ const dms = dmChannels(); if (dms.length){ side.appendChild(el("span","wa-lab","Privé")); dms.sort((a, b) => ((lastOf[b] || {}).at || "").localeCompare((lastOf[a] || {}).at || "")).forEach(k => row(k, dmOther(k))); } }
   side.appendChild(el("span","wa-lab","Clients"));
   clientNames().filter(n => n !== AGENCE).map(n => [pre+"c:"+n, n]).sort((a, b) => ((lastOf[b[0]] || {}).at || "").localeCompare((lastOf[a[0]] || {}).at || "") || a[1].localeCompare(b[1])).forEach(([k, n]) => row(k, n));
@@ -1440,7 +1447,7 @@ function vTachesHub(root){
   const cur = opts.some(o => o[0] === S.ui.tHub) ? S.ui.tHub : "taches";
   (cur === "montage" ? vMontage : vTaches)(root); if (opts.length > 1) hubTabs(root, opts, cur, "tHub");
 }
-const RENDER = {fiches:vFiches, parametres:vParametres, accueil:vAccueil, agenda:vAgendaHub, taches:vTachesHub, commercial:vCommercial, campagnes:vMeta, montage:vMontage, publications:vPublications, clients:vClients, messagerie:vMessagerie, formation:vFormation};
+const RENDER = {fiches:vFiches, parametres:vParametres, accueil:vAccueil, agenda:vAgendaHub, taches:vTachesHub, commercial:vCommercial, campagnes:vMeta, montage:vMontage, publications:vPublications, clients:vClients, messagerie:vMessagerie, vocal:vVocal, formation:vFormation};
 function go(v){ if (MERGED[v]){ S.ui[MERGED[v][1]] = v; remember(); v = MERGED[v][0]; } if (location.hash !== "#"+v) location.hash = v; else { S.view = v; render(); } }
 function fromHash(){ let h = (location.hash||"").replace("#",""); if (h === "editorial"){ S.ui.agClient = AGENCE; if (!S.ui.agLayers.includes("posts")) S.ui.agLayers = S.ui.agLayers.concat("posts"); h = "agenda"; } if (MERGED[h] && canSee(h)){ S.ui[MERGED[h][1]] = h; h = MERGED[h][0]; } S.view = RENDER[h] && canSee(h) ? h : "accueil"; }
 window.addEventListener("hashchange", () => { fromHash(); render(); window.scrollTo(0,0); });
@@ -1456,15 +1463,16 @@ const ICONS = {
   publications:'<rect x="4" y="4" width="16" height="16" rx="4"/><circle cx="12" cy="12" r="3.6"/><path d="M16.7 7.3h.01"/>',
   clients:'<circle cx="9" cy="9" r="3.2"/><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5M15.5 6.2a3 3 0 0 1 0 5.6M17 14.3c1.9.6 3.1 2.2 3.5 4.7"/>',
   messagerie:'<path d="M4.5 6.5A2 2 0 0 1 6.5 4.5h11a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H10l-4.5 3.5v-3.5h0a2 2 0 0 1-1-1.7z"/>',
+  vocal:'<path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3.5" y="13.5" width="4" height="6.5" rx="1.5"/><rect x="16.5" y="13.5" width="4" height="6.5" rx="1.5"/>',
   formation:'<rect x="3.5" y="5.5" width="17" height="12" rx="2"/><path d="M10.5 9v5l4-2.5z"/><path d="M8 20.5h8"/>',
   plus:'<path d="M5 7h14M5 12h14M5 17h14"/>'
 };
-const SHORT = {fiches:"Tableau clients", parametres:"Paramètres", accueil:"Accueil", agenda:"Agenda", taches:"Tâches", commercial:"Commercial", campagnes:"Campagnes", montage:"Montage", publications:"Publications", clients:"Calendrier clients", messagerie:"Messagerie", formation:"Formation"};
+const SHORT = {fiches:"Tableau clients", parametres:"Paramètres", accueil:"Accueil", agenda:"Agenda", taches:"Tâches", commercial:"Commercial", campagnes:"Campagnes", montage:"Montage", publications:"Publications", clients:"Calendrier clients", messagerie:"Messagerie", vocal:"Vocal", formation:"Formation"};
 const MOBILE_MAIN = ["accueil","agenda","taches","commercial"];
 const ico = k => { const s = document.createElementNS("http://www.w3.org/2000/svg","svg"); s.setAttribute("viewBox","0 0 24 24"); s.setAttribute("aria-hidden","true"); s.classList.add("ico"); s.innerHTML = ICONS[k] || ""; return s; };
 function renderTabs(){
   const me = S.me || "Gabriel";
-  const badge = { messagerie: unreadRole(), taches: openTasks().filter(t => t.who === me && lateDays(t.date) > 0).length, commercial: me === "Gabriel" ? S.d.commercial.filter(c => isISO(c.nextDate) && c.nextDate <= today()).length : 0 };
+  const badge = { messagerie: unreadRole(), taches: openTasks().filter(t => t.who === me && lateDays(t.date) > 0).length, commercial: me === "Gabriel" ? S.d.commercial.filter(c => isISO(c.nextDate) && c.nextDate <= today()).length : 0, vocal: S.ready ? new Set(VOICE.flatMap(([k]) => voiceHere(k)).filter(n => n !== me)).size : 0 };
   try { const n = badge.messagerie || 0; if (navigator.setAppBadge) { n ? navigator.setAppBadge(n) : navigator.clearAppBadge(); } } catch(e){}
   const link = k => { const a = el("a"); a.href = "#"+k; a.appendChild(ico(k)); a.appendChild(el("span","lb", SHORT[k])); if (k === S.view) a.setAttribute("aria-current","page"); if (badge[k]) a.appendChild(el("span","n",String(badge[k]))); return a; };
   const n = $("#tabs"); n.textContent = "";
