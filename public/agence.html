@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Espace agence</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<style>
+main.wrap{max-width:1100px;padding-block:24px 60px}
+.adm-grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--trait);vertical-align:top}
+th{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--gris)}
+.scroll{overflow-x:auto;background:var(--noir);border:1px solid var(--trait);border-radius:16px;padding:6px 10px}
+.mini-btn{border:1px solid var(--trait-2);background:transparent;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700}
+.mini-btn.go{background:var(--citron);border-color:var(--citron);color:var(--sur-citron)}
+.codecell{font:400 22px/1 var(--display);letter-spacing:2px;color:var(--citron)}
+select,input[type=date],input[type=month],input[type=number],input[type=password],input[type=url]{width:100%;background:var(--fond);border:1.5px solid var(--trait-2);border-radius:14px;padding:12px 14px;font-size:15px;color:var(--blanc);text-transform:none;letter-spacing:0;font-weight:400}
+.navadm{display:flex;gap:6px;flex-wrap:wrap;margin:18px 0}
+.navadm button{border:1px solid var(--trait-2);background:transparent;border-radius:999px;padding:7px 13px;font-weight:700;font-size:13px;color:var(--gris)}
+.navadm button[aria-pressed=true]{background:var(--blanc);color:var(--fond)}
+h1{font-size:clamp(48px,9vw,88px)}
+.checks{display:flex;gap:14px;text-transform:none;letter-spacing:0;font-size:14px;color:var(--blanc);font-weight:600}
+.checks input{width:auto}
+</style>
+</head>
+<body>
+<main class="wrap" id="app"></main>
+<script>
+(function(){
+"use strict";
+const $ = s => document.querySelector(s);
+const el = (t, c, x) => { const n = document.createElement(t); if (c) n.className = c; if (x != null) n.textContent = x; return n; };
+let KEY = sessionStorage.getItem("gc-admin") || "";
+let D = null, tab = "clients", edit = null;
+async function api(p, o = {}){
+  const h = {"Content-Type":"application/json"}; if (KEY) h.Authorization = "Bearer "+KEY;
+  const r = await fetch(p, {method:o.method || (o.body ? "POST" : "GET"), headers:h, body:o.body ? JSON.stringify(o.body) : undefined});
+  const j = await r.json().catch(() => ({}));
+  if (r.status === 401){ KEY = ""; sessionStorage.removeItem("gc-admin"); login(); throw new Error(j.error); }
+  if (!r.ok) throw new Error(j.error || "Erreur"); return j;
+}
+const cname = id => (D.clients.find(c => c.id == id) || {}).name || "?";
+const dt = s => String(s || "").slice(0,16).replace("T"," ");
+function table(cols, rows){ const w = el("div","scroll"); const t = el("table"); const tr = el("tr"); cols.forEach(c => tr.appendChild(el("th",null,c[0]))); const th = el("thead"); th.appendChild(tr); t.appendChild(th); const tb = el("tbody");
+  rows.forEach(r => { const x = el("tr"); cols.forEach(c => { const td = el("td"); const v = c[1](r); if (v instanceof Node) td.appendChild(v); else td.textContent = v == null ? "" : String(v); x.appendChild(td); }); tb.appendChild(x); });
+  if (!rows.length){ const x = el("tr"); const td = el("td",null,"Rien pour l'instant."); td.colSpan = cols.length; td.style.color = "var(--gris)"; x.appendChild(td); tb.appendChild(x); }
+  t.appendChild(tb); w.appendChild(t); return w; }
+function inp(label, name, type, val, extra){ const l = el("label",null,label); let i;
+  if (type === "select"){ i = el("select"); extra.forEach(([v,t]) => { const o = el("option",null,t); o.value = v; if (String(v) === String(val)) o.selected = true; i.appendChild(o); }); }
+  else if (type === "area"){ i = el("textarea"); i.rows = 3; i.value = val || ""; }
+  else { i = el("input"); i.type = type; i.value = val == null ? "" : val; }
+  i.name = name; l.appendChild(i); return l; }
+const clientSel = (val) => inp("Client","client_id","select",val,D.clients.map(c => [c.id,c.name]));
+function form(title, fields, submit){ const f = el("form","form"); f.noValidate = true; f.appendChild(el("h2",null,title)); fields.forEach(x => f.appendChild(x)); const er = el("p","err"); const b = el("button","btn go full","Enregistrer"); b.type = "submit"; f.append(er, b);
+  f.onsubmit = async e => { e.preventDefault(); er.textContent = ""; const data = Object.fromEntries(new FormData(f)); try { await submit(data, f); await load(); } catch(x){ er.textContent = x.message; } }; return f; }
+
+function login(){
+  const r = $("#app"); r.textContent = "";
+  r.appendChild(el("p","eyebrow","Agence Gacolet")); const h = el("h1"); h.append(el("span",null,"Espace"), document.createElement("br"), el("span","c","agence")); r.appendChild(h);
+  const f = form("Connexion",[inp("Mot de passe","password","password","")], async d => { const j = await api("/api/admin/login",{body:d}); KEY = j.key; sessionStorage.setItem("gc-admin", KEY); });
+  f.querySelector("h2").remove(); f.style.maxWidth = "420px"; f.style.marginTop = "20px"; r.appendChild(f);
+}
+async function load(){ D = await api("/api/admin/overview"); draw(); }
+
+const TABS = [["clients","Clients et codes"],["users","Inscriptions"],["decisions","Validations"],["requests","Demandes"],["leads","Contacts Meta"],["events","Planning"],["deliverables","Livrables"],["stats","Résultats"]];
+function draw(){
+  const r = $("#app"); r.textContent = "";
+  r.appendChild(el("p","eyebrow","Agence Gacolet")); const h = el("h1"); h.append(el("span",null,"Espace "), el("span","c","agence")); r.appendChild(h);
+  const n = el("div","navadm"); TABS.forEach(([k,l]) => { const b = el("button",null,l); b.setAttribute("aria-pressed", String(tab === k)); b.onclick = () => { tab = k; edit = null; draw(); }; n.appendChild(b); }); r.appendChild(n);
+  V[tab](r);
+}
+const del = (t, id) => { const b = el("button","mini-btn","Supprimer"); b.onclick = async () => { if (!confirm("Supprimer cette ligne ?")) return; await api("/api/admin/"+t+"/"+id, {method:"DELETE"}); load(); }; return b; };
+const V = {
+  clients(r){
+    const c = edit || {modules:["com"]};
+    const mods = el("div","checks"); [["com","Réseaux sociaux"],["meta","Campagnes Meta"]].forEach(([v,t]) => { const l = el("label"); l.className = ""; const i = el("input"); i.type = "checkbox"; i.name = "m_"+v; i.checked = (c.modules || []).includes(v); l.append(i, document.createTextNode(" "+t)); mods.appendChild(l); });
+    const g = el("div","adm-grid");
+    g.appendChild(form(edit ? "Modifier "+c.name : "Nouveau client", [inp("Nom du client","name","text",c.name), inp("Formule (affichée au client)","formula","text",c.formula), mods,
+      inp("Id de la marque Metricool","metricool_blog_id","text",c.metricool_blog_id), inp("Objectif mensuel de contacts qualifiés (Meta)","contacts_goal","number",c.contacts_goal),
+      inp("Définition écrite du contact qualifié (contrat)","qualified_definition","area",c.qualified_definition), inp("Lien du dossier partagé du client","drive_url","url",c.drive_url)],
+      async d => { const body = Object.assign({}, d, {modules:["com","meta"].filter(m => d["m_"+m]), id:edit && edit.id}); const j = await api("/api/admin/client",{body}); if (j.code) alert("Code créé : "+j.code+"\nÀ envoyer au client par courriel, après relecture de Gabriel."); edit = null; }));
+    r.appendChild(g);
+    r.appendChild(el("h2",null,"Clients"));
+    r.appendChild(table([["Code", c => el("span","codecell",c.code)],["Client", c => c.name],["Formule", c => c.formula],["Modules", c => c.modules.map(m => m === "com" ? "Réseaux" : "Meta").join(" + ")],["Metricool", c => c.metricool_blog_id],["Inscrits", c => D.users.filter(u => u.client_id === c.id).length],["", c => { const b = el("button","mini-btn","Modifier"); b.onclick = () => { edit = c; draw(); window.scrollTo(0,0); }; return b; }]], D.clients));
+  },
+  users(r){ r.appendChild(table([["Date", u => dt(u.created_at)],["Client", u => cname(u.client_id)],["Personne", u => u.prenom+" "+u.nom],["Courriel", u => u.email],["Tél.", u => u.tel],["Activité", u => u.activite],["Zone", u => u.zone],["Réseaux", u => u.reseaux],["Objectif", u => u.objectif],["Clients types", u => u.clientele],["Tournage", u => u.dispo]], D.users)); },
+  decisions(r){ r.appendChild(table([["Date", d => dt(d.created_at)],["Client", d => cname(d.client_id)],["Publication", d => d.post_title+" ("+d.post_date+")"],["Décision", d => d.status === "ok" ? "Validée" : "Modification"],["Demande", d => d.note],["Par", d => d.prenom+" "+d.nom]], D.decisions)); },
+  requests(r){ r.appendChild(table([["Date", q => dt(q.created_at)],["Client", q => cname(q.client_id)],["Par", q => q.prenom+" "+q.nom],["Type", q => q.type],["Message", q => q.message],["Fichiers", q => { const w = el("div"); (q.files ? q.files.split(",") : []).forEach(f => { const b = el("button","mini-btn",f.split("-").pop()); b.onclick = () => dl(f); w.appendChild(b); }); return w; }],["Statut", q => { if (q.status !== "Envoyée") return q.status; const b = el("button","mini-btn go","Prise en compte"); b.onclick = async () => { await api("/api/admin/request/"+q.id,{body:{status:"Prise en compte"}}); load(); }; return b; }]], D.requests)); },
+  leads(r){
+    r.appendChild(form("Ajouter un contact", [clientSel(), inp("Date","date","date",new Date().toISOString().slice(0,10)), inp("Titre (ex. Demande de devis · Nîmes)","title","text",""), inp("Détail","detail","text","")], d => api("/api/admin/leads",{body:d})));
+    r.appendChild(el("h2",null,"Contacts"));
+    r.appendChild(table([["Date", l => l.date],["Client", l => cname(l.client_id)],["Contact", l => l.title],["Détail", l => l.detail],["Qualifié par le client", l => l.qualified == null ? "À trier" : l.qualified ? "Oui" : "Non"],["", l => del("leads", l.id)]], D.leads));
+  },
+  events(r){
+    r.appendChild(form("Ajouter une date", [clientSel(), inp("Date","date","date",""), inp("Type","kind","select","",[["","Échéance"],["tour","Tournage"]]), inp("Titre","title","text",""), inp("Détail (heure, lieu)","detail","text","")], d => api("/api/admin/events",{body:d})));
+    r.appendChild(el("h2",null,"Planning"));
+    r.appendChild(table([["Date", e => e.date],["Client", e => cname(e.client_id)],["Type", e => e.kind === "tour" ? "Tournage" : "Échéance"],["Titre", e => e.title],["Détail", e => e.detail],["", e => del("events", e.id)]], D.events));
+  },
+  deliverables(r){
+    r.appendChild(form("Ajouter un livrable", [clientSel(), inp("Date","date","date",new Date().toISOString().slice(0,10)), inp("Titre","title","text",""), inp("Détail (format, durée)","detail","text",""), inp("Lien du fichier validé","url","url","")], d => api("/api/admin/deliverables",{body:d})));
+    r.appendChild(el("h2",null,"Livrables"));
+    r.appendChild(table([["Date", e => e.date],["Client", e => cname(e.client_id)],["Titre", e => e.title],["Détail", e => e.detail],["Lien", e => e.url],["", e => del("deliverables", e.id)]], D.deliverables));
+  },
+  stats(r){
+    const g = el("div","adm-grid");
+    g.appendChild(form("Résultats réseaux du mois", [clientSel(), inp("Mois","period","month",""), inp("Demandes reçues via les réseaux","demandes","number",""), inp("Vues des vidéos","vues","number",""), inp("Publications","publications","number",""), inp("Publications prévues","prevues","number",""), inp("Nouveaux abonnés","abonnes","number",""), inp("Source","source","text","Metricool")],
+      d => { const data = {}; ["demandes","vues","publications","prevues","abonnes"].forEach(k => { if (d[k] !== "") data[k] = Number(d[k]); }); return api("/api/admin/stats",{body:{client_id:d.client_id, period:d.period, module:"com", data:JSON.stringify(data), source:d.source}}); }));
+    g.appendChild(form("Résultats Meta du mois", [clientSel(), inp("Mois","period","month",""), inp("Dépense chez Meta (€)","depense","number",""), inp("Budget prévu (€)","budget","number",""), inp("Personnes touchées","touchees","number",""), inp("Annonces actives","annonces","number",""), inp("Source","source","text","Gestionnaire de publicités Meta")],
+      d => { const data = {}; ["depense","budget","touchees","annonces"].forEach(k => { if (d[k] !== "") data[k] = Number(d[k]); }); return api("/api/admin/stats",{body:{client_id:d.client_id, period:d.period, module:"meta", data:JSON.stringify(data), source:d.source}}); }));
+    r.appendChild(g);
+    r.appendChild(el("h2",null,"Saisis"));
+    r.appendChild(table([["Mois", s => s.period],["Client", s => cname(s.client_id)],["Module", s => s.module === "com" ? "Réseaux" : "Meta"],["Chiffres", s => s.data],["Source", s => s.source],["", s => del("stats", s.id)]], D.stats));
+  }
+};
+async function dl(name){ const r = await fetch("/api/admin/file/"+encodeURIComponent(name), {headers:{Authorization:"Bearer "+KEY}}); if (!r.ok) return alert("Fichier introuvable."); const b = await r.blob(); const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = name; a.click(); }
+if (KEY) load().catch(() => login()); else login();
+})();
+</script>
+</body>
+</html>
