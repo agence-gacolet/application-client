@@ -1233,6 +1233,28 @@ function gifPicker(ch, me){
   });
 }
 function waTime(at){ const d = new Date(at || 0), k = iso(d); if (k === today()) return d.getHours() + " h " + String(d.getMinutes()).padStart(2,"0"); if (k === addDays(today(), -1)) return "Hier"; return fmtD(k); }
+/* Salons vocaux : visio, partage d’écran et réunions, ouverts dans une fenêtre Jitsi. Le lien secret du salon est rangé dans « meta/voice ». */
+const VOICE = [["equipe","Salon équipe","Discussions au fil de la journée"],["tournage","Salon tournage","Préparer et suivre les tournages"],["reunion","Réunion","Points d’équipe, réunions avec un client"]];
+const HEADSET = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3.5" y="13.5" width="4" height="6.5" rx="1.5"/><rect x="16.5" y="13.5" width="4" height="6.5" rx="1.5"/></svg>';
+function voiceHere(room){
+  const lim = Date.now() - 90 * 60000, last = {};
+  S.d.messages.filter(m => m.ch === "voix" && m.voice === room && Date.parse(m.at) > lim).sort((a, b) => (a.at || "").localeCompare(b.at || "")).forEach(m => { last[m.who] = m; });
+  return Object.values(last).filter(m => !m.left).map(m => m.who);
+}
+async function joinVoice(room, label){
+  const me = S.me || "Gabriel";
+  let v = (S.d.meta || []).find(x => x.id === "voice");
+  if (!v || !v.token){
+    if (S.role !== "owner"){ toast("Un propriétaire doit ouvrir les salons une première fois."); return; }
+    const tok = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(36).padStart(2, "0")).join("").slice(0, 18);
+    try { await save("meta", "voice", { token: tok }); } catch(e){ toast(e.message); return; }
+    v = { token: tok };
+  }
+  const url = "https://meet.jit.si/Gacolet-" + room + "-" + v.token + "#userInfo.displayName=" + encodeURIComponent(JSON.stringify(me)) + "&config.startWithVideoMuted=true&config.prejoinConfig.enabled=false&config.subject=" + encodeURIComponent(JSON.stringify(label));
+  window.open(url, "gacolet-voix-" + room);
+  try { await save("messages", null, { ch: "voix", voice: room, who: me, text: "", at: new Date().toISOString() }); } catch(e){}
+}
+async function leaveVoice(room){ try { await save("messages", null, { ch: "voix", voice: room, who: S.me || "Gabriel", text: "", left: true, at: new Date().toISOString() }); } catch(e){} }
 function vMessagerie(root){
   const me = S.me || "Gabriel";
   const mode = S.ui.msgMode || "main";
@@ -1258,6 +1280,12 @@ function vMessagerie(root){
     side.appendChild(b);
   };
   side.appendChild(el("span","wa-lab","Équipe")); CHANNELS.forEach(([k,l]) => row(pre+k, l));
+  side.appendChild(el("span","wa-lab","Vocal"));
+  VOICE.forEach(([k, l, sub]) => { const here = voiceHere(k), mine = here.includes(me);
+    const b = el("div","wa-row wa-voice" + (here.length ? " live" : "")); const ic = el("span","wa-vic"); ic.innerHTML = HEADSET;
+    const tx = el("span","wa-rtx"); const t1 = el("span","wa-rtop"); t1.appendChild(el("b",null,l)); const t2 = el("span","wa-rbot"); t2.appendChild(el("span",null, here.length ? here.join(", ") + (here.length > 1 ? " sont" : " est") + " dans le salon" : sub)); tx.append(t1, t2);
+    const go = el("button","btn sm " + (mine ? "" : "lemon"), mine ? "Quitter" : "Rejoindre"); go.type = "button"; go.onclick = e => { e.stopPropagation(); mine ? leaveVoice(k) : joinVoice(k, l); };
+    b.append(ic, tx, go); side.appendChild(b); });
   if (mode !== "shoot"){ const dms = dmChannels(); if (dms.length){ side.appendChild(el("span","wa-lab","Privé")); dms.sort((a, b) => ((lastOf[b] || {}).at || "").localeCompare((lastOf[a] || {}).at || "")).forEach(k => row(k, dmOther(k))); } }
   side.appendChild(el("span","wa-lab","Clients"));
   clientNames().filter(n => n !== AGENCE).map(n => [pre+"c:"+n, n]).sort((a, b) => ((lastOf[b[0]] || {}).at || "").localeCompare((lastOf[a[0]] || {}).at || "") || a[1].localeCompare(b[1])).forEach(([k, n]) => row(k, n));
