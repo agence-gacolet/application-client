@@ -482,13 +482,23 @@ function vAccueil(root){
   const dl = fmtDL(t0); W.appendChild(el("p","w2-date", dl.charAt(0).toUpperCase()+dl.slice(1)));
   const h1 = el("h1","w2-h"); h1.append(document.createTextNode(hello + " "), el("span", null, me)); W.appendChild(h1);
   W.appendChild(el("p","w2-say", say));
-  const dated = openTasks().filter(t => t.who === me && isISO(t.date)).sort((a,b) => a.date.localeCompare(b.date));
-  const urgent = dated[0] || openTasks().filter(t => t.who === me)[0];
-  const s = el("div","w2-start"); s.appendChild(el("h2","hh", urgent ? "On commence par" : "Rien d’urgent"));
-  const r = el("button","hrow go"); 
-  if (urgent){ r.style.setProperty("--c", colorOf(urgent.client)); r.appendChild(el("span","hd", urgent.date ? fmtD(urgent.date) : "")); const m = el("span","hm2"); m.appendChild(el("b",null,urgent.title)); if (urgent.client && urgent.client !== AGENCE) m.appendChild(el("span",null,urgent.client)); r.appendChild(m); r.onclick = () => openTask(urgent); }
-  else { r.appendChild(el("span","hd","")); const m = el("span","hm2"); m.appendChild(el("b",null,"Jeter un œil à l’agenda")); r.appendChild(m); r.onclick = () => go("agenda"); }
-  r.appendChild(el("span","ht","Y aller")); s.appendChild(r); W.appendChild(s); root.appendChild(W);
+  const t14 = addDays(t0, 14), t7 = addDays(t0, 7);
+  const myTasks = openTasks().filter(t => t.who === me && (!isISO(t.date) || t.date <= t7)).length;
+  const tiles = [];
+  if (me === "Matis"){
+    tiles.push([S.d.rushes.filter(r => r.status !== "Monté" && (r.editor === "Matis" || !r.editor)).length, "montages", () => go("montage")]);
+    tiles.push([S.d.events.filter(e => e.type === "Tournage" && e.status === "Prévu" && e.date >= t0 && e.date <= t7).length, "tournages cette semaine", () => go("agenda")]);
+  } else if (me === "Clara"){
+    tiles.push([S.d.posts.filter(p => postWho(p) === "Clara" && !POST_DONE.includes(p.status) && p.date >= t0 && p.date <= t14).length, "posts à préparer", () => { S.ui.agClient = AGENCE; go("agenda"); }]);
+    tiles.push([S.d.cevents.filter(e => !e.done && prepBy(e) && prepBy(e) <= t14 && e.date >= t0).length, "temps forts clients", () => { S.ui.ccTab = "soon"; go("clients"); }]);
+  } else {
+    tiles.push([S.d.commercial.filter(c => isISO(c.nextDate) && c.nextDate <= t0).length, "relances", () => go("commercial")]);
+    tiles.push([S.d.campaigns.filter(c => c.status === "À lancer").length, "campagnes à lancer", () => go("campagnes")]);
+  }
+  tiles.push([myTasks, "tâches cette semaine", () => { S.ui.tWho = me; go("taches"); }]);
+  const s = el("div","w2-tiles");
+  tiles.forEach(([n, l, f]) => { const t = el("button","w2-tile"); t.append(el("b",null,String(n)), el("span",null,l)); t.onclick = f; s.appendChild(t); });
+  W.appendChild(s); root.appendChild(W);
 }
 
 /* ---------- Tâches ---------- */
