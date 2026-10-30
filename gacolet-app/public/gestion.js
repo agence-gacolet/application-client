@@ -3,8 +3,8 @@
 "use strict";
 
 /* ---------- Constantes ---------- */
-const PEOPLE = ["Gabriel","Matis","Clara"];
-const OWNERS = ["Gabriel","Matis","Clara","À attribuer"];
+let PEOPLE = ["Gabriel","Matis","Clara"];
+let OWNERS = ["Gabriel","Matis","Clara","À attribuer"];
 const POLES = [["00","DIRECTION & DIVERS"],["10","STRATÉGIE & CONSEIL"],["20","PRODUCTION"],["30","GRAPHISME & IMPRESSION"],["40","RÉSEAUX SOCIAUX"],["50","PUBLICITÉ"],["60","WEB & RÉFÉRENCEMENT"]];
 const POLE = Object.fromEntries(POLES);
 const EV_TYPES = ["Tournage","Éditorial","Maroudeur","Rendez-vous"];
@@ -19,9 +19,16 @@ const DAYS = ["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"]
 const DEFAULT_COLORS = {"Agence Gacolet":"#1D1D1B","AR Climatisation":"#E8833A","Bonobo":"#2E9E5B","Delta Sud Formation":"#D6334A","Domaine Pagezi":"#7A1F3D","Flora Design":"#C25CC9","France Étanchéité":"#2F6FE4","Gaufrement Bon":"#E3B505","Hugo Maître Nageur":"#1BA6C9","Insolent":"#5C5C57","KR Thermolaquage":"#8C6239","La Vie La Construction":"#F06A1D","Le Petit Mas":"#6E8B3D","Locamex":"#E2559C","Meyer-Pic":"#3D4FB5","Only Clean":"#17A398","Paillotte Bassamoise":"#F2A93B","SOS Pare-Brise Codognan":"#9B2226","SOS Pare-Brise Vendargues":"#4A6C8C","Sport Défense":"#8E44AD","The New Me Montpellier":"#D98BA5","Total Habitat 360":"#6C7A2E"};
 const VIEWS = [
   ["accueil","Accueil"],["agenda","Agenda"],["taches","Tâches"],["messagerie","Messagerie"],["commercial","Commercial"],["clients","Calendrier clients"],
-  ["montage","Prêt à monter"],["publications","Publications"],["campagnes","Campagnes"],["formation","Formation"]
+  ["montage","Prêt à monter"],["publications","Publications"],["campagnes","Campagnes"],["formation","Formation"],["parametres","Paramètres"]
 ];
-const NAV_GROUPS = [["",["accueil"]],["Au quotidien",["agenda","taches","messagerie"]],["Clients",["commercial","clients"]],["Production",["montage","publications","campagnes"]],["Ressources",["formation"]]];
+const NAV_GROUPS = [["",["accueil"]],["Au quotidien",["agenda","taches","messagerie"]],["Clients",["commercial","clients"]],["Production",["montage","publications","campagnes"]],["Ressources",["formation"]],["Compte",["parametres"]]];
+/* Rôles : ce que chaque siège voit. Le serveur applique les mêmes limites aux données. */
+const ROLE_LABEL = {owner:"Propriétaire", member:"Membre", commercial:"Commercial"};
+const ROLE_VIEWS = {
+  member: ["accueil","agenda","taches","messagerie","formation","parametres"],
+  commercial: ["accueil","agenda","taches","messagerie","commercial","clients","montage","publications","campagnes","formation","parametres"]
+};
+const canSee = k => !S.role || S.role === "owner" || (ROLE_VIEWS[S.role] || []).includes(k);
 const COLLS = ["events","tasks","commercial","campaigns","rushes","publications","clients","cevents","keydates","posts","edtodo","meta","messages","formations"];
 
 /* ---------- Outils ---------- */
@@ -489,7 +496,8 @@ function vAccueil(root){
   const t14 = addDays(t0, 14), t7 = addDays(t0, 7);
   const myTasks = openTasks().filter(t => t.who === me && (!isISO(t.date) || t.date <= t7)).length;
   const tiles = [];
-  if (me === "Matis"){
+  if (S.role && S.role !== "owner"){ if (S.role === "commercial") tiles.push([S.d.commercial.filter(c => isISO(c.nextDate) && c.nextDate <= t0).length, "relances", () => go("commercial")]); }
+  else if (me === "Matis"){
     tiles.push([S.d.rushes.filter(r => r.status !== "Monté" && (r.editor === "Matis" || !r.editor)).length, "montages", () => go("montage")]);
     tiles.push([S.d.events.filter(e => e.type === "Tournage" && e.status === "Prévu" && e.date >= t0 && e.date <= t7).length, "tournages cette semaine", () => go("agenda")]);
   } else if (me === "Clara"){
@@ -499,7 +507,7 @@ function vAccueil(root){
     tiles.push([S.d.commercial.filter(c => isISO(c.nextDate) && c.nextDate <= t0).length, "relances", () => go("commercial")]);
     tiles.push([S.d.campaigns.filter(c => c.status === "À lancer").length, "campagnes à lancer", () => go("campagnes")]);
   }
-  (MSG_ROLE[me] || []).forEach(md => { const pre = md === "shoot" ? "tg:" : "", chs = msgChannels(md);
+  (MSG_ROLE[me] || ["main"]).forEach(md => { const pre = md === "shoot" ? "tg:" : "", chs = msgChannels(md);
     const team = chs.filter(k => !k.startsWith(pre + "c:")), cli = chs.filter(k => k.startsWith(pre + "c:"));
     const nt = team.reduce((n, k) => n + unreadIn(k), 0), nc = cli.reduce((n, k) => n + unreadIn(k), 0), fc = cli.find(k => unreadIn(k));
     const open = k => () => { S.ui.msgMode = md; if (md === "shoot") S.ui.msgShoot = k; else S.ui.msgCh = k; remember(); go("messagerie"); };
@@ -837,7 +845,7 @@ function msgChannels(mode){ const pre = mode === "shoot" ? "tg:" : ""; return CH
 function seenKey(k){ return "seen_" + (S.me || "Gabriel") + "_" + k; }
 function unreadIn(k){ const me = S.me || "Gabriel", s = S.ui[seenKey(k)] || ""; return S.d.messages.filter(m => m.ch === k && m.who !== me && (m.at || "") > s).length; }
 function unreadMode(mode){ return msgChannels(mode).reduce((n, k) => n + unreadIn(k), 0); }
-function unreadRole(){ return (MSG_ROLE[S.me || "Gabriel"] || []).reduce((n, m) => n + unreadMode(m), 0); }
+function unreadRole(){ return (MSG_ROLE[S.me || "Gabriel"] || ["main"]).reduce((n, m) => n + unreadMode(m), 0); }
 function shootLabel(e){ return fmtD(e.date) + ", " + e.client; }
 function chName(k){ k = k.replace(/^tg:/, ""); const c = CHANNELS.find(x => x[0] === k); return c ? c[1] : k.replace(/^c:/, ""); }
 /* ---------- Messages vocaux ---------- */
@@ -923,7 +931,7 @@ function vMessagerie(root){
     else row.appendChild(el("div","msg-t", m.text||""));
     const act = el("div","msg-a");
     const tk = el("button",null,"En faire une tâche"); tk.onclick = () => editTask({who: me, title: (m.text||"Écouter le message vocal").slice(0,120), client: ch.replace(/^tg:/, "").startsWith("c:") ? ch.replace(/^tg:/, "").slice(2) : ""}); act.appendChild(tk);
-    if (m.who === me){ const del = el("button","rm","Retirer"); let armed = false; del.onclick = () => { if (!armed){ armed = true; del.textContent = "Confirmer"; del.classList.add("armed"); setTimeout(() => { armed = false; del.textContent = "Retirer"; del.classList.remove("armed"); }, 3000); return; } AUDIO_EL.delete(m.id); remove("messages", m.id); }; act.appendChild(del); }
+    if (m.who === me || S.role === "owner"){ const del = el("button","rm","Retirer"); let armed = false; del.onclick = () => { if (!armed){ armed = true; del.textContent = "Confirmer"; del.classList.add("armed"); setTimeout(() => { armed = false; del.textContent = "Retirer"; del.classList.remove("armed"); }, 3000); return; } AUDIO_EL.delete(m.id); remove("messages", m.id); }; act.appendChild(del); }
     row.appendChild(act);
     list.appendChild(row); prev = m;
   });
@@ -1005,11 +1013,12 @@ function vFormation(root){
 }
 
 /* ---------- Navigation ---------- */
-const RENDER = {accueil:vAccueil, agenda:vAgenda, taches:vTaches, commercial:vCommercial, campagnes:vCampagnes, montage:vMontage, publications:vPublications, clients:vClients, messagerie:vMessagerie, formation:vFormation};
+const RENDER = {parametres:vParametres, accueil:vAccueil, agenda:vAgenda, taches:vTaches, commercial:vCommercial, campagnes:vCampagnes, montage:vMontage, publications:vPublications, clients:vClients, messagerie:vMessagerie, formation:vFormation};
 function go(v){ if (location.hash !== "#"+v) location.hash = v; else { S.view = v; render(); } }
-function fromHash(){ let h = (location.hash||"").replace("#",""); if (h === "editorial"){ S.ui.agClient = AGENCE; if (!S.ui.agLayers.includes("posts")) S.ui.agLayers = S.ui.agLayers.concat("posts"); h = "agenda"; } S.view = RENDER[h] ? h : "accueil"; }
+function fromHash(){ let h = (location.hash||"").replace("#",""); if (h === "editorial"){ S.ui.agClient = AGENCE; if (!S.ui.agLayers.includes("posts")) S.ui.agLayers = S.ui.agLayers.concat("posts"); h = "agenda"; } S.view = RENDER[h] && canSee(h) ? h : "accueil"; }
 window.addEventListener("hashchange", () => { fromHash(); render(); window.scrollTo(0,0); });
 const ICONS = {
+  parametres:'<circle cx="12" cy="12" r="3.2"/><path d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6 6l1.6 1.6M16.4 16.4 18 18M6 18l1.6-1.6M16.4 7.6 18 6"/>',
   accueil:'<path d="M4 11.2 12 4.8l8 6.4V20h-5.6v-5.2H9.6V20H4z"/>',
   agenda:'<rect x="4" y="5.5" width="16" height="14.5" rx="1.5"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/>',
   taches:'<path d="M4.5 7l1.5 1.5L8.5 6M4.5 13l1.5 1.5L8.5 12M11 7.3h8.5M11 13.3h8.5M11 18.8h8.5M5 18.8h2.5"/>',
@@ -1022,7 +1031,7 @@ const ICONS = {
   formation:'<rect x="3.5" y="5.5" width="17" height="12" rx="2"/><path d="M10.5 9v5l4-2.5z"/><path d="M8 20.5h8"/>',
   plus:'<path d="M5 7h14M5 12h14M5 17h14"/>'
 };
-const SHORT = {accueil:"Accueil", agenda:"Agenda", taches:"Tâches", commercial:"Commercial", campagnes:"Campagnes", montage:"Montage", publications:"Publications", clients:"Calendrier clients", messagerie:"Messagerie", formation:"Formation"};
+const SHORT = {parametres:"Paramètres", accueil:"Accueil", agenda:"Agenda", taches:"Tâches", commercial:"Commercial", campagnes:"Campagnes", montage:"Montage", publications:"Publications", clients:"Calendrier clients", messagerie:"Messagerie", formation:"Formation"};
 const MOBILE_MAIN = ["accueil","agenda","taches","commercial"];
 const ico = k => { const s = document.createElementNS("http://www.w3.org/2000/svg","svg"); s.setAttribute("viewBox","0 0 24 24"); s.setAttribute("aria-hidden","true"); s.classList.add("ico"); s.innerHTML = ICONS[k] || ""; return s; };
 function renderTabs(){
@@ -1030,11 +1039,12 @@ function renderTabs(){
   const badge = { messagerie: unreadRole(), taches: openTasks().filter(t => t.who === me && lateDays(t.date) > 0).length, commercial: me === "Gabriel" ? S.d.commercial.filter(c => isISO(c.nextDate) && c.nextDate <= today()).length : 0 };
   const link = k => { const a = el("a"); a.href = "#"+k; a.appendChild(ico(k)); a.appendChild(el("span","lb", SHORT[k])); if (k === S.view) a.setAttribute("aria-current","page"); if (badge[k]) a.appendChild(el("span","n",String(badge[k]))); return a; };
   const n = $("#tabs"); n.textContent = "";
-  NAV_GROUPS.forEach(([lab, ks]) => { if (lab) n.appendChild(el("span","navlab",lab)); ks.forEach(k => n.appendChild(link(k))); });
+  NAV_GROUPS.forEach(([lab, ks]) => { ks = ks.filter(canSee); if (!ks.length) return; if (lab) n.appendChild(el("span","navlab",lab)); ks.forEach(k => n.appendChild(link(k))); });
   const m = $("#mtabs"); m.textContent = "";
-  MOBILE_MAIN.forEach(k => m.appendChild(link(k)));
+  const mm = S.role && S.role !== "owner" ? ["accueil","agenda","taches","messagerie"] : MOBILE_MAIN;
+  mm.filter(canSee).forEach(k => m.appendChild(link(k)));
   const more = el("button","morebtn"); more.type = "button"; more.appendChild(ico("plus")); more.appendChild(el("span","lb","Plus"));
-  if (!MOBILE_MAIN.includes(S.view)) more.setAttribute("aria-current","page");
+  if (!mm.includes(S.view)) more.setAttribute("aria-current","page");
   if (badge.messagerie) more.appendChild(el("span","n",String(badge.messagerie)));
   more.onclick = openMore; m.appendChild(more);
   $("#mbar-title").textContent = SHORT[S.view] || "";
@@ -1042,9 +1052,9 @@ function renderTabs(){
 }
 function openMore(){
   openModal(md => { md.classList.add("sheet"); const t = el("h3",null,"Menu"); t.id = "mtitle"; md.appendChild(t);
-    const l = el("nav","morelist"); VIEWS.filter(([k]) => !MOBILE_MAIN.includes(k)).forEach(([k,lab]) => { const a = el("a"); a.href = "#"+k; a.appendChild(ico(k)); a.appendChild(el("span",null,lab)); if (k === S.view) a.setAttribute("aria-current","page"); a.onclick = () => closeModal(); l.appendChild(a); }); md.appendChild(l);
-    const w = el("div","whobox"); w.appendChild(el("span","flabel","Je suis"));
-    w.appendChild(segm(PEOPLE.map(p => [p,p]), S.me, p => { setMe(p); closeModal(); })); md.appendChild(w);
+    const l = el("nav","morelist"); VIEWS.filter(([k]) => canSee(k) && !(S.role && S.role !== "owner" ? ["accueil","agenda","taches","messagerie"] : MOBILE_MAIN).includes(k)).forEach(([k,lab]) => { const a = el("a"); a.href = "#"+k; a.appendChild(ico(k)); a.appendChild(el("span",null,lab)); if (k === S.view) a.setAttribute("aria-current","page"); a.onclick = () => closeModal(); l.appendChild(a); }); md.appendChild(l);
+    if (S.secours || !S.user){ const w = el("div","whobox"); w.appendChild(el("span","flabel","Je suis"));
+    w.appendChild(segm(PEOPLE.map(p => [p,p]), S.me, p => { setMe(p); closeModal(); })); md.appendChild(w); }
     const o = el("div","actions"); o.style.justifyContent = "space-between";
     const ag = el("a","btn sm","Espace clients"); ag.href = "/agence"; o.appendChild(ag);
     o.appendChild(btn("Se déconnecter","sm", () => window.GC && GC.logout())); md.appendChild(o);
@@ -1060,9 +1070,201 @@ function render(){
   if (S.failed){ root.appendChild(head("Gestionnaire", "")); root.appendChild(el("p","empty",S.failed)); return; }
   if (!S.ready){ root.appendChild(head(VIEWS.find(v => v[0] === S.view)[1], "Chargement des données de l’agence…")); root.appendChild(el("p","empty","Les tâches, le commercial, les campagnes, les calendriers et l’agenda s’affichent dans un instant.")); return; }
   try { RENDER[S.view](root); } catch(x){ root.appendChild(el("p","err","Affichage impossible : "+(x && x.message))); console.error(x); }
-  if (S.canWrite === false) root.insertBefore(el("p","status","Consultation seule : demande à Gabriel l’accès Contributeur pour modifier."), root.firstChild);
+  if (S.preview){ const b = el("div","pv-bar"); b.append(el("span",null,"Aperçu : tu vois l’application comme "+S.me+" ("+(ROLE_LABEL[S.role]||S.role)+"). Lecture seule.")); b.appendChild(btn("Quitter l’aperçu","sm", () => { GC.setAs(""); location.hash = "#parametres"; location.reload(); })); root.insertBefore(b, root.firstChild); }
+  else if (S.canWrite === false) root.insertBefore(el("p","status","Consultation seule."), root.firstChild);
   if (focusId){ const f = document.getElementById(focusId); if (f){ f.focus(); try { if (caret != null) f.setSelectionRange(caret, caret); } catch(e){} } }
   document.title = "Gacolet";
+}
+
+/* ---------- Compte connecté ---------- */
+function applyMe(r){
+  if (!r || !r.user) return;
+  const u = r.user;
+  S.user = u; S.role = u.role; S.secours = !!u.secours; S.preview = !!u.preview;
+  S.isOwner = u.role === "owner"; S.canWrite = !u.preview;
+  S.team = r.team || [];
+  const names = S.team.map(t => t.name);
+  if (names.length) PEOPLE = names;
+  if (!S.secours) S.me = u.name;
+  OWNERS = S.role === "owner" ? PEOPLE.concat(["À attribuer"]) : [S.me];
+  const lab = document.querySelector(".me"); if (lab) lab.hidden = !S.secours;
+  if (S.secours){ meSel.textContent = ""; PEOPLE.forEach(p => { const o = el("option",null,p); o.value = p; meSel.appendChild(o); }); if (S.me) meSel.value = S.me; }
+  const ac = $("#acct");
+  if (ac && !S.secours){ ac.hidden = false; $("#acct-name").textContent = u.name; $("#acct-role").textContent = (ROLE_LABEL[u.role] || "") + (S.preview ? ", aperçu" : ""); }
+  const fa = $("#foot-agence"); if (fa) fa.hidden = S.role !== "owner";
+  fromHash(); render();
+}
+
+/* ---------- Notifications (messages) ---------- */
+const notifKey = () => "gacolet-notif-" + (S.user && S.user.id ? S.user.id : (S.me || ""));
+const notifOn = () => store.get(notifKey()) === true && "Notification" in window && Notification.permission === "granted";
+let NOTIF_SEEN = null;
+function notifyInit(){}
+function notifyNew(){
+  if (!NOTIF_SEEN){ NOTIF_SEEN = new Set(S.d.messages.map(m => m.id)); return; }
+  const fresh = S.d.messages.filter(m => !NOTIF_SEEN.has(m.id)); fresh.forEach(m => NOTIF_SEEN.add(m.id));
+  if (!notifOn() || S.preview) return;
+  if (!document.hidden && S.view === "messagerie") return;
+  fresh.filter(m => m.who !== S.me && Date.now() - Date.parse(m.at || 0) < 120000).slice(-3).forEach(m => {
+    try {
+      const n = new Notification(m.who + ", " + chName(m.ch), { body: m.audio ? "Message vocal" : String(m.text || "").slice(0, 140), icon: "/icon-v4-512.png", tag: m.id });
+      n.onclick = () => { window.focus(); const shoot = String(m.ch).startsWith("tg:"); S.ui.msgMode = shoot ? "shoot" : "main"; if (shoot) S.ui.msgShoot = m.ch; else S.ui.msgCh = m.ch; remember(); go("messagerie"); n.close(); };
+    } catch(e){}
+  });
+}
+
+/* ---------- Paramètres ---------- */
+function pmCard(title, sub){ const c = el("section","pm-card"); c.appendChild(el("h2",null,title)); if (sub) c.appendChild(el("p","muted",sub)); return c; }
+function pmField(label, type, value, ac){ const l = el("label","pm-f"); l.appendChild(el("span",null,label)); const i = el("input"); i.type = type || "text"; i.value = value || ""; if (ac) i.autocomplete = ac; l.appendChild(i); return [l, i]; }
+async function reloadUsers(){ try { const r = await GC.api("GET","/api/g-users"); S.users = r.users; } catch(e){ toast(e.message); if (!S.users) S.users = []; } render(); }
+
+function vParametres(root){
+  const tabs = [["compte","Mon compte"],["notif","Notifications"]].concat(S.role === "owner" ? [["equipe","Équipe et accès"]] : []).concat([["cgu","Conditions"]]);
+  const tab = tabs.some(t => t[0] === S.ui.pmTab) ? S.ui.pmTab : (S.secours ? "equipe" : "compte");
+  root.appendChild(head("Paramètres", "Ton compte, tes notifications, l’équipe et les règles de l’application.", [segm(tabs, tab, v => { S.ui.pmTab = v; remember(); render(); })]));
+  const w = el("div","pm"); root.appendChild(w);
+  ({compte:pmCompte, notif:pmNotif, equipe:pmEquipe, cgu:pmCgu})[tab](w);
+}
+
+function pmCompte(w){
+  if (S.secours){
+    const c = pmCard("Accès de secours", "Tu es connecté avec le mot de passe commun de l’agence. Il sert seulement à créer les comptes ou à dépanner. Définis ton mot de passe dans Équipe et accès, puis reconnecte-toi avec ton identifiant.");
+    const a = el("div","pm-actions"); a.append(btn("Aller à Équipe et accès","lemon", () => { S.ui.pmTab = "equipe"; render(); }), btn("Se déconnecter","", () => GC.logout())); c.appendChild(a); w.appendChild(c); return;
+  }
+  if (S.preview){ w.appendChild(pmCard("Aperçu", "Les réglages du compte ne sont pas disponibles pendant un aperçu.")); return; }
+  const u = S.user || {}, info = u.info || {};
+  const c1 = pmCard("Mon profil"); const dl = el("dl","pm-dl");
+  [["Prénom", u.name], ["Identifiant", u.username], ["Rôle", ROLE_LABEL[u.role] || u.role]].forEach(([k, v]) => dl.append(el("dt",null,k), el("dd",null,v || ""))); c1.appendChild(dl); w.appendChild(c1);
+
+  const c2 = pmCard("Coordonnées", "Pour que l’équipe puisse te joindre.");
+  const f2 = el("form"); const g2 = el("div","pm-grid");
+  const [l1, iMail] = pmField("Courriel","email",info.email,"email"), [l2, iTel] = pmField("Téléphone","tel",info.tel,"tel");
+  g2.append(l1, l2); f2.appendChild(g2);
+  const s2 = el("button","btn lemon","Enregistrer"); s2.type = "submit"; f2.appendChild(s2);
+  f2.onsubmit = async e => { e.preventDefault(); s2.disabled = true; try { const r = await GC.api("PATCH","/api/g-me",{ email: iMail.value.trim(), tel: iTel.value.trim() }); S.user.info = r.info; toast("Coordonnées enregistrées."); } catch(x){ toast(x.message); } s2.disabled = false; };
+  c2.appendChild(f2); w.appendChild(c2);
+
+  const c3 = pmCard("Mot de passe", "8 caractères au moins. Le changer déconnecte tes autres appareils.");
+  const f3 = el("form"); const g3 = el("div","pm-grid");
+  const hid = el("input"); hid.type = "text"; hid.autocomplete = "username"; hid.value = u.username || ""; hid.hidden = true; f3.appendChild(hid);
+  const [a1, pCur] = pmField("Mot de passe actuel","password","","current-password"), [a2, pNew] = pmField("Nouveau mot de passe","password","","new-password"), [a3, pNew2] = pmField("Confirmer le nouveau","password","","new-password");
+  g3.append(a1, el("span"), a2, a3); f3.appendChild(g3);
+  const s3 = el("button","btn lemon","Changer le mot de passe"); s3.type = "submit"; f3.appendChild(s3);
+  f3.onsubmit = async e => { e.preventDefault();
+    if (pNew.value.length < 8){ toast("Le nouveau mot de passe doit faire au moins 8 caractères."); return; }
+    if (pNew.value !== pNew2.value){ toast("Les deux nouveaux mots de passe ne sont pas identiques."); return; }
+    s3.disabled = true;
+    try { const r = await GC.api("POST","/api/g-me/password",{ current: pCur.value, next: pNew.value }); GC.setKey(r.key); pCur.value = pNew.value = pNew2.value = ""; toast("Mot de passe changé."); } catch(x){ toast(x.message); }
+    s3.disabled = false; };
+  c3.appendChild(f3); w.appendChild(c3);
+
+  const c4 = pmCard("Session"); c4.appendChild(btn("Se déconnecter","", () => GC.logout())); w.appendChild(c4);
+}
+
+function pmNotif(w){
+  const c = pmCard("Nouveaux messages", "Une notification quand quelqu’un t’écrit, tant que l’application est ouverte sur cet appareil, même en arrière-plan.");
+  const lab = el("label","pm-tg"); const cb = el("input"); cb.type = "checkbox"; cb.checked = notifOn(); lab.append(cb, el("span",null,"Recevoir les notifications sur cet appareil"));
+  cb.onchange = () => {
+    if (!cb.checked){ store.set(notifKey(), false); toast("Notifications coupées."); render(); return; }
+    if (!("Notification" in window)){ cb.checked = false; toast("Cet appareil ne gère pas les notifications."); return; }
+    Notification.requestPermission().then(p => {
+      if (p === "granted"){ store.set(notifKey(), true); toast("Notifications activées."); }
+      else { store.set(notifKey(), false); toast("Notifications refusées : autorise-les dans les réglages du navigateur."); }
+      render();
+    });
+  };
+  c.appendChild(lab);
+  const st = !("Notification" in window) ? "Cet appareil ne gère pas les notifications." : Notification.permission === "denied" ? "Le navigateur bloque les notifications pour l’application : il faut les autoriser dans ses réglages." : notifOn() ? "Activées sur cet appareil." : "Désactivées sur cet appareil.";
+  c.appendChild(el("p","pm-note", st));
+  c.appendChild(el("p","pm-note","Sur iPhone, il faut que l’application soit installée sur l’écran d’accueil (iOS 16.4 ou plus récent). Les pastilles du menu, elles, restent toujours affichées."));
+  w.appendChild(c);
+}
+
+function pmEquipe(w){
+  if (S.role !== "owner"){ w.appendChild(pmCard("Équipe et accès", "Réservé aux propriétaires.")); return; }
+  if (!S.users){ w.appendChild(el("p","empty","Chargement des comptes…")); reloadUsers(); return; }
+  if (S.secours) w.appendChild(el("p","pv-note","Accès de secours : définis le mot de passe de chaque propriétaire, puis reconnectez-vous chacun avec votre identifiant."));
+  const us = S.users, act = us.filter(u => !u.disabled);
+  const c = pmCard("Sièges", act.length + " siège" + (act.length > 1 ? "s" : "") + " actif" + (act.length > 1 ? "s" : "") + " : " + ["owner","member","commercial"].map(r => act.filter(u => u.role === r).length + " " + (ROLE_LABEL[r] || r).toLowerCase() + (act.filter(u => u.role === r).length > 1 ? "s" : "")).join(", ") + ".");
+  const top = el("div","pm-actions"); top.appendChild(addBtn("Ajouter un siège", () => seatForm())); c.appendChild(top);
+  const { w: tw, tb } = table(["Nom","Identifiant","Rôle","Mot de passe","Statut",""]);
+  us.forEach(u => {
+    const tr = el("tr","row" + (u.disabled ? " done" : ""));
+    td(tr, u.name + (S.user && u.id === S.user.id ? " (toi)" : ""), "nw"); td(tr, u.username, "nw");
+    const sel = el("select","inl"); Object.entries(ROLE_LABEL).forEach(([k, l]) => { const o = el("option",null,l); o.value = k; sel.appendChild(o); }); sel.value = u.role; sel.disabled = !writable();
+    sel.onchange = async () => { try { await GC.api("PATCH","/api/g-users/"+u.id,{ role: sel.value }); toast(u.name + " passe " + (ROLE_LABEL[sel.value] || "").toLowerCase() + "."); } catch(x){ toast(x.message); } reloadUsers(); };
+    td(tr, sel);
+    td(tr, u.hasPassword ? "Défini" : el("span","pm-tag","À définir"), "nw");
+    td(tr, u.disabled ? "Suspendu" : "Actif", "nw");
+    const a = el("div","pm-row-a");
+    a.appendChild(btn(u.hasPassword ? "Nouveau mot de passe" : "Définir le mot de passe","sm", () => pwForm(u)));
+    a.appendChild(btn(u.disabled ? "Réactiver" : "Suspendre","sm", async () => { try { await GC.api("PATCH","/api/g-users/"+u.id,{ disabled: !u.disabled }); } catch(x){ toast(x.message); } reloadUsers(); }));
+    if (!(S.user && u.id === S.user.id)){ const rm = el("button","btn sm rmb","Retirer"); rm.type = "button"; let armed = false;
+      rm.onclick = async () => { if (!armed){ armed = true; rm.textContent = "Confirmer"; setTimeout(() => { armed = false; rm.textContent = "Retirer"; }, 3000); return; } try { await GC.api("DELETE","/api/g-users/"+u.id); toast("Siège retiré."); } catch(x){ toast(x.message); } reloadUsers(); };
+      a.appendChild(rm); }
+    td(tr, a);
+    tb.appendChild(tr);
+  });
+  c.appendChild(tw); w.appendChild(c);
+
+  const r = pmCard("Les rôles");
+  const rl = el("dl","pm-dl wide");
+  [["Propriétaire","Tout : chaque onglet, toutes les tâches, l’agenda complet, les comptes et ces réglages."],
+   ["Membre","Accueil, Agenda (uniquement ses tâches et les événements où il est inscrit), ses tâches, la Messagerie et la Formation."],
+   ["Commercial","Comme un membre, plus Commercial, Calendrier clients, Montage, Publications et Campagnes."]].forEach(([k, v]) => rl.append(el("dt",null,k), el("dd",null,v)));
+  r.appendChild(rl);
+  r.appendChild(el("p","pm-note","Le serveur applique ces limites : une personne ne reçoit jamais les données que son rôle ne permet pas de voir. Les propriétaires peuvent retirer n’importe quel message, les autres seulement les leurs."));
+  w.appendChild(r);
+
+  const p = pmCard("Aperçu", "Pour vérifier les réglages : l’application s’ouvre exactement comme la voit la personne choisie, en lecture seule.");
+  const g = el("div","pm-grid");
+  const others = us.filter(u => !(S.user && u.id === S.user.id) && !u.disabled);
+  const s1 = el("select","pick"); others.forEach(u => { const o = el("option",null,u.name + ", " + (ROLE_LABEL[u.role] || "").toLowerCase()); o.value = u.id; s1.appendChild(o); });
+  const b1 = btn("Voir comme ce membre","lemon", () => { if (!s1.value) return; GC.setAs(s1.value); location.hash = "#accueil"; location.reload(); });
+  const box1 = el("div","pm-f"); box1.append(el("span",null,"Membre de l’agence"), s1, b1);
+  const s2 = el("select","pick"); (S.pvClients || []).forEach(x => { const o = el("option",null,x.name); o.value = x.id; s2.appendChild(o); });
+  if (!S.pvClients && !S.pvLoading){ S.pvLoading = true; GC.api("GET","/api/g-preview-clients").then(r => { S.pvClients = r.clients; render(); }).catch(() => { S.pvClients = []; }); }
+  const b2 = btn("Voir l’espace de ce client","lemon", async () => { if (!s2.value) return; const win = window.open("about:blank","_blank"); try { const r = await GC.api("POST","/api/g-preview-client",{ clientId: Number(s2.value) }); if (win) win.location = r.url; else location.href = r.url; } catch(x){ if (win) win.close(); toast(x.message); } });
+  const box2 = el("div","pm-f"); box2.append(el("span",null,"Client"), s2, b2);
+  g.append(box1, box2); p.appendChild(g);
+  if (!others.length) p.appendChild(el("p","pm-note","Ajoute d’abord un siège pour pouvoir l’ouvrir en aperçu."));
+  w.appendChild(p);
+}
+function seatForm(){
+  openForm({ key:"seat", title:"Nouveau siège", intro:"Choisis le rôle et un mot de passe provisoire à transmettre à la personne. Elle pourra le changer dans Paramètres.", okLabel:"Créer le siège", done:"Siège créé.",
+    fields:[{k:"name",label:"Prénom",req:"Indique le prénom.",half:true},{k:"username",label:"Identifiant",req:"Choisis un identifiant.",half:true,ph:"ex. lea"},
+      {k:"role",label:"Rôle",type:"select",options:[["member","Membre"],["commercial","Commercial"],["owner","Propriétaire"]]},
+      {k:"password",label:"Mot de passe provisoire",type:"password",ph:"8 caractères au moins",req:"Indique un mot de passe provisoire."}],
+    onSave: async out => { try { await GC.api("POST","/api/g-users",out); } catch(x){ toast(x.message); throw x; } reloadUsers(); } });
+}
+function pwForm(u){
+  openForm({ key:"pw", title:"Mot de passe de " + u.name, intro: u.hasPassword ? "Le nouveau mot de passe remplace l’ancien et déconnecte ses appareils." : "Définis le mot de passe de ce compte, puis transmets-le à la personne.", okLabel:"Enregistrer", done:"Mot de passe enregistré.",
+    fields:[{k:"password",label:"Nouveau mot de passe",type:"password",ph:"8 caractères au moins",req:"Indique un mot de passe."}],
+    onSave: async out => { try { await GC.api("PATCH","/api/g-users/"+u.id,{ password: out.password }); } catch(x){ toast(x.message); throw x; } reloadUsers(); } });
+}
+
+const CGU = [
+  ["Objet", "L’application Gacolet est l’outil de travail de l’Agence Gacolet : organisation, messagerie, suivi des clients et, pour sa partie client, espace où chaque client suit ses contenus et ses résultats. Ces conditions s’appliquent à toute personne à qui l’agence ouvre un accès. Utiliser l’application vaut acceptation de ces conditions."],
+  ["Éditeur et hébergement", "Éditeur : Agence Gacolet, Nîmes (Gard) [forme juridique, adresse et numéro SIRET à compléter]. Contact : [adresse de contact à compléter]. Hébergement : Infomaniak Network SA, Genève, Suisse."],
+  ["Accès et comptes", "L’accès se fait uniquement sur invitation de l’agence. Chaque compte est personnel : l’identifiant et le mot de passe ne se partagent pas. La personne est responsable de ce qui est fait depuis son compte et prévient l’agence sans attendre en cas de perte ou de doute. L’agence peut suspendre ou retirer un accès à tout moment, notamment à la fin d’une collaboration."],
+  ["Rôles", "Chaque compte a un rôle (propriétaire, membre ou commercial) qui détermine les parties visibles. Toute tentative d’accéder à une partie non autorisée, de contourner une limite ou d’utiliser le compte d’une autre personne est interdite."],
+  ["Règles d’utilisation", "L’application sert à un usage professionnel. Sont interdits : les contenus illicites, injurieux, discriminatoires ou portant atteinte à la vie privée ; la diffusion hors de l’agence d’informations sur les clients, les prix, les devis ou la stratégie ; l’enregistrement ou la diffusion de la voix d’une personne sans son accord ; l’envoi de fichiers malveillants ; toute action qui perturbe le fonctionnement de l’application."],
+  ["Confidentialité", "Les informations consultées dans l’application (clients, contrats, tarifs, contenus en préparation, échanges internes) sont confidentielles. Cette obligation s’applique pendant la collaboration et après sa fin."],
+  ["Propriété intellectuelle", "L’application, son code, son nom, son logo et sa présentation appartiennent à l’Agence Gacolet. Ils ne peuvent être copiés, reproduits ou réutilisés sans accord écrit. Les droits sur les contenus réalisés pour les clients suivent les contrats signés avec eux."],
+  ["Données personnelles", "Responsable du traitement : Agence Gacolet. Données traitées : prénom, identifiant, coordonnées facultatives (courriel, téléphone), mot de passe (stocké sous forme chiffrée, jamais lisible), messages écrits et vocaux, fichiers envoyés, tâches et éléments d’organisation ; pour les clients, l’identité, l’entreprise, les coordonnées, les réponses au questionnaire et les validations de contenus. Finalités : faire fonctionner l’application, organiser le travail de l’agence et échanger avec les clients. Bases légales : l’exécution du contrat (de travail, de collaboration ou de prestation) et l’intérêt légitime de l’agence à organiser son activité. Destinataires : les membres de l’agence selon leur rôle et l’hébergeur. Les données ne sont ni vendues ni utilisées à des fins publicitaires. Durée de conservation : le temps de l’accès, puis suppression dans les [3 mois, à valider] suivant la fin de la collaboration, sauf obligation légale de conservation."],
+  ["Sécurité", "Connexion chiffrée, mots de passe chiffrés, accès limités par rôle, sauvegardes assurées par l’hébergeur. Aucune mesure n’offre une sécurité absolue : chacun contribue en gardant son mot de passe secret et en se déconnectant sur un appareil partagé."],
+  ["Vos droits", "Chaque personne peut demander l’accès à ses données, leur rectification, leur effacement, la limitation ou l’opposition au traitement et leur portabilité, en écrivant à l’agence [adresse de contact à compléter]. En cas de désaccord, une réclamation peut être déposée auprès de la CNIL (cnil.fr)."],
+  ["Stockage sur l’appareil", "L’application garde sur l’appareil la session de connexion et quelques préférences (filtres, messages lus, notifications). Elle n’utilise ni cookie publicitaire ni outil de mesure d’audience."],
+  ["Disponibilité", "L’agence fait le nécessaire pour que l’application fonctionne, sans garantir une disponibilité continue. Des interruptions peuvent avoir lieu pour maintenance ou en cas d’incident chez l’hébergeur."],
+  ["Évolution des conditions", "L’agence peut faire évoluer ces conditions. La version en vigueur est toujours consultable dans Paramètres."],
+  ["Droit applicable", "Ces conditions sont soumises au droit français. En cas de litige, une solution amiable est recherchée en priorité ; à défaut, les tribunaux compétents sont ceux du ressort de Nîmes [à valider]."]
+];
+function pmCgu(w){
+  const c = pmCard("Conditions générales d’utilisation et protection des données", "Version 1, octobre 2026.");
+  if (S.role === "owner") c.appendChild(el("p","pv-note","Visible des propriétaires seulement : les mentions entre crochets sont à compléter, et le texte est à faire relire par un professionnel du droit avant de le présenter aux clients."));
+  const box = el("div","pm-legal");
+  CGU.forEach(([t, x], i) => { box.appendChild(el("h3",null,(i + 1) + ". " + t)); box.appendChild(el("p",null,x)); });
+  c.appendChild(box); w.appendChild(c);
 }
 
 /* ---------- Démarrage ---------- */
@@ -1083,11 +1285,13 @@ render();
   if (!db){ S.failed = "Connexion au serveur impossible. Recharge la page."; render(); return; }
   S.db = db;
   window.claude.use("assets").then(a => { S.assets = a || null; }).catch(() => {});
-  if (user){ try { S.isOwner = await user.isOwner(); } catch(e){} try { S.canWrite = await user.can("data.write"); } catch(e){} }
+  try { applyMe(await GC.api("GET","/api/g-me")); } catch(e){}
   if (!S.me){ if (S.isOwner){ S.me = "Gabriel"; meSel.value = "Gabriel"; } else askWho(); }
+  if (S.d.messages) notifyInit();
   COLLS.forEach(c => {
     db.collection(c).onSnapshot(snap => {
       S.d[c] = snap.docs.filter(d => d.exists).map(d => Object.assign({id: d.id}, d.data()));
+      if (c === "messages") notifyNew();
       S.got[c] = true; if (!S.ready && COLLS.every(x => S.got[x])) S.ready = true;
       renderSoon();
     }, err => { /* coupure passagère : le bandeau « Hors connexion » s'affiche et la synchro reprend seule */ });
