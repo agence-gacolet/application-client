@@ -498,6 +498,7 @@ function vAccueil(root){
     tiles.push([S.d.commercial.filter(c => isISO(c.nextDate) && c.nextDate <= t0).length, "relances", () => go("commercial")]);
     tiles.push([S.d.campaigns.filter(c => c.status === "À lancer").length, "campagnes à lancer", () => go("campagnes")]);
   }
+  (MSG_ROLE[me] || []).forEach(md => { const n = unreadMode(md); if (n) tiles.push([n, md === "main" ? (n > 1 ? "messages équipe" : "message équipe") : (n > 1 ? "messages tournage" : "message tournage"), () => { S.ui.msgMode = md; remember(); go("messagerie"); }]); });
   tiles.push([myTasks, "tâches cette semaine", () => { S.ui.tWho = me; go("taches"); }]);
   W.appendChild(el("h2","w2-lab", hr >= 18 || weekend ? "Pour la suite" : "Ta journée en bref"));
   const s = el("div","w2-tiles");
@@ -817,7 +818,13 @@ function agAgence(root, m){
 }
 
 /* ---------- Messagerie ---------- */
-const CHANNELS = [["general","Général"],["production","Production"],["reseaux","Réseaux sociaux"],["commercial","Commercial"]];
+const CHANNELS = [["general","Général"]];
+const MSG_ROLE = {Gabriel:["main","shoot"], Clara:["main"], Matis:["shoot"]};
+function msgChannels(mode){ const pre = mode === "shoot" ? "tg:" : ""; return CHANNELS.map(c => pre + c[0]).concat(clientNames().filter(n => n !== AGENCE).map(n => pre + "c:" + n)); }
+function seenKey(k){ return "seen_" + (S.me || "Gabriel") + "_" + k; }
+function unreadIn(k){ const me = S.me || "Gabriel", s = S.ui[seenKey(k)] || ""; return S.d.messages.filter(m => m.ch === k && m.who !== me && (m.at || "") > s).length; }
+function unreadMode(mode){ return msgChannels(mode).reduce((n, k) => n + unreadIn(k), 0); }
+function unreadRole(){ return (MSG_ROLE[S.me || "Gabriel"] || []).reduce((n, m) => n + unreadMode(m), 0); }
 function shootLabel(e){ return fmtD(e.date) + ", " + e.client; }
 function chName(k){ k = k.replace(/^tg:/, ""); const c = CHANNELS.find(x => x[0] === k); return c ? c[1] : k.replace(/^c:/, ""); }
 function vMessagerie(root){
@@ -825,13 +832,13 @@ function vMessagerie(root){
   const mode = S.ui.msgMode || "main";
   const pre = mode === "shoot" ? "tg:" : "";
   let ch = mode === "shoot" ? (S.ui.msgShoot || "") : (S.ui.msgCh || "general");
-  if (mode === "shoot" && !ch.startsWith("tg:")) ch = "tg:general";
-  root.appendChild(head("Messagerie", mode === "shoot" ? "Les fils tournage, mêmes sujets et mêmes clients" : "L’équipe, par sujet et par client", [segm([["main","Principal"],["shoot","Tournage"]], mode, v => { S.ui.msgMode = v; remember(); render(); })]));
+  if (!msgChannels(mode).includes(ch)) ch = mode === "shoot" ? "tg:general" : "general";
+  root.appendChild(head("Messagerie", mode === "shoot" ? "Les fils tournage, mêmes sujets et mêmes clients" : "L’équipe, par sujet et par client", [(() => { const sg = segm([["main","Principal"],["shoot","Tournage"]], mode, v => { S.ui.msgMode = v; remember(); render(); }); [...sg.querySelectorAll("button")].forEach((b, i) => { const n = unreadMode(i ? "shoot" : "main"); if (n) b.appendChild(el("span","cnt",String(n))); }); return sg; })()]));
   const wrap = el("div","chat");
   const side = el("nav","chat-side");
   const last = {}; S.d.messages.forEach(m => { if (!last[m.ch] || m.at > last[m.ch]) last[m.ch] = m.at; });
-  const chBtn = (k, label) => { const b = el("button", null, label); b.setAttribute("aria-pressed", String(k === ch)); if (last[k] && k !== ch && last[k] > (S.ui["seen_"+k] || "")) b.classList.add("unread"); b.onclick = () => { if (mode === "shoot") S.ui.msgShoot = k; else S.ui.msgCh = k; S.ui["seen_"+k] = new Date().toISOString(); remember(); render(); }; side.appendChild(b); };
-  side.appendChild(el("span","chat-lab","Sujets")); CHANNELS.forEach(([k,l]) => chBtn(pre+k, l));
+  const chBtn = (k, label) => { const b = el("button", null, label); b.setAttribute("aria-pressed", String(k === ch)); const un = k === ch ? 0 : unreadIn(k); if (un){ b.classList.add("unread"); b.appendChild(el("span","cnt",String(un))); } b.onclick = () => { if (mode === "shoot") S.ui.msgShoot = k; else S.ui.msgCh = k; S.ui[seenKey(k)] = new Date().toISOString(); remember(); render(); }; side.appendChild(b); };
+  side.appendChild(el("span","chat-lab","Équipe")); CHANNELS.forEach(([k,l]) => chBtn(pre+k, l));
   side.appendChild(el("span","chat-lab","Clients")); clientNames().filter(n => n !== AGENCE).forEach(n => chBtn(pre+"c:"+n, n));
   const main = el("section","chat-main");
   main.appendChild(el("h2","chat-title", (mode === "shoot" ? "Tournage, " : "") + chName(ch)));
@@ -862,7 +869,7 @@ function vMessagerie(root){
   const sb = el("button","btn lemon","Envoyer"); sb.type = "submit";
   form.append(ta, sb); main.appendChild(form);
   wrap.append(side, main); root.appendChild(wrap);
-  S.ui["seen_"+ch] = new Date().toISOString();
+  if (unreadIn(ch)){ S.ui[seenKey(ch)] = new Date().toISOString(); remember(); setTimeout(renderTabs, 0); }
   requestAnimationFrame(() => { const l = document.getElementById("chat-list"); if (l) l.scrollTop = l.scrollHeight; });
 }
 
@@ -942,7 +949,7 @@ const MOBILE_MAIN = ["accueil","agenda","taches","commercial"];
 const ico = k => { const s = document.createElementNS("http://www.w3.org/2000/svg","svg"); s.setAttribute("viewBox","0 0 24 24"); s.setAttribute("aria-hidden","true"); s.classList.add("ico"); s.innerHTML = ICONS[k] || ""; return s; };
 function renderTabs(){
   const me = S.me || "Gabriel";
-  const badge = { taches: openTasks().filter(t => t.who === me && lateDays(t.date) > 0).length, commercial: me === "Gabriel" ? S.d.commercial.filter(c => isISO(c.nextDate) && c.nextDate <= today()).length : 0 };
+  const badge = { messagerie: unreadRole(), taches: openTasks().filter(t => t.who === me && lateDays(t.date) > 0).length, commercial: me === "Gabriel" ? S.d.commercial.filter(c => isISO(c.nextDate) && c.nextDate <= today()).length : 0 };
   const link = k => { const a = el("a"); a.href = "#"+k; a.appendChild(ico(k)); a.appendChild(el("span","lb", SHORT[k])); if (k === S.view) a.setAttribute("aria-current","page"); if (badge[k]) a.appendChild(el("span","n",String(badge[k]))); return a; };
   const n = $("#tabs"); n.textContent = "";
   VIEWS.forEach(([k]) => { n.appendChild(link(k)); if (k === "commercial" || k === "clients") n.appendChild(el("span","navsep")); });
@@ -950,6 +957,7 @@ function renderTabs(){
   MOBILE_MAIN.forEach(k => m.appendChild(link(k)));
   const more = el("button","morebtn"); more.type = "button"; more.appendChild(ico("plus")); more.appendChild(el("span","lb","Plus"));
   if (!MOBILE_MAIN.includes(S.view)) more.setAttribute("aria-current","page");
+  if (badge.messagerie) more.appendChild(el("span","n",String(badge.messagerie)));
   more.onclick = openMore; m.appendChild(more);
   $("#mbar-title").textContent = SHORT[S.view] || "";
   $("#me-name").textContent = me;
