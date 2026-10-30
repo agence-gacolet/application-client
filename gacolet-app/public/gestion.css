@@ -483,3 +483,8 @@ details.box[open] summary::after{content:"\2212"}
 @media (max-width:640px){.w2-mug{width:52px;height:52px}.w2-lab{margin-top:40px}.w2-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:100%}.w2-tile{min-width:0;padding:16px 8px 14px;border-radius:14px}.w2-tile b{font-size:44px}.w2-tile span{font-size:12px}}
 /* Agenda : filtres en menus déroulants */
 @media (max-width:640px){.ag-f{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:14px 0 10px}.ag-f .fgroup{display:block}.ag-f .flabel{display:block;margin:0 0 4px;font-size:11px}.ag-f select.pick{width:100%;max-width:none}}
+/* Messagerie : pastilles de notification */
+.cnt{display:inline-flex;align-items:center;justify-content:center;min-width:19px;height:19px;padding:0 6px;margin-left:8px;border-radius:10px;background:var(--lemon);color:#0E0E0D;font-size:11.5px;font-weight:700;line-height:1;vertical-align:1px}
+.chat-side button.unread::after{display:none}
+.chat-side button.unread{display:flex;align-items:center;justify-content:space-between}
+.morebtn{position:relative}
