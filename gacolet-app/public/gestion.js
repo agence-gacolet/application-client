@@ -833,7 +833,8 @@ function vMessagerie(root){
   const pre = mode === "shoot" ? "tg:" : "";
   let ch = mode === "shoot" ? (S.ui.msgShoot || "") : (S.ui.msgCh || "general");
   if (!msgChannels(mode).includes(ch)) ch = mode === "shoot" ? "tg:general" : "general";
-  root.appendChild(head("Messagerie", mode === "shoot" ? "Les fils tournage, mêmes sujets et mêmes clients" : "L’équipe, par sujet et par client", [(() => { const sg = segm([["main","Principal"],["shoot","Tournage"]], mode, v => { S.ui.msgMode = v; remember(); render(); }); [...sg.querySelectorAll("button")].forEach((b, i) => { const n = unreadMode(i ? "shoot" : "main"); if (n) b.appendChild(el("span","cnt",String(n))); }); return sg; })()]));
+  if (unreadIn(ch)){ S.ui[seenKey(ch)] = new Date().toISOString(); remember(); setTimeout(renderTabs, 0); }
+  root.appendChild(head("Messagerie", mode === "shoot" ? "Les fils tournage, mêmes sujets et mêmes clients" : "L’équipe et les clients", [(() => { const sg = segm([["main","Principal"],["shoot","Tournage"]], mode, v => { S.ui.msgMode = v; remember(); render(); }); [...sg.querySelectorAll("button")].forEach((b, i) => { const n = unreadMode(i ? "shoot" : "main"); if (n) b.appendChild(el("span","cnt",String(n))); }); return sg; })()]));
   const wrap = el("div","chat");
   const side = el("nav","chat-side");
   const last = {}; S.d.messages.forEach(m => { if (!last[m.ch] || m.at > last[m.ch]) last[m.ch] = m.at; });
@@ -869,7 +870,6 @@ function vMessagerie(root){
   const sb = el("button","btn lemon","Envoyer"); sb.type = "submit";
   form.append(ta, sb); main.appendChild(form);
   wrap.append(side, main); root.appendChild(wrap);
-  if (unreadIn(ch)){ S.ui[seenKey(ch)] = new Date().toISOString(); remember(); setTimeout(renderTabs, 0); }
   requestAnimationFrame(() => { const l = document.getElementById("chat-list"); if (l) l.scrollTop = l.scrollHeight; });
 }
 
