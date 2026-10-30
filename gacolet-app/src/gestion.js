@@ -50,7 +50,7 @@ module.exports = function (app, { db, wrap, root }) {
   const sign = s => crypto.createHmac("sha256", SECRET).update(s).digest("base64url");
   const makeToken = u => { const p = Buffer.from(JSON.stringify({ i: u.id, v: Number(u.pv) || 0, e: Date.now() + 180 * 864e5 })).toString("base64url"); return "u1." + p + "." + sign(p); };
   const eq = (a, b) => a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
-  const pub = u => { let info = {}; try { info = JSON.parse(u.info || "{}"); } catch (e) {} return { id: u.id, username: u.username, name: u.name, role: u.role, disabled: !!Number(u.disabled), hasPassword: !!u.pass, email: info.email || "", tel: info.tel || "" }; };
+  const pub = u => { let info = {}; try { info = JSON.parse(u.info || "{}"); } catch (e) {} return { id: u.id, username: u.username, name: u.name, role: u.role, disabled: !!Number(u.disabled), hasPassword: !!u.pass, email: info.email || "", tel: info.tel || "", poste: info.poste || "" }; };
 
   async function who(req) {
     const k = String(req.get("authorization") || "").replace(/^Bearer\s+/i, "");
@@ -134,7 +134,7 @@ module.exports = function (app, { db, wrap, root }) {
   }));
   const infoOf = u => { try { return JSON.parse(u.info || "{}"); } catch (e) { return {}; } };
   app.get("/api/g-me", auth, wrap(async (req, res) => {
-    const team = (await db.all("SELECT name, role, info FROM gusers WHERE disabled = 0 ORDER BY created_at")).map(r => { const i = infoOf(r); return { name: r.name, role: r.role, avatar: i.avatar || "", email: i.email || "", tel: i.tel || "" }; });
+    const team = (await db.all("SELECT name, role, info FROM gusers WHERE disabled = 0 ORDER BY created_at")).map(r => { const i = infoOf(r); return { name: r.name, role: r.role, avatar: i.avatar || "", email: i.email || "", tel: i.tel || "", poste: i.poste || "" }; });
     const row = req.user.secours ? null : await db.one("SELECT * FROM gusers WHERE id = ?", [req.user.id]);
     res.json({ user: Object.assign({}, req.user, row ? { info: infoOf(row) } : {}), team });
   }));
@@ -144,6 +144,7 @@ module.exports = function (app, { db, wrap, root }) {
     const b = req.body || {}, info = infoOf(u);
     if (b.email != null) { const e = String(b.email).trim().slice(0, 160); if (e && !/^\S+@\S+\.\S+$/.test(e)) return res.status(400).json({ error: "Adresse de courriel invalide." }); info.email = e; }
     if (b.tel != null) info.tel = String(b.tel).trim().slice(0, 40);
+    if (b.poste != null) info.poste = String(b.poste).replace(/\s+/g, " ").trim().slice(0, 60);
     if (b.avatar != null) { const a = String(b.avatar); if (a && !/^\/f\/[a-f0-9]{32}\.(jpe?g|png|webp|gif)$/.test(a)) return res.status(400).json({ error: "Photo invalide." }); info.avatar = a; }
     await db.run("UPDATE gusers SET info = ? WHERE id = ?", [JSON.stringify(info), u.id]);
     res.json({ ok: true, info });
@@ -175,7 +176,8 @@ module.exports = function (app, { db, wrap, root }) {
     if (await db.one("SELECT id FROM gusers WHERE username = ?", [username])) return res.status(400).json({ error: "Cet identifiant est déjà pris." });
     if (await db.one("SELECT id FROM gusers WHERE name = ?", [name])) return res.status(400).json({ error: "Ce prénom est déjà utilisé : ajoute l’initiale du nom." });
     const id = newId();
-    await db.run("INSERT INTO gusers (id, username, name, role, pass, pv, disabled, created_at) VALUES (?,?,?,?,?,0,0,?)", [id, username, name, role, pw ? hashPw(pw) : "", stamp()]);
+    const poste = String(b.poste || "").replace(/\s+/g, " ").trim().slice(0, 60);
+    await db.run("INSERT INTO gusers (id, username, name, role, pass, pv, disabled, info, created_at) VALUES (?,?,?,?,?,0,0,?,?)", [id, username, name, role, pw ? hashPw(pw) : "", poste ? JSON.stringify({ poste }) : "", stamp()]);
     res.json({ ok: true, id });
   }));
   app.patch("/api/g-users/:id", auth, ownerOnly, wrap(async (req, res) => {
@@ -202,7 +204,9 @@ module.exports = function (app, { db, wrap, root }) {
       pass = hashPw(pw); pv++;
     }
     if (disabled !== Number(u.disabled) || role !== u.role) pv++;
-    await db.run("UPDATE gusers SET username = ?, role = ?, disabled = ?, pass = ?, pv = ? WHERE id = ?", [username, role, disabled, pass, pv, u.id]);
+    let infoS = u.info || "";
+    if (b.poste != null) { const info = infoOf(u); info.poste = String(b.poste).replace(/\s+/g, " ").trim().slice(0, 60); infoS = JSON.stringify(info); }
+    await db.run("UPDATE gusers SET username = ?, role = ?, disabled = ?, pass = ?, pv = ?, info = ? WHERE id = ?", [username, role, disabled, pass, pv, infoS, u.id]);
     res.json({ ok: true });
   }));
   app.delete("/api/g-users/:id", auth, ownerOnly, wrap(async (req, res) => {
