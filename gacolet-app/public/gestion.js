@@ -768,6 +768,10 @@ function vMeta(root){
   } else root.appendChild(el("p","empty","Aucune campagne pour ce client."));
 
   root.appendChild(el("h3","mt-h","Suivi des contacts"));
+  { const gs = cs.map(x => x.link).concat(sheetsOf(cur).map(x => x.url)).find(u => /^https:\/\/docs\.google\.com\/spreadsheets\/d\//.test(u || ""));
+    if (gs){ const id = gs.match(/\/d\/([\w-]+)/)[1], src = "https://docs.google.com/spreadsheets/d/" + id + "/edit?rm=minimal";
+      const box = el("div","gs-box"); const fr = document.createElement("iframe"); fr.src = src; fr.title = "Tableau de suivi " + cur; fr.loading = "lazy"; fr.allow = "clipboard-read; clipboard-write"; box.appendChild(fr); root.appendChild(box);
+      const st = el("p","status","Le vrai tableau Google Sheets, modifiable ici. Il faut être connecté au compte Google de l’agence dans ce navigateur. "); const a = el("a",null,"Ouvrir dans Google Sheets"); a.href = "https://docs.google.com/spreadsheets/d/" + id + "/edit"; a.target = "_blank"; a.rel = "noopener"; st.appendChild(a); root.appendChild(st); return; } }
   if (msSection(root, cur)) return;
   if (!c){ root.appendChild(el("p","empty","Ce client n’a pas le module Meta dans l’espace client : le suivi passe par le lien de la campagne.")); return; }
   root.appendChild(el("p","status", c.qualifiedDef ? "Contact qualifié : " + c.qualifiedDef : "Pas encore de définition écrite du contact qualifié : à fixer avec le client avant d’annoncer un chiffre."));
@@ -1093,7 +1097,7 @@ function audioFor(m){
 /* ---------- Avatars ---------- */
 const AV_COLORS = ["#C6FF33","#5AC8FA","#FF9F5A","#C49BFF","#4CD9A0","#FF6B8B","#F5D04C","#7AA7FF"];
 function avColor(s){ let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return AV_COLORS[h % AV_COLORS.length]; }
-function initials(s){ const w = String(s || "?").replace(/[^\p{L}\p{N} ]/gu, " ").trim().split(/\s+/); return ((w[0] || "?")[0] + (w.length > 1 ? w[w.length - 1][0] : "")).toUpperCase(); }
+function initials(s){ const w = String(s || "?").replace(/\(.*?\)/g, " ").replace(/[^\p{L}\p{N} ]/gu, " ").trim().split(/\s+/); return ((w[0] || "?")[0] + (w.length > 1 ? w[w.length - 1][0] : "")).toUpperCase(); }
 function personAvatar(name){ const t = (S.team || []).find(x => x.name === name); return t && t.avatar ? t.avatar : ""; }
 function avatarEl(name, size, opts){
   opts = opts || {};
@@ -1243,7 +1247,7 @@ const VC_ICO = {
   screen:'<svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="12" rx="1.5"/><path d="M8 20h8M12 16.5V20M12 13V8M9.5 10.5 12 8l2.5 2.5"/></svg>',
   leave:'<svg viewBox="0 0 24 24"><path d="M4.5 13.5c4.6-4 10.4-4 15 0l-1.8 2.3-3-1.2v-2.2a9 9 0 0 0-5.4 0v2.2l-3 1.2z"/></svg>'
 };
-const VC = { room: "", label: "", pid: "", local: null, video: null, kind: "", muted: false, peers: new Map(), polling: false, speak: {} };
+const VC = { room: "", label: "", pid: "", local: null, video: null, kind: "", muted: false, peers: new Map(), polling: false, speak: {}, chat: [] };
 S.rtc = { rooms: {} };
 function voiceHere(room){ return (S.rtc.rooms[room] || []).slice(); }
 let RTC_T = 0;
@@ -1284,6 +1288,7 @@ async function vcPoll(){
         if (ev.type === "join") vcPeer(ev.pid, ev.name);
         else if (ev.type === "leave") vcDrop(ev.pid);
         else if (ev.type === "signal"){ if (!VC.peers.has(ev.from)) continue; await vcSignal(ev.from, ev.data); }
+        else if (ev.type === "chat"){ VC.chat.push({ name: ev.name, text: ev.text }); vcChat(); if (S.view !== "vocal") toast(ev.name + " : " + ev.text.slice(0, 80)); }
       }
     } catch(e){ await new Promise(r => setTimeout(r, 2000)); }
   }
@@ -1303,7 +1308,7 @@ async function vcJoin(room, label){
   if (VC.room) await vcLeave();
   let local; try { local = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); } catch(e){ toast("Micro refusé ou introuvable : autorise le micro pour rejoindre le salon."); return; }
   let r; try { r = await GC.api("POST","/api/rtc/join",{ room }); } catch(e){ local.getTracks().forEach(t => t.stop()); toast(e.message); return; }
-  Object.assign(VC, { room, label, pid: r.pid, local, video: null, kind: "", muted: false, speak: {} });
+  Object.assign(VC, { room, label, pid: r.pid, local, video: null, kind: "", muted: false, speak: {}, chat: [] });
   vcMeter("me", local);
   (r.peers || []).forEach(p => vcPeer(p.pid, p.name));
   vcPoll(); rtcTick(); vcRender(); if (S.view === "vocal") render();
@@ -1359,13 +1364,22 @@ function vcTile(id, name, stream, isMe){
   return t;
 }
 function vcStage(){
-  const st = document.getElementById("vc-stage"); if (!st) return; st.textContent = "";
+  const st = document.getElementById("vc-stage"); if (!st) return; const keep = document.getElementById("vc-in"), kv = keep ? keep.value : "", kf = keep && document.activeElement === keep; st.textContent = "";
+  setTimeout(() => { const i = document.getElementById("vc-in"); if (i){ i.value = kv; if (kf) i.focus(); } }, 0);
   const me = S.me || "Gabriel"; const grid = el("div","vc-grid n" + Math.min(VC.peers.size + 1, 6));
   grid.appendChild(vcTile("me", me, VC.local, true));
   VC.peers.forEach(P => grid.appendChild(vcTile(P.pid, P.name, P.stream, false)));
   const hd = el("div","vc-sh"); hd.append(el("b",null,VC.label), el("span","muted", VC.peers.size ? (VC.peers.size + 1) + " personnes" : "En attente des autres"));
-  st.append(hd, grid, vcControls());
+  const body = el("div","vc-body"); const ch = el("section","vc-chat"); ch.appendChild(el("h3",null,"Discussion du salon"));
+  const ms = el("div","vc-msgs"); ms.id = "vc-msgs"; ch.appendChild(ms);
+  const f = el("form","vc-cf"); const inp = el("input"); inp.id = "vc-in"; inp.placeholder = "Écrire dans le salon"; inp.maxLength = 2000; inp.autocomplete = "off"; const sb = el("button","btn sm lemon","Envoyer"); sb.type = "submit"; f.append(inp, sb);
+  f.onsubmit = async e => { e.preventDefault(); const t = inp.value.trim(); if (!t || !VC.room) return; inp.value = ""; VC.chat.push({ name: me, text: t, mine: true }); vcChat(); try { await GC.api("POST","/api/rtc/chat",{ room: VC.room, pid: VC.pid, text: t }); } catch(x){} };
+  ch.appendChild(f); body.append(grid, ch);
+  st.append(hd, body, vcControls()); vcChat();
 }
+function vcChat(){ const box = document.getElementById("vc-msgs"); if (!box) return; box.textContent = "";
+  if (!VC.chat.length) box.appendChild(el("p","muted","Messages visibles par les personnes présentes, effacés à la fin de l’appel."));
+  VC.chat.forEach(m => { const d = el("div","vc-m" + (m.mine ? " mine" : "")); if (!m.mine) d.appendChild(el("b",null,m.name)); d.appendChild(document.createTextNode(m.text)); box.appendChild(d); }); box.scrollTop = box.scrollHeight; }
 function vVocal(root){
   root.appendChild(head("Vocal", "Salons vocaux de l’agence, directement dans l’application : micro, caméra et partage d’écran."));
   if (VC.room){ const st = el("section","vc-stage"); st.id = "vc-stage"; root.appendChild(st); setTimeout(vcStage, 0); }
@@ -1377,7 +1391,27 @@ function vVocal(root){
     const a = el("div","vx-act"); a.appendChild(mine ? btn("Quitter","", () => vcLeave()) : btn(VC.room ? "Changer de salon" : "Rejoindre","lemon", () => vcJoin(k, l))); c.appendChild(a);
     g.appendChild(c); });
   root.appendChild(g);
+  if (S.role === "owner" || S.role === "commercial"){
+    if (!S.invites && !S.invLoading){ S.invLoading = true; GC.api("GET","/api/rtc/invites").then(r => { S.invites = r.invites; }).catch(() => { S.invites = []; }).finally(() => { S.invLoading = false; render(); }); }
+    const sec = el("section","vx-inv"); const top = el("div","vx-invh"); const tt = el("div"); tt.append(el("h2",null,"Rendez-vous avec des prospects"), el("p","muted","Un lien à envoyer : la personne entre son nom et rejoint la visio, sans compte. Elle n’a accès qu’à ce salon."));
+    top.append(tt, btn("Inviter un prospect","lemon", () => newInvite())); sec.appendChild(top);
+    const list = (S.invites || []);
+    if (!list.length) sec.appendChild(el("p","muted", S.invites ? "Aucun rendez-vous en cours." : "Chargement…"));
+    list.forEach(x => { const here = voiceHere(x.room), mine = VC.room === x.room; const r = el("div","vx-ir" + (here.length ? " live" : ""));
+      const tx = el("div"); tx.append(el("b",null,x.label), el("small",null, (here.length ? here.join(", ") + " dans le salon. " : "") + "Créé par " + x.by + ", valable jusqu’au " + fmtFR(new Date(x.exp).toISOString().slice(0, 10)) + "."));
+      const a = el("div","vx-ia");
+      a.append(mine ? btn("Quitter","sm", () => vcLeave()) : btn("Rejoindre","sm lemon", () => vcJoin(x.room, x.label)), btn("Copier le lien","sm", () => copyInvite(x.link)));
+      const del = btn("Supprimer","sm rm", async () => { if (!del.classList.contains("armed")){ del.classList.add("armed"); del.textContent = "Confirmer"; setTimeout(() => { del.classList.remove("armed"); del.textContent = "Supprimer"; }, 3000); return; } try { await GC.api("DELETE","/api/rtc/invites/" + x.room); if (VC.room === x.room) vcLeave(true); S.invites = null; render(); } catch(e){ toast(e.message); } });
+      a.appendChild(del); r.append(tx, a); sec.appendChild(r); });
+    root.appendChild(sec);
+  }
   root.appendChild(el("p","status","Le son et l’image passent directement d’un ordinateur à l’autre. On peut changer d’onglet pendant un appel : une barre reste en bas de l’écran. Le navigateur demande l’accès au micro la première fois."));
+}
+function copyInvite(link){ const u = location.origin + link; (navigator.clipboard ? navigator.clipboard.writeText(u) : Promise.reject()).then(() => toast("Lien copié, à envoyer au prospect."), () => prompt("Lien à envoyer au prospect", u)); }
+function newInvite(){
+  openForm({ key:"iv", title:"Inviter un prospect", intro:"Le lien est copié tout de suite. La visio s’ouvre dans le navigateur du prospect, sans rien installer.", values:{ days: 7 },
+    fields:[{k:"label",label:"Nom du rendez-vous",ph:"Ex. Découverte, Boulangerie Martin",req:"Donne un nom au rendez-vous."},{k:"days",label:"Lien valable (jours)",type:"number",half:true}],
+    onSave: async out => { try { const r = await GC.api("POST","/api/rtc/invites",{ label: out.label, days: Number(out.days) || 7 }); copyInvite(r.link); S.invites = null; render(); } catch(e){ toast(e.message); throw e; } } });
 }
 window.addEventListener("beforeunload", () => { if (VC.room) navigator.sendBeacon && fetch("/api/rtc/leave", { method: "POST", keepalive: true, headers: { "Content-Type": "application/json", "Authorization": "Bearer " + (localStorage.getItem("gacolet-gestion-cle") || "") }, body: JSON.stringify({ room: VC.room, pid: VC.pid }) }).catch(() => {}); });
 function vMessagerie(root){
