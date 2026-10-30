@@ -452,3 +452,4 @@ details.box[open] summary::after{content:"\2212"}
 @keyframes w2-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.w2-date,.w2-h,.w2-say,.w2-start{animation:none}}
 @media (max-width:900px){.welcome2{min-height:calc(100vh - 200px)}.w2-say{font-size:17px}}
+.chat-none{margin:4px 10px;font-size:13px;color:var(--faint)}
