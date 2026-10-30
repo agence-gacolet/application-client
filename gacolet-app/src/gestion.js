@@ -331,6 +331,101 @@ module.exports = function (app, { db, wrap, root }) {
     res.json({ ok: true, file, tabs: out });
   }));
 
+  // ---------- Salons vocaux intégrés (WebRTC, de pair à pair) ----------
+  // Le serveur ne fait que relayer les messages de mise en relation (offres, réponses, candidats réseau) par interrogation longue.
+  // Le son, la vidéo et le partage d’écran passent directement entre les navigateurs.
+  // Invités (prospects) : un lien signé donne accès à un seul salon, sans compte, jusqu’à sa date de fin ou sa suppression.
+  const RTC = new Map(); // salon -> Map(pid -> { name, uid, q: [], wait: null, seen })
+  const okRoom = r => /^[a-z]{3,20}$/.test(String(r || ""));
+  const roomOf = r => { if (!RTC.has(r)) RTC.set(r, new Map()); return RTC.get(r); };
+  const deliver = (p, ev) => { p.q.push(ev); if (p.wait) { const w = p.wait; p.wait = null; w(); } };
+  const dropPeer = (room, pid) => { const m = RTC.get(room); if (!m || !m.has(pid)) return; const p = m.get(pid); m.delete(pid); if (p.wait) { const w = p.wait; p.wait = null; w(); } m.forEach(o => deliver(o, { type: "leave", pid })); if (!m.size) RTC.delete(room); };
+  setInterval(() => { const lim = Date.now() - 45000; RTC.forEach((m, room) => m.forEach((p, pid) => { if (p.seen < lim) dropPeer(room, pid); })); }, 10000).unref();
+  const peerOf = (req, room, pid) => { const m = RTC.get(room); const p = m && m.get(String(pid || "")); return p && p.uid === req.user.id ? p : null; };
+  const letters = n => Array.from(crypto.randomBytes(n), b => "abcdefghijklmnopqrstuvwxyz"[b % 26]).join("");
+  const inviteTok = d => { const p = Buffer.from(JSON.stringify(d)).toString("base64url"); return "g1." + p + "." + sign("g1" + p); };
+  const gauth = (req, res, next) => ensure().then(async () => {
+    const [v, p, sg] = String(req.get("x-gc-guest") || req.query.i || "").split(".");
+    if (v !== "g1" || !p || !sg || !eq(sg, sign("g1" + p))) return res.status(401).json({ error: "Lien d’invitation invalide." });
+    let d; try { d = JSON.parse(Buffer.from(p, "base64url").toString()); } catch (e) { return res.status(401).json({ error: "Lien d’invitation invalide." }); }
+    const inv = await current("rtcinv", d.r);
+    if (!inv || inv.exp < Date.now()) return res.status(410).json({ error: "Ce lien a expiré. Demandez-en un nouveau à l’agence." });
+    req.inv = inv; req.user = { id: "g:" + d.r, name: "", guest: true, room: d.r }; next();
+  }).catch(e => res.status(500).json({ error: "Base indisponible.", detail: String(e.message || e).slice(0, 200) }));
+  const staffOnly = (req, res, next) => req.user && (req.user.role === "owner" || req.user.role === "commercial") ? next() : res.status(403).json({ error: "Réservé aux propriétaires et aux commerciaux." });
+  const guestRoom = (req, res, next) => { if (req.user.guest) { const r = String((req.body && req.body.room) || req.query.room || ""); if (r !== req.user.room) return res.status(403).json({ error: "Salon non autorisé." }); } next(); };
+  const hJoin = (req, res) => {
+    const room = String((req.body || {}).room || ""); if (!okRoom(room)) return res.status(400).json({ error: "Salon inconnu." });
+    const name = req.user.guest ? (String((req.body || {}).name || "").replace(/\s+/g, " ").trim().slice(0, 40) || "Invité") + " (invité)" : req.user.name;
+    const m = roomOf(room), pid = newId();
+    const peers = [...m.entries()].map(([id, p]) => ({ pid: id, name: p.name }));
+    m.forEach(o => deliver(o, { type: "join", pid, name }));
+    m.set(pid, { name, uid: req.user.id, q: [], wait: null, seen: Date.now() });
+    res.json({ pid, peers, name });
+  };
+  const hPoll = (req, res) => {
+    const room = String(req.query.room || ""), p = peerOf(req, room, req.query.pid);
+    if (!p) return res.json({ gone: true, events: [] });
+    p.seen = Date.now();
+    const send = () => { if (res.headersSent) return; p.seen = Date.now(); const ev = p.q.splice(0); res.json({ events: ev }); };
+    if (p.q.length) return send();
+    const w = () => { clearTimeout(t); send(); };
+    const t = setTimeout(() => { if (p.wait === w) p.wait = null; send(); }, 25000);
+    p.wait = w;
+    res.on("close", () => { clearTimeout(t); if (p.wait === w) p.wait = null; });
+  };
+  const hSignal = (req, res) => {
+    const b = req.body || {}, room = String(b.room || ""), p = peerOf(req, room, b.pid);
+    if (!p) return res.status(410).json({ error: "Plus dans le salon." });
+    p.seen = Date.now();
+    const to = RTC.get(room).get(String(b.to || "")); if (to) deliver(to, { type: "signal", from: String(b.pid), data: b.data });
+    res.json({ ok: true });
+  };
+  const hChat = (req, res) => {
+    const b = req.body || {}, room = String(b.room || ""), p = peerOf(req, room, b.pid);
+    if (!p) return res.status(410).json({ error: "Plus dans le salon." });
+    const text = String(b.text || "").trim().slice(0, 2000); if (!text) return res.json({ ok: true });
+    const ev = { type: "chat", from: String(b.pid), name: p.name, text, at: new Date().toISOString() };
+    RTC.get(room).forEach((o, id) => { if (id !== String(b.pid)) deliver(o, ev); });
+    res.json({ ok: true, at: ev.at });
+  };
+  const hLeave = (req, res) => { const b = req.body || {}, room = String(b.room || ""); if (peerOf(req, room, b.pid)) dropPeer(room, String(b.pid)); res.json({ ok: true }); };
+  app.get("/api/rtc/state", auth, (req, res) => {
+    const rooms = {}; RTC.forEach((m, room) => { rooms[room] = [...new Set([...m.values()].map(p => p.name))]; });
+    res.json({ rooms });
+  });
+  app.post("/api/rtc/join", auth, hJoin);
+  app.get("/api/rtc/poll", auth, hPoll);
+  app.post("/api/rtc/signal", auth, hSignal);
+  app.post("/api/rtc/chat", auth, hChat);
+  app.post("/api/rtc/leave", auth, hLeave);
+  // Invitations
+  app.get("/api/rtc/invites", auth, staffOnly, wrap(async (req, res) => {
+    const rows = await db.all("SELECT data FROM docs WHERE col = ? AND deleted = 0", ["rtcinv"]);
+    const now = Date.now(); res.json({ invites: rows.map(r => JSON.parse(r.data)).filter(x => x.exp > now).sort((a, b) => (b.at || "").localeCompare(a.at || "")).map(x => ({ room: x.room, label: x.label, by: x.by, at: x.at, exp: x.exp, link: "/visio?i=" + x.tok })) });
+  }));
+  app.post("/api/rtc/invites", auth, staffOnly, wrap(async (req, res) => {
+    const label = String((req.body || {}).label || "").trim().slice(0, 80) || "Rendez-vous";
+    const days = Math.min(Math.max(Number((req.body || {}).days) || 7, 1), 60);
+    const room = "inv" + letters(12), exp = Date.now() + days * 864e5, tok = inviteTok({ r: room, e: exp });
+    await put("rtcinv", room, { room, label, by: req.user.name, at: new Date().toISOString(), exp, tok });
+    res.json({ room, label, exp, link: "/visio?i=" + tok });
+  }));
+  app.delete("/api/rtc/invites/:room", auth, staffOnly, wrap(async (req, res) => {
+    const room = String(req.params.room || ""); if (!/^inv[a-z]{12}$/.test(room)) return res.status(400).json({ error: "Invitation inconnue." });
+    await db.run("UPDATE docs SET deleted = 1, updated_at = ? WHERE col = ? AND id = ?", [stamp(), "rtcinv", room]);
+    const m = RTC.get(room); if (m) [...m.keys()].forEach(pid => dropPeer(room, pid));
+    res.json({ ok: true });
+  }));
+  // Côté invité (page /visio, sans compte)
+  app.get("/api/rtc/g/info", gauth, (req, res) => res.json({ room: req.inv.room, label: req.inv.label, by: req.inv.by }));
+  app.post("/api/rtc/g/join", gauth, guestRoom, hJoin);
+  app.get("/api/rtc/g/poll", gauth, guestRoom, hPoll);
+  app.post("/api/rtc/g/signal", gauth, guestRoom, hSignal);
+  app.post("/api/rtc/g/chat", gauth, guestRoom, hChat);
+  app.post("/api/rtc/g/leave", gauth, guestRoom, hLeave);
+  app.get(["/visio", "/visio/"], (req, res) => res.sendFile(path.join(root, "public", "visio.html")));
+
   // ---------- GIF (GIPHY) ----------
   app.get("/api/g-gifs", auth, wrap(async (req, res) => {
     const key = process.env.GIPHY_KEY;
