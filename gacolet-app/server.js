@@ -211,7 +211,7 @@ require("./src/gestion")(app, { db, wrap, admin, root: __dirname });
 
 // ---------- Fichiers de l'application ----------
 app.get("/agence", (req, res) => res.sendFile(path.join(__dirname, "public", "agence.html")));
-app.use(express.static(path.join(__dirname, "public"), { maxAge: "1h", setHeaders: (res, p) => { if (/sw\.js$|\.html$/.test(p)) res.setHeader("Cache-Control", "no-cache"); } }));
+app.use(express.static(path.join(__dirname, "public"), { maxAge: "1h", setHeaders: (res, p) => { if (/sw\.js$|\.(html|css|js|webmanifest)$/.test(p)) res.setHeader("Cache-Control", "no-cache"); } }));
 app.get("*", (req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
 
 db.init().then(async () => {
