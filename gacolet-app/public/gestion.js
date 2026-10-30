@@ -19,9 +19,9 @@ const DAYS = ["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"]
 const DEFAULT_COLORS = {"Agence Gacolet":"#1D1D1B","AR Climatisation":"#E8833A","Bonobo":"#2E9E5B","Delta Sud Formation":"#D6334A","Domaine Pagezi":"#7A1F3D","Flora Design":"#C25CC9","France Étanchéité":"#2F6FE4","Gaufrement Bon":"#E3B505","Hugo Maître Nageur":"#1BA6C9","Insolent":"#5C5C57","KR Thermolaquage":"#8C6239","La Vie La Construction":"#F06A1D","Le Petit Mas":"#6E8B3D","Locamex":"#E2559C","Meyer-Pic":"#3D4FB5","Only Clean":"#17A398","Paillotte Bassamoise":"#F2A93B","SOS Pare-Brise Codognan":"#9B2226","SOS Pare-Brise Vendargues":"#4A6C8C","Sport Défense":"#8E44AD","The New Me Montpellier":"#D98BA5","Total Habitat 360":"#6C7A2E"};
 const VIEWS = [
   ["accueil","Accueil"],["agenda","Agenda"],["taches","Tâches"],["commercial","Commercial"],["campagnes","Campagnes"],
-  ["montage","Prêt à monter"],["publications","Publications"],["clients","Calendrier clients"]
+  ["montage","Prêt à monter"],["publications","Publications"],["clients","Calendrier clients"],["messagerie","Messagerie"],["formation","Formation"]
 ];
-const COLLS = ["events","tasks","commercial","campaigns","rushes","publications","clients","cevents","keydates","posts","edtodo","meta"];
+const COLLS = ["events","tasks","commercial","campaigns","rushes","publications","clients","cevents","keydates","posts","edtodo","meta","messages","formations"];
 
 /* ---------- Outils ---------- */
 const $ = s => document.querySelector(s);
@@ -466,51 +466,31 @@ function item(a, b, sub, c, onClick, color){
 /* ---------- Accueil ---------- */
 function vAccueil(root){
   const me = S.me || "Gabriel", t0 = today(), now = new Date(), hr = now.getHours(), wd = now.getDay(), t1 = addDays(t0, 1);
-  const mine = openTasks().filter(t => t.who === me);
-  const late = mine.filter(t => lateDays(t.date) > 0).sort((a,b) => a.date.localeCompare(b.date));
-  const todayT = mine.filter(t => t.date === t0);
+  const weekend = wd === 0 || wd === 6, evening = hr >= 18;
   const evOf = d => S.d.events.filter(e => e.date === d && e.status !== "Annulé" && (!(e.who||[]).length || (e.who||[]).includes(me))).sort((a,b) => (a.time||"99").localeCompare(b.time||"99"));
-  const evToday = evOf(t0), evTomorrow = evOf(t1);
-  const ru = S.d.rushes.filter(r => r.status !== "Monté" && (r.editor === me || !r.editor));
-  const rel = S.d.commercial.filter(c => isISO(c.nextDate) && c.nextDate <= t0);
-  const prep = S.d.cevents.filter(e => !e.done && prepBy(e) && prepBy(e) <= t0 && e.date >= t0);
+  const evs = evening || weekend ? evOf(t1) : evOf(t0);
   const hello = hr < 5 ? "Bonne nuit" : hr < 12 ? "Bonjour" : hr < 14 ? "Bon appétit" : hr < 18 ? "Bon après-midi" : "Bonsoir";
-  const weekend = wd === 0 || wd === 6;
-  let open;
-  if (weekend) open = "C’est le week-end, rien ne presse.";
-  else if (hr < 12) open = wd === 1 ? "Nouvelle semaine, le café d’abord." : wd === 5 ? "Dernière ligne droite avant le week-end." : "Le café d’abord, le reste suivra.";
-  else if (hr < 14) open = "Une pause, puis on reprend tranquillement.";
-  else if (hr < 18) open = "Encore un bel après-midi devant toi.";
-  else open = "La journée touche à sa fin, beau travail.";
-  const evTxt = e => (e.type === "Tournage" ? "tournage chez " : e.type === "Rendez-vous" ? "rendez-vous avec " : "") + e.client + (e.time ? " à " + fmtTime(e.time) : "");
-  const joinFr = a => a.length < 2 ? a.join("") : a.slice(0, -1).join(", ") + " et " + a[a.length - 1];
-  const parts = [];
-  const evs = hr >= 18 || weekend ? evTomorrow : evToday;
-  if (evs.length) parts.push((hr >= 18 || weekend ? "Demain, " : "Aujourd’hui, ") + joinFr(evs.slice(0, 2).map(evTxt)) + (evs.length > 2 ? ", et " + plural(evs.length - 2, "autre rendez-vous", "autres rendez-vous") : "") + ".");
-  const first = late.concat(todayT)[0];
-  if (first) parts.push("Premier sur la liste : " + first.title.charAt(0).toLowerCase() + first.title.slice(1) + (first.client && first.client !== "Agence Gacolet" && first.client !== "Tous clients" ? " pour " + first.client : "") + ".");
-  if (me === "Matis" && ru.length) parts.push(ru.length > 1 ? "Des rushs t’attendent en salle de montage." : "Un rush t’attend en salle de montage.");
-  if (me === "Gabriel" && rel.length) parts.push("Quelques relances à passer quand tu as un moment.");
-  if (me === "Clara" && prep.length) parts.push(prep.length > 1 ? "Des temps forts clients à préparer." : "Un temps fort client à préparer.");
-  if (!first && !evs.length) parts.push("Rien d’urgent, tu as de la marge.");
+  let say;
+  if (weekend) say = "C’est le week-end, rien ne presse. Profite.";
+  else if (hr < 5) say = "Il est tard. Le meilleur travail se fait après une bonne nuit.";
+  else if (hr < 12) say = wd === 1 ? "Nouvelle semaine, page blanche. Le café d’abord, le reste suivra." : wd === 5 ? "Vendredi. Dernière ligne droite, on finit la semaine en beauté." : "Le café d’abord, le reste suivra.";
+  else if (hr < 14) say = "Une vraie pause, puis on reprend tranquillement.";
+  else if (hr < 18) say = wd === 5 ? "Encore quelques heures et c’est le week-end." : "Encore un bel après-midi devant toi.";
+  else say = "La journée touche à sa fin. Beau travail aujourd’hui.";
+  if (evs.length){ const e = evs[0]; const what = e.type === "Tournage" ? "tournage chez " + e.client : e.type === "Rendez-vous" ? "rendez-vous avec " + e.client : e.client; say += " " + (evening || weekend ? "Demain" : "Aujourd’hui") + ", " + what + (e.time ? " à " + fmtTime(e.time) : "") + "."; }
+  const mine = openTasks().filter(t => t.who === me && isISO(t.date)).sort((a,b) => a.date.localeCompare(b.date));
+  const urgent = mine[0] || openTasks().filter(t => t.who === me)[0];
   const w = el("section","welcome");
   const top = el("div","wl-top");
   const mk = document.createElementNS("http://www.w3.org/2000/svg","svg"); mk.setAttribute("viewBox","140 158 561 281"); mk.setAttribute("aria-hidden","true");
   mk.innerHTML = '<path transform="matrix(1,0,0,-1,700.5803,436.46803)" d="M0 0-147.532-1.615-193.477 45.57-273.888 22.275-261.335 93.466-366.182 35.258-183.556 179.076Z"/><path transform="matrix(1,0,0,-1,232.1747,348.0155)" d="M0 0V0L-91.997-90.068 179.263 118.781 271.552 107.27 190.836 189.479 31.32 30.024"/>';
   const h = el("h1","wl"); h.append(document.createTextNode(hello + " "), el("span", null, me)); top.append(mk, h); w.appendChild(top);
-  w.appendChild(el("p","wl-say", open + " " + parts.join(" ")));
-  const next = [];
-  evs.forEach(e => next.push({a: e.time ? fmtTime(e.time) : (hr >= 18 || weekend ? "Demain" : "Aujourd’hui"), b: e.client, c: e.title || e.type, col: colorOf(e.client), go: () => openEvent(e)}));
-  late.concat(todayT.filter(t => !late.includes(t))).forEach(t => next.push({a: fmtD(t.date), b: t.title, c: t.client || "", col: colorOf(t.client), late: false, go: () => openTask(t)}));
-  if (next.length){
-    const n = el("div","wl-next"); n.appendChild(el("h2","wl-h", hr >= 18 || weekend ? "Pour demain" : "Pour commencer"));
-    next.slice(0, 4).forEach(x => { const r = el("button","hrow"+(x.late ? " late" : "")); r.style.setProperty("--c", x.col); r.appendChild(el("span","hd",x.a)); const m = el("span","hm2"); m.appendChild(el("b",null,x.b)); if (x.c) m.appendChild(el("span",null,x.c)); r.appendChild(m); r.appendChild(el("span","ht","")); r.onclick = x.go; n.appendChild(r); });
-    w.appendChild(n);
-  }
-  const links = el("div","wl-links");
-  const L = (t, f) => { const b = el("button", null, t); b.onclick = f; links.appendChild(b); };
-  L("Mes tâches", () => { S.ui.tWho = me; go("taches"); }); L("Agenda", () => go("agenda")); if (writable()) L("Nouvelle tâche", () => editTask({who: me}));
-  w.appendChild(links);
+  w.appendChild(el("p","wl-say", say));
+  const go1 = el("button","wl-go");
+  if (urgent){ go1.appendChild(el("small",null,"On commence par")); go1.appendChild(el("b",null,urgent.title)); if (urgent.client && urgent.client !== AGENCE) go1.appendChild(el("span",null,urgent.client)); go1.onclick = () => openTask(urgent); }
+  else { go1.appendChild(el("small",null,"Rien d’urgent")); go1.appendChild(el("b",null,"Jeter un œil à l’agenda")); go1.onclick = () => go("agenda"); }
+  const arrow = el("i","wl-arrow"); go1.appendChild(arrow);
+  w.appendChild(go1);
   root.appendChild(w);
 }
 
@@ -825,8 +805,107 @@ function agAgence(root, m){
   edExtras(root);
 }
 
+/* ---------- Messagerie ---------- */
+const CHANNELS = [["general","Général"],["production","Production"],["reseaux","Réseaux sociaux"],["commercial","Commercial"]];
+function chName(k){ const c = CHANNELS.find(x => x[0] === k); return c ? c[1] : k.replace(/^c:/, ""); }
+function vMessagerie(root){
+  const me = S.me || "Gabriel";
+  const ch = S.ui.msgCh || "general";
+  root.appendChild(head("Messagerie", "L’équipe, par sujet et par client"));
+  const wrap = el("div","chat");
+  const side = el("nav","chat-side");
+  const last = {}; S.d.messages.forEach(m => { if (!last[m.ch] || m.at > last[m.ch]) last[m.ch] = m.at; });
+  const chBtn = (k, label) => { const b = el("button", null, label); b.setAttribute("aria-pressed", String(k === ch)); if (last[k] && k !== ch && last[k] > (S.ui["seen_"+k] || "")) b.classList.add("unread"); b.onclick = () => { S.ui.msgCh = k; S.ui["seen_"+k] = new Date().toISOString(); remember(); render(); }; side.appendChild(b); };
+  side.appendChild(el("span","chat-lab","Sujets")); CHANNELS.forEach(([k,l]) => chBtn(k, l));
+  side.appendChild(el("span","chat-lab","Clients")); clientNames().filter(n => n !== AGENCE).forEach(n => chBtn("c:"+n, n));
+  const main = el("section","chat-main");
+  main.appendChild(el("h2","chat-title", chName(ch)));
+  const list = el("div","chat-list"); list.id = "chat-list";
+  const msgs = S.d.messages.filter(m => m.ch === ch).sort((a,b) => (a.at||"").localeCompare(b.at||""));
+  if (!msgs.length) list.appendChild(el("p","chat-empty","Aucun message ici pour l’instant. Écris le premier."));
+  let prev = null;
+  msgs.forEach(m => {
+    const md = new Date(m.at||0), d = iso(md);
+    if (!prev || iso(new Date(prev.at||0)) !== d){ const dl = fmtDL(d); list.appendChild(el("div","chat-day", d === today() ? "Aujourd’hui" : dl.charAt(0).toUpperCase()+dl.slice(1))); prev = null; }
+    const grouped = prev && prev.who === m.who && (Date.parse(m.at) - Date.parse(prev.at)) < 5*60000;
+    const row = el("div","msg"+(m.who === me ? " mine" : "")+(grouped ? " cont" : ""));
+    if (!grouped){ const hd = el("div","msg-h"); hd.append(el("b",null,m.who||""), el("span",null,md.getHours()+" h "+String(md.getMinutes()).padStart(2,"0"))); row.appendChild(hd); }
+    row.appendChild(el("div","msg-t", m.text||""));
+    const act = el("div","msg-a");
+    const tk = el("button",null,"En faire une tâche"); tk.onclick = () => editTask({who: me, title: (m.text||"").slice(0,120), client: ch.startsWith("c:") ? ch.slice(2) : ""}); act.appendChild(tk);
+    if (m.who === me){ const del = el("button",null,"Supprimer"); del.onclick = () => remove("messages", m.id); act.appendChild(del); }
+    row.appendChild(act);
+    list.appendChild(row); prev = m;
+  });
+  main.appendChild(list);
+  const form = el("form","chat-form");
+  const ta = el("textarea"); ta.id = "chat-input"; ta.rows = 2; ta.placeholder = "Écrire dans " + chName(ch) + "…"; ta.value = S.ui.msgDraft || "";
+  ta.oninput = () => { S.ui.msgDraft = ta.value; };
+  const send = async () => { const t = ta.value.trim(); if (!t) return; S.ui.msgDraft = ""; ta.value = ""; try { await save("messages", null, {ch, text: t, who: me, at: new Date().toISOString()}); } catch(e){ S.ui.msgDraft = t; } };
+  ta.onkeydown = e => { if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); send(); } };
+  form.onsubmit = e => { e.preventDefault(); send(); };
+  const sb = el("button","btn lemon","Envoyer"); sb.type = "submit";
+  form.append(ta, sb); main.appendChild(form);
+  wrap.append(side, main); root.appendChild(wrap);
+  S.ui["seen_"+ch] = new Date().toISOString();
+  requestAnimationFrame(() => { const l = document.getElementById("chat-list"); if (l) l.scrollTop = l.scrollHeight; });
+}
+
+/* ---------- Formation ---------- */
+function embedUrl(u){
+  u = String(u||"").trim(); let m;
+  if ((m = u.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{6,})/))) return "https://www.youtube-nocookie.com/embed/" + m[1];
+  if ((m = u.match(/vimeo\.com\/(?:video\/)?(\d+)/))) return "https://player.vimeo.com/video/" + m[1];
+  if ((m = u.match(/drive\.google\.com\/file\/d\/([\w-]+)/))) return "https://drive.google.com/file/d/" + m[1] + "/preview";
+  return "";
+}
+function editFormation(f){
+  openForm({ key:"fo", title: f.id ? f.title : "Nouvelle vidéo", intro: f.id ? "" : "Colle le lien d’une vidéo YouTube, Vimeo ou Google Drive.", values: Object.assign({aud: S.ui.foAud || "Équipe"}, f),
+    fields:[{k:"title",label:"Titre",req:"Donne un titre."},{k:"aud",label:"Pour",type:"select",options:["Équipe","Clients"],half:true},{k:"topic",label:"Thème",half:true,ph:"Ex. Montage, Metricool, Tournage"},
+      {k:"url",label:"Lien de la vidéo",ph:"https://",req:"Colle le lien de la vidéo."},{k:"duration",label:"Durée",half:true,ph:"Ex. 4 min"},{k:"order",label:"Ordre",type:"number",half:true},{k:"desc",label:"Ce qu’on y apprend",type:"textarea"}],
+    onDelete: f.id ? () => remove("formations", f.id) : null,
+    onSave: out => save("formations", f.id || null, Object.assign(f.id ? strip(f) : {}, out)) });
+}
+function openFormation(f){
+  const me = S.me || "Gabriel";
+  openModal(m => {
+    const t = el("h3",null,f.title); t.id = "mtitle"; m.appendChild(t);
+    if (f.topic || f.duration) m.appendChild(el("p","muted",[f.topic, f.duration].filter(Boolean).join(", ")));
+    const src = embedUrl(f.url);
+    if (src){ const v = el("div","fo-player"); const i = document.createElement("iframe"); i.src = src; i.allow = "autoplay; fullscreen; picture-in-picture"; i.allowFullscreen = true; v.appendChild(i); m.appendChild(v); }
+    else if (f.url){ const a = el("a","btn","Ouvrir la vidéo"); a.href = f.url; a.target = "_blank"; a.rel = "noopener"; m.appendChild(a); }
+    if (f.desc) m.appendChild(el("p","fo-desc",f.desc));
+    const acts = el("div","actions");
+    const seen = (f.seenBy||[]).includes(me);
+    const sb = btn(seen ? "Vue" : "Marquer comme vue", seen ? "" : "lemon", () => { const s = new Set(f.seenBy||[]); seen ? s.delete(me) : s.add(me); patch("formations", f.id, {seenBy:[...s]}); closeModal(); });
+    const eb = btn("Modifier","", () => { closeModal(); editFormation(f); });
+    acts.append(eb, sb); m.appendChild(acts);
+  });
+}
+function vFormation(root){
+  const me = S.me || "Gabriel"; const aud = S.ui.foAud || "Équipe";
+  root.appendChild(head("Formation", aud === "Équipe" ? "Pour bien démarrer à l’agence" : "Les tutos à partager aux clients",
+    [segm([["Équipe","Équipe"],["Clients","Clients"]], aud, v => { S.ui.foAud = v; remember(); render(); }), addBtn("Ajouter une vidéo", () => editFormation({aud}))]));
+  const rows = S.d.formations.filter(f => (f.aud||"Équipe") === aud).sort((a,b) => (Number(a.order)||999) - (Number(b.order)||999) || (a.title||"").localeCompare(b.title||""));
+  if (!rows.length){ root.appendChild(el("p","empty", aud === "Équipe" ? "Aucune vidéo pour l’instant. Ajoute la première : outils, règles de nommage, tournage, montage." : "Aucun tuto client pour l’instant. Commence par « Valider une publication » et « Envoyer ses photos »." )); return; }
+  const topics = []; rows.forEach(f => { const t = f.topic || "Général"; if (!topics.includes(t)) topics.push(t); });
+  const seenN = rows.filter(f => (f.seenBy||[]).includes(me)).length;
+  if (aud === "Équipe") root.appendChild(el("p","status", seenN + " sur " + rows.length + " vues par toi."));
+  topics.forEach(tp => {
+    root.appendChild(el("h2","sec",tp));
+    const g = el("div","fo-grid");
+    rows.filter(f => (f.topic || "Général") === tp).forEach(f => {
+      const c = el("button","fo-card"+((f.seenBy||[]).includes(me) ? " seen" : ""));
+      const th = el("span","fo-th"); th.appendChild(el("span","fo-play")); c.appendChild(th);
+      c.appendChild(el("b",null,f.title)); c.appendChild(el("span",null,[f.duration, (f.seenBy||[]).includes(me) ? "Vue" : ""].filter(Boolean).join(", ")));
+      c.onclick = () => openFormation(f); g.appendChild(c);
+    });
+    root.appendChild(g);
+  });
+}
+
 /* ---------- Navigation ---------- */
-const RENDER = {accueil:vAccueil, agenda:vAgenda, taches:vTaches, commercial:vCommercial, campagnes:vCampagnes, montage:vMontage, publications:vPublications, clients:vClients};
+const RENDER = {accueil:vAccueil, agenda:vAgenda, taches:vTaches, commercial:vCommercial, campagnes:vCampagnes, montage:vMontage, publications:vPublications, clients:vClients, messagerie:vMessagerie, formation:vFormation};
 function go(v){ if (location.hash !== "#"+v) location.hash = v; else { S.view = v; render(); } }
 function fromHash(){ let h = (location.hash||"").replace("#",""); if (h === "editorial"){ S.ui.agClient = AGENCE; if (!S.ui.agLayers.includes("posts")) S.ui.agLayers = S.ui.agLayers.concat("posts"); h = "agenda"; } S.view = RENDER[h] ? h : "accueil"; }
 window.addEventListener("hashchange", () => { fromHash(); render(); window.scrollTo(0,0); });
@@ -839,9 +918,11 @@ const ICONS = {
   montage:'<rect x="3.5" y="6" width="17" height="12" rx="1.5"/><path d="M8 6v12M16 6v12M3.5 10h4.5M3.5 14h4.5M16 10h4.5M16 14h4.5"/>',
   publications:'<rect x="4" y="4" width="16" height="16" rx="4"/><circle cx="12" cy="12" r="3.6"/><path d="M16.7 7.3h.01"/>',
   clients:'<circle cx="9" cy="9" r="3.2"/><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5M15.5 6.2a3 3 0 0 1 0 5.6M17 14.3c1.9.6 3.1 2.2 3.5 4.7"/>',
+  messagerie:'<path d="M4.5 6.5A2 2 0 0 1 6.5 4.5h11a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H10l-4.5 3.5v-3.5h0a2 2 0 0 1-1-1.7z"/>',
+  formation:'<rect x="3.5" y="5.5" width="17" height="12" rx="2"/><path d="M10.5 9v5l4-2.5z"/><path d="M8 20.5h8"/>',
   plus:'<path d="M5 7h14M5 12h14M5 17h14"/>'
 };
-const SHORT = {accueil:"Accueil", agenda:"Agenda", taches:"Tâches", commercial:"Commercial", campagnes:"Campagnes", montage:"Montage", publications:"Publications", clients:"Calendrier clients"};
+const SHORT = {accueil:"Accueil", agenda:"Agenda", taches:"Tâches", commercial:"Commercial", campagnes:"Campagnes", montage:"Montage", publications:"Publications", clients:"Calendrier clients", messagerie:"Messagerie", formation:"Formation"};
 const MOBILE_MAIN = ["accueil","agenda","taches","commercial"];
 const ico = k => { const s = document.createElementNS("http://www.w3.org/2000/svg","svg"); s.setAttribute("viewBox","0 0 24 24"); s.setAttribute("aria-hidden","true"); s.classList.add("ico"); s.innerHTML = ICONS[k] || ""; return s; };
 function renderTabs(){
@@ -849,7 +930,7 @@ function renderTabs(){
   const badge = { taches: openTasks().filter(t => t.who === me && lateDays(t.date) > 0).length, commercial: me === "Gabriel" ? S.d.commercial.filter(c => isISO(c.nextDate) && c.nextDate <= today()).length : 0 };
   const link = k => { const a = el("a"); a.href = "#"+k; a.appendChild(ico(k)); a.appendChild(el("span","lb", SHORT[k])); if (k === S.view) a.setAttribute("aria-current","page"); if (badge[k]) a.appendChild(el("span","n",String(badge[k]))); return a; };
   const n = $("#tabs"); n.textContent = "";
-  VIEWS.forEach(([k]) => { n.appendChild(link(k)); if (k === "commercial") n.appendChild(el("span","navsep")); });
+  VIEWS.forEach(([k]) => { n.appendChild(link(k)); if (k === "commercial" || k === "clients") n.appendChild(el("span","navsep")); });
   const m = $("#mtabs"); m.textContent = "";
   MOBILE_MAIN.forEach(k => m.appendChild(link(k)));
   const more = el("button","morebtn"); more.type = "button"; more.appendChild(ico("plus")); more.appendChild(el("span","lb","Plus"));
