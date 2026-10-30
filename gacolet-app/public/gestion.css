@@ -774,3 +774,6 @@ details.box[open] summary::after{content:"\2212"}
 .ms-doc .ms-dh{margin-top:16px;color:var(--ink);font-weight:700}
 .fw-pv{padding:10px 12px;border-radius:10px;background:#232321;font-size:14px;margin:0 0 14px;white-space:pre-wrap;max-height:160px;overflow:auto}
 .ms-tw .search,.ag-f .search{min-width:240px}
+/* Onglets clients Meta : sur plusieurs lignes, plus aérés */
+.mt-tabs{flex-wrap:wrap;overflow:visible;gap:8px;padding:16px 0 18px;margin:4px 0 20px}
+.mt-tabs button{padding:8px 14px}
