@@ -434,17 +434,18 @@ function vFiches(root){
   [["","Tous les services"]].concat(SERVICES.map(([k,l]) => [k, k+" "+l])).forEach(([v,l]) => { const o = el("option",null,l); o.value = v; sel.appendChild(o); }); sel.value = S.ui.fiSv || ""; sel.onchange = () => { S.ui.fiSv = sel.value; remember(); render(); };
   g.append(lb, sel); f.appendChild(g); root.appendChild(f);
   const list = S.d.clients.filter(c => c.name !== AGENCE && (!S.ui.fiSv || (c.services || {})[S.ui.fiSv] != null)).sort((a,b) => (a.since || "9999").localeCompare(b.since || "9999") || a.name.localeCompare(b.name,"fr"));
-  const {w, tb} = table(["Client","Client depuis","Services","Formule","Publications / mois","Tournage","Réseaux","À penser"]);
-  list.forEach(c => { const tr = el("tr","row"); tr.onclick = () => editClient(c);
+  const {w, tb} = table(["Client","Depuis","Services","~Formule","~Publications / mois","~À penser"]);
+  const line = (tr, txt, cls) => { const c = td(tr, txt ? el("span","fi-1", txt) : el("span","muted","—"), cls); if (txt) c.title = txt; return c; };
+  list.forEach(c => { const tr = el("tr","row fi-row"); tr.onclick = () => editClient(c);
     td(tr, clientTag(c.name),"nw"); td(tr, c.since ? fmtFR(c.since) : "—","nw");
-    const sv = el("div","fi-sv"); Object.keys(c.services || {}).sort().forEach(k => { const s = SERVICES.find(x => x[0] === k); const p = el("span","fi-chip"); p.append(el("b",null,k), document.createTextNode(" "+(s ? s[1] : "")+(c.services[k] ? ", depuis "+fmtFR(c.services[k]) : ""))); sv.appendChild(p); });
-    if (!sv.children.length) sv.appendChild(el("span","muted","À renseigner"));
-    td(tr, sv); td(tr, el("div","note",c.formula)); td(tr, c.perMonth || "","nw"); td(tr, el("div","note",c.shoot)); td(tr, el("div","note",c.networks));
-    td(tr, el("div","note",[c.remember, c.ask ? "À demander : "+c.ask : ""].filter(Boolean).join("\n")));
+    const ks = Object.keys(c.services || {}).sort(), sv = el("div","fi-sv");
+    ks.forEach(k => { const s = SERVICES.find(x => x[0] === k); const p = el("b","fi-code",k); p.title = (s ? s[1] : "") + (c.services[k] ? ", depuis " + fmtFR(c.services[k]) : ""); sv.appendChild(p); });
+    if (!ks.length) sv.appendChild(el("span","muted","À renseigner"));
+    td(tr, sv,"nw"); line(tr, c.formula, "hm"); line(tr, c.perMonth, "hm"); line(tr, [c.remember, c.ask ? "À demander : " + c.ask : ""].filter(Boolean).join(" "), "hm");
     tb.appendChild(tr); });
   w.classList.add("fi-tw");
   root.appendChild(list.length ? w : el("p","empty","Aucun client pour ce service."));
-  root.appendChild(el("p","status", plural(list.length,"client")+". Clique sur une ligne pour modifier la fiche."));
+  root.appendChild(el("p","status", plural(list.length,"client")+". Clique sur une ligne pour voir et modifier toute la fiche : tournage, réseaux, à penser."));
 }
 
 /* Éditorial agence */
