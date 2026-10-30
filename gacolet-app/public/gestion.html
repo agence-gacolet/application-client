@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Gacolet</title>
+<title>Gacolet Gestion</title>
 <meta name="theme-color" content="#090908">
 <meta name="robots" content="noindex">
 <link rel="manifest" href="/gestion.webmanifest">
@@ -12,12 +12,28 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<meta name="apple-mobile-web-app-title" content="Gacolet">
+<meta name="apple-mobile-web-app-title" content="Gestion">
 <link rel="preload" href="/fonts/inter.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/bebas-neue.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/gestion.css?v=3">
+<link rel="stylesheet" href="/gestion.css?v=2">
 </head>
 <body>
+<style>
+.splash{position:fixed;inset:0;z-index:200;background:#090908;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;animation:sp-out .5s cubic-bezier(.7,0,.3,1) 1.75s forwards}
+.splash svg{width:min(230px,50vw);height:auto;overflow:visible;fill:#C6FF33;animation:sp-pop .5s cubic-bezier(.3,1.6,.5,1) 1.05s}
+.splash .sp-a,.splash .sp-b{transform-box:fill-box;transform-origin:50% 100%;opacity:0}
+.splash .sp-a{animation:sp-slash .55s cubic-bezier(.2,.9,.25,1) .15s forwards}
+.splash .sp-b{animation:sp-rise .6s cubic-bezier(.2,.9,.25,1) .45s forwards}
+.splash b{font:400 30px/1 "Bebas Neue","Arial Narrow",Impact,sans-serif;font-style:italic;color:#F4F3EE;letter-spacing:.9em;margin-right:-.9em;opacity:0;animation:sp-word .7s cubic-bezier(.2,.9,.25,1) .8s forwards}
+@keyframes sp-slash{from{opacity:0;transform:translate(-40%,40%)}to{opacity:1;transform:none}}
+@keyframes sp-rise{from{opacity:0;transform:translateY(60%) scaleY(.4)}to{opacity:1;transform:none}}
+@keyframes sp-pop{50%{transform:scale(1.06)}}
+@keyframes sp-word{from{opacity:0;letter-spacing:.9em}to{opacity:1;letter-spacing:.12em;margin-right:-.12em}}
+@keyframes sp-out{to{opacity:0;transform:translateY(-3%);visibility:hidden}}
+@media (prefers-reduced-motion:reduce){.splash{animation:sp-out .3s ease .6s forwards}.splash *{animation:none!important;opacity:1!important}}
+</style>
+<div class="splash" id="splash" aria-hidden="true"><svg viewBox="140 158 561 281"><g class="sp-a"><path transform="matrix(1,0,0,-1,232.1747,348.0155)" d="M0 0V0L-91.997-90.068 179.263 118.781 271.552 107.27 190.836 189.479 31.32 30.024"/></g><g class="sp-b"><path transform="matrix(1,0,0,-1,700.5803,436.46803)" d="M0 0-147.532-1.615-193.477 45.57-273.888 22.275-261.335 93.466-366.182 35.258-183.556 179.076Z"/></g></svg><b>GACOLET</b></div>
+<script>setTimeout(function(){var s=document.getElementById("splash");if(s)s.remove()},2400)</script>
 <div class="shell" id="shell" hidden>
   <aside class="side">
     <a class="logo" href="#accueil" aria-label="Accueil"><span>AGENCE</span><span>GACOLET</span></a>
@@ -61,7 +77,7 @@
   const shell = document.getElementById("shell"), login = document.getElementById("login");
   function boot() {
     login.hidden = true; shell.hidden = false;
-    const s = document.createElement("script"); s.src = "/gestion.js?v=2"; document.body.appendChild(s);
+    const s = document.createElement("script"); s.src = "/gestion.js?v=1"; document.body.appendChild(s);
   }
   window.addEventListener("gc-logout", () => location.reload());
   document.getElementById("logout").onclick = () => GC.logout();
