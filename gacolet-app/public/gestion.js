@@ -465,45 +465,55 @@ function item(a, b, sub, c, onClick, color){
 
 /* ---------- Accueil ---------- */
 function vAccueil(root){
-  const me = S.me || "Gabriel", t0 = today(), t7 = addDays(t0, 7);
-  const nb = btn("Nouvelle tâche", "", () => editTask({who:me})); if (!writable()) nb.disabled = true;
-  const dl = fmtDL(t0); root.appendChild(head(["Bonjour", me], dl.charAt(0).toUpperCase()+dl.slice(1)+" "+t0.slice(0,4), [nb]));
+  const me = S.me || "Gabriel", t0 = today(), now = new Date(), hr = now.getHours(), wd = now.getDay(), t1 = addDays(t0, 1);
   const mine = openTasks().filter(t => t.who === me);
   const late = mine.filter(t => lateDays(t.date) > 0).sort((a,b) => a.date.localeCompare(b.date));
-  const soon = mine.filter(t => isISO(t.date) && t.date >= t0 && t.date <= t7).sort((a,b) => a.date.localeCompare(b.date));
-  const sum = el("p","hsum");
-  if (late.length){ const b = el("b","late", plural(late.length,"tâche en retard","tâches en retard")); sum.appendChild(b); sum.appendChild(document.createTextNode(soon.length ? ", "+plural(soon.length,"autre","autres")+" cette semaine." : ".")); }
-  else sum.textContent = soon.length ? plural(soon.length,"tâche prévue","tâches prévues")+" cette semaine, rien en retard." : "Rien en retard, rien de prévu cette semaine.";
-  root.appendChild(sum);
-  const row = (date, title, sub, tag, onClick, color, isLate) => { const r = el("button","hrow"+(isLate ? " late" : "")); if (color) r.style.setProperty("--c", color);
-    r.appendChild(el("span","hd", date)); const m = el("span","hm2"); m.appendChild(el("b",null,title)); if (sub) m.appendChild(el("span",null,sub)); r.appendChild(m);
-    r.appendChild(tag instanceof Node ? tag : el("span","ht", tag || "")); r.onclick = onClick; return r; };
-  const block = (title, count, nodes, empty, more) => { const s = el("section","hblock"); const h = el("h2","hh",title); if (count) h.appendChild(el("span",null,count)); s.appendChild(h);
-    if (!nodes.length) s.appendChild(el("p","hempty",empty)); nodes.forEach(n => s.appendChild(n));
-    if (more){ const a = el("button","hmore",more[0]); a.onclick = more[1]; s.appendChild(a); } return s; };
-  const g = el("div","home"); const L = el("div","hcol"), R = el("div","hcol");
-  const tasks = late.concat(soon);
-  L.appendChild(block("À faire", tasks.length ? String(tasks.length) : "", tasks.slice(0,8).map(t => row(t.date ? fmtD(t.date) : "", t.title, t.client || "", lateDays(t.date) ? lateDays(t.date)+" j de retard" : "", () => openTask(t), colorOf(t.client), lateDays(t.date) > 0)), "Rien à faire cette semaine.", tasks.length > 8 ? ["Voir toutes mes tâches", () => { S.ui.tWho = me; go("taches"); }] : null));
-  if (me === "Gabriel"){
-    const rel = S.d.commercial.filter(c => isISO(c.nextDate) && c.nextDate <= addDays(t0,2)).sort((a,b) => a.nextDate.localeCompare(b.nextDate));
-    L.appendChild(block("Relances", rel.length ? String(rel.length) : "", rel.slice(0,5).map(c => row(fmtD(c.nextDate), c.company, c.nextAction || "", lateDays(c.nextDate) ? lateDays(c.nextDate)+" j de retard" : "", () => openCommercial(c), "", lateDays(c.nextDate) > 0)), "Aucune relance due.", rel.length > 5 ? ["Voir le commercial", () => go("commercial")] : null));
+  const todayT = mine.filter(t => t.date === t0);
+  const evOf = d => S.d.events.filter(e => e.date === d && e.status !== "Annulé" && (!(e.who||[]).length || (e.who||[]).includes(me))).sort((a,b) => (a.time||"99").localeCompare(b.time||"99"));
+  const evToday = evOf(t0), evTomorrow = evOf(t1);
+  const ru = S.d.rushes.filter(r => r.status !== "Monté" && (r.editor === me || !r.editor));
+  const rel = S.d.commercial.filter(c => isISO(c.nextDate) && c.nextDate <= t0);
+  const prep = S.d.cevents.filter(e => !e.done && prepBy(e) && prepBy(e) <= t0 && e.date >= t0);
+  const hello = hr < 5 ? "Bonne nuit" : hr < 12 ? "Bonjour" : hr < 14 ? "Bon appétit" : hr < 18 ? "Bon après-midi" : "Bonsoir";
+  const weekend = wd === 0 || wd === 6;
+  let open;
+  if (weekend) open = "C’est le week-end, rien ne presse.";
+  else if (hr < 12) open = wd === 1 ? "Nouvelle semaine, le café d’abord." : wd === 5 ? "Dernière ligne droite avant le week-end." : "Le café d’abord, le reste suivra.";
+  else if (hr < 14) open = "Une pause, puis on reprend tranquillement.";
+  else if (hr < 18) open = "Encore un bel après-midi devant toi.";
+  else open = "La journée touche à sa fin.";
+  const evTxt = e => (e.type === "Tournage" ? "tournage chez " : e.type === "Rendez-vous" ? "rendez-vous avec " : "") + e.client + (e.time ? " à " + fmtTime(e.time) : "");
+  const joinFr = a => a.length < 2 ? a.join("") : a.slice(0, -1).join(", ") + " et " + a[a.length - 1];
+  const parts = [];
+  const evs = hr >= 18 || weekend ? evTomorrow : evToday;
+  if (evs.length) parts.push((hr >= 18 || weekend ? "Demain, " : "Aujourd’hui, ") + joinFr(evs.slice(0, 2).map(evTxt)) + (evs.length > 2 ? ", et " + plural(evs.length - 2, "autre rendez-vous", "autres rendez-vous") : "") + ".");
+  const todo = [];
+  if (late.length) todo.push(plural(late.length, "tâche attend", "tâches attendent") + " depuis quelques jours");
+  else if (todayT.length) todo.push(plural(todayT.length, "tâche prévue", "tâches prévues") + " aujourd’hui");
+  if (me === "Matis" && ru.length) todo.push(plural(ru.length, "rush à monter", "rushs à monter"));
+  if (me === "Gabriel" && rel.length) todo.push(plural(rel.length, "relance à passer", "relances à passer"));
+  if (me === "Clara" && prep.length) todo.push(plural(prep.length, "temps fort à préparer", "temps forts à préparer"));
+  if (todo.length) { const s = joinFr(todo); parts.push(s.charAt(0).toUpperCase() + s.slice(1) + "."); }
+  else if (!evs.length) parts.push("Rien d’urgent, tu as de la marge.");
+  const w = el("section","welcome");
+  const top = el("div","wl-top");
+  const mk = document.createElementNS("http://www.w3.org/2000/svg","svg"); mk.setAttribute("viewBox","140 158 561 281"); mk.setAttribute("aria-hidden","true");
+  mk.innerHTML = '<path transform="matrix(1,0,0,-1,700.5803,436.46803)" d="M0 0-147.532-1.615-193.477 45.57-273.888 22.275-261.335 93.466-366.182 35.258-183.556 179.076Z"/><path transform="matrix(1,0,0,-1,232.1747,348.0155)" d="M0 0V0L-91.997-90.068 179.263 118.781 271.552 107.27 190.836 189.479 31.32 30.024"/>';
+  const h = el("h1","wl"); h.append(document.createTextNode(hello + " "), el("span", null, me)); top.append(mk, h); w.appendChild(top);
+  w.appendChild(el("p","wl-say", open + " " + parts.join(" ")));
+  const next = [];
+  evs.forEach(e => next.push({a: e.time ? fmtTime(e.time) : (hr >= 18 || weekend ? "Demain" : "Aujourd’hui"), b: e.client, c: e.title || e.type, col: colorOf(e.client), go: () => openEvent(e)}));
+  late.concat(todayT.filter(t => !late.includes(t))).forEach(t => next.push({a: fmtD(t.date), b: t.title, c: t.client || "", col: colorOf(t.client), late: lateDays(t.date) > 0, go: () => openTask(t)}));
+  if (next.length){
+    const n = el("div","wl-next"); n.appendChild(el("h2","wl-h", hr >= 18 || weekend ? "Pour demain" : "Pour commencer"));
+    next.slice(0, 4).forEach(x => { const r = el("button","hrow"+(x.late ? " late" : "")); r.style.setProperty("--c", x.col); r.appendChild(el("span","hd",x.a)); const m = el("span","hm2"); m.appendChild(el("b",null,x.b)); if (x.c) m.appendChild(el("span",null,x.c)); r.appendChild(m); r.appendChild(el("span","ht","")); r.onclick = x.go; n.appendChild(r); });
+    w.appendChild(n);
   }
-  if (me === "Matis"){
-    const ru = S.d.rushes.filter(r => r.status !== "Monté" && (r.editor === "Matis" || !r.editor));
-    L.appendChild(block("À monter", ru.length ? String(ru.length) : "", ru.slice(0,5).map(r => row(fmtD(r.shotAt), r.client, r.content || "", r.status, () => editRush(r), colorOf(r.client))), "Aucun rush en attente.", ru.length > 5 ? ["Voir tout", () => go("montage")] : null));
-  }
-  if (me === "Clara"){
-    const ce = S.d.cevents.filter(e => !e.done && prepBy(e) && prepBy(e) <= addDays(t0,14) && e.date >= t0).sort((a,b) => prepBy(a).localeCompare(prepBy(b)));
-    L.appendChild(block("À préparer", ce.length ? String(ce.length) : "", ce.slice(0,5).map(e => row(fmtD(prepBy(e)), e.client, e.subject || "", prepBy(e) < t0 ? "En retard" : "", () => openCevent(e), colorOf(e.client), prepBy(e) < t0)), "Rien à préparer dans les 14 jours.", ce.length > 5 ? ["Voir le calendrier clients", () => go("clients")] : null));
-  }
-  const ev = S.d.events.filter(e => e.date >= t0 && e.date <= t7 && e.status !== "Annulé").sort((a,b) => (a.date+(a.time||"99")).localeCompare(b.date+(b.time||"99")));
-  const wk = el("section","hblock"); const wh = el("h2","hh","Cette semaine"); wk.appendChild(wh);
-  if (!ev.length) wk.appendChild(el("p","hempty","Aucun rendez-vous ni tournage."));
-  let cur = "";
-  ev.forEach(e => { if (e.date !== cur){ cur = e.date; const d = fmtDL(e.date); wk.appendChild(el("div","hday", e.date === t0 ? "Aujourd’hui" : d.charAt(0).toUpperCase()+d.slice(1))); }
-    wk.appendChild(row(e.time ? fmtTime(e.time) : "", e.client, e.title || e.type, (e.who||[]).includes(me) ? "Toi" : "", () => openEvent(e), colorOf(e.client))); });
-  R.appendChild(wk);
-  g.append(L, R); root.appendChild(g);
+  const links = el("div","wl-links");
+  const L = (t, f) => { const b = el("button", null, t); b.onclick = f; links.appendChild(b); };
+  L("Mes tâches", () => { S.ui.tWho = me; go("taches"); }); L("Agenda", () => go("agenda")); if (writable()) L("Nouvelle tâche", () => editTask({who: me}));
+  w.appendChild(links);
+  root.appendChild(w);
 }
 
 /* ---------- Tâches ---------- */
