@@ -31,7 +31,7 @@ const ROLE_VIEWS = {
   commercial: ["accueil","agenda","taches","messagerie","commercial","clients","montage","publications","campagnes","formation","parametres"]
 };
 const canSee = k => !S.role || S.role === "owner" || (ROLE_VIEWS[S.role] || []).includes(k);
-const COLLS = ["events","tasks","commercial","campaigns","rushes","publications","clients","cevents","keydates","posts","edtodo","meta","messages","formations"];
+const COLLS = ["events","tasks","commercial","campaigns","rushes","publications","clients","cevents","keydates","posts","edtodo","meta","messages","formations","msheets"];
 
 /* ---------- Outils ---------- */
 const $ = s => document.querySelector(s);
@@ -417,10 +417,12 @@ function editKeydate(k){
     onDelete: k.id ? () => remove("keydates", k.id) : null,
     onSave: out => { const cl = out.clientsTxt.split(",").map(s => s.trim()).filter(Boolean); delete out.clientsTxt; return save("keydates", k.id || null, Object.assign(k.id ? strip(k) : {}, out, {clients:cl, forWhom:cl.join(", ")})); } });
 }
-const SERVICES = [["10","Stratégie & conseil"],["20","Production"],["30","Graphisme & impression"],["40","Réseaux sociaux"],["50","Publicité"],["60","Web & référencement"]];
+/* Services vendus : gestion des réseaux sociaux, publicité Meta, ou les deux. Les anciennes fiches (codes 10 à 60) sont relues ainsi. */
+const SERVICES = [["com","Gestion des réseaux sociaux","Réseaux sociaux"],["meta","Publicité Meta","Meta"]];
+const svOf = c => { const o = {}; Object.entries(c.services || {}).forEach(([k, v]) => { const n = k === "meta" || k === "50" ? "meta" : "com"; if (!(n in o) || (v && (!o[n] || v < o[n]))) o[n] = v || o[n] || ""; }); return o; };
 function editClient(c){
-  const sv = c.services || {}; const vals = Object.assign({}, c); SERVICES.forEach(([k]) => { vals["sv"+k] = k in sv; vals["sd"+k] = sv[k] || ""; });
-  const svFields = []; SERVICES.forEach(([k, l]) => { svFields.push({k:"sv"+k, label:k+" "+l, type:"check", half:true}); svFields.push({k:"sd"+k, label:"Depuis le", type:"date", half:true}); });
+  const sv = svOf(c); const vals = Object.assign({}, c); SERVICES.forEach(([k]) => { vals["sv"+k] = k in sv; vals["sd"+k] = sv[k] || ""; });
+  const svFields = []; SERVICES.forEach(([k, l]) => { svFields.push({k:"sv"+k, label:l, type:"check", half:true}); svFields.push({k:"sd"+k, label:"Depuis le", type:"date", half:true}); });
   openForm({ key:"cf", title: c.id ? "Fiche, "+c.name : "Nouveau client", values:vals,
     fields:(c.id ? [] : [{k:"name",label:"Nom du client",req:"Indique le nom du client."}]).concat([{k:"since",label:"Client depuis le",type:"date"}]).concat(svFields).concat([{k:"formula",label:"Formule"},{k:"perMonth",label:"Publications / mois"},{k:"shoot",label:"Tournage",half:true},{k:"networks",label:"Réseaux",half:true},
       {k:"remember",label:"À retenir",type:"textarea"},{k:"ask",label:"À demander au client",type:"textarea"},{k:"leadWeeks",label:"Préparer combien de semaines avant",type:"number",half:true},{k:"color",label:"Couleur dans l’agenda",type:"color",half:true}]),
@@ -431,15 +433,15 @@ function editClient(c){
 function vFiches(root){
   root.appendChild(head("Tableau clients", "Réservé aux propriétaires : depuis quand, quels services, la formule et ce qu’il faut penser.", [addBtn("Nouveau client", () => editClient({}))]));
   const f = el("div","filters ag-f"); const g = el("div","fgroup"); const lb = el("label","flabel","Service"); lb.htmlFor = "fi-sv"; const sel = el("select","pick"); sel.id = "fi-sv";
-  [["","Tous les services"]].concat(SERVICES.map(([k,l]) => [k, k+" "+l])).forEach(([v,l]) => { const o = el("option",null,l); o.value = v; sel.appendChild(o); }); sel.value = S.ui.fiSv || ""; sel.onchange = () => { S.ui.fiSv = sel.value; remember(); render(); };
+  [["","Tous les services"],["com","Réseaux sociaux"],["meta","Publicité Meta"],["both","Réseaux sociaux et Meta"]].forEach(([v,l]) => { const o = el("option",null,l); o.value = v; sel.appendChild(o); }); sel.value = S.ui.fiSv || ""; sel.onchange = () => { S.ui.fiSv = sel.value; remember(); render(); };
   g.append(lb, sel); f.appendChild(g); root.appendChild(f);
-  const list = S.d.clients.filter(c => c.name !== AGENCE && (!S.ui.fiSv || (c.services || {})[S.ui.fiSv] != null)).sort((a,b) => (a.since || "9999").localeCompare(b.since || "9999") || a.name.localeCompare(b.name,"fr"));
+  const list = S.d.clients.filter(c => c.name !== AGENCE && (!S.ui.fiSv || (S.ui.fiSv === "both" ? ("com" in svOf(c) && "meta" in svOf(c)) : S.ui.fiSv in svOf(c)))).sort((a,b) => (a.since || "9999").localeCompare(b.since || "9999") || a.name.localeCompare(b.name,"fr"));
   const {w, tb} = table(["Client","Depuis","Services","~Formule","~Publications / mois","~À penser"]);
   const line = (tr, txt, cls) => { const c = td(tr, txt ? el("span","fi-1", txt) : el("span","muted","—"), cls); if (txt) c.title = txt; return c; };
   list.forEach(c => { const tr = el("tr","row fi-row"); tr.onclick = () => editClient(c);
     td(tr, clientTag(c.name),"nw"); td(tr, c.since ? fmtFR(c.since) : "—","nw");
-    const ks = Object.keys(c.services || {}).sort(), sv = el("div","fi-sv");
-    ks.forEach(k => { const s = SERVICES.find(x => x[0] === k); const p = el("b","fi-code",k); p.title = (s ? s[1] : "") + (c.services[k] ? ", depuis " + fmtFR(c.services[k]) : ""); sv.appendChild(p); });
+    const so = svOf(c), ks = SERVICES.map(x => x[0]).filter(k => k in so), sv = el("div","fi-sv");
+    ks.forEach(k => { const s = SERVICES.find(x => x[0] === k); const p = el("b","fi-code",s[2]); p.title = s[1] + (so[k] ? ", depuis " + fmtFR(so[k]) : ""); sv.appendChild(p); });
     if (!ks.length) sv.appendChild(el("span","muted","À renseigner"));
     td(tr, sv,"nw"); line(tr, c.formula, "hm"); line(tr, c.perMonth, "hm"); line(tr, [c.remember, c.ask ? "À demander : " + c.ask : ""].filter(Boolean).join(" "), "hm");
     tb.appendChild(tr); });
@@ -632,12 +634,78 @@ function loadMeta(force){
   GC.api("GET","/api/g-meta").then(r => { S.meta = r; }).catch(e => { S.meta = { clients: [], leads: [], error: e.message }; }).finally(() => { META_LOAD = 0; render(); });
 }
 const CAMP_RANK = { "En cours":0, "À lancer":1, "Arrêtée":2 };
+/* Tableaux de suivi copiés depuis Google Sheets par Make (lecture seule, mis à jour automatiquement) */
+const msBase = n => norm(n).replace(/\s*\(.*\)\s*$/, "").replace(/\s+/g, " ").trim();
+const sheetsOf = name => (S.d.msheets || []).filter(x => msBase(x.client) === msBase(name) || norm(x.client) === norm(name));
+const TAB_RANK = t => /^contacts$/i.test(t) ? 0 : /factur/i.test(t) ? 1 : /r[ée]cap/i.test(t) ? 2 : /mode d/i.test(t) ? 9 : 5;
+const msDate = v => { const s = String(v || "").trim(); let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); if (m) return m[3] + "-" + m[2].padStart(2,"0") + "-" + m[1].padStart(2,"0"); m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[0] : ""; };
+const msStatusCol = h => { const i = h.findIndex(x => /^statut final$/i.test(x)); if (i >= 0) return i; const j = h.findIndex(x => /^statut$/i.test(x)); if (j >= 0) return j; return h.findIndex(x => /^suite$/i.test(x)); };
+const msTone = v => /^(qualifié|commande|signé|oui$)/i.test(v) ? "ok" : /^(non qualifié|exclu|pas de commande|sans suite|non$)/i.test(v) ? "l2" : v ? "l3" : "";
+function msContacts(name){
+  const sh = sheetsOf(name).find(x => /^contacts$/i.test(x.tab)); if (!sh || !sh.rows || !sh.rows.length) return null;
+  const h = sh.rows[0], rows = sh.rows.slice(1).filter(r => r.some(v => v !== "")), di = h.findIndex(x => /^reçu le$/i.test(x)), si = msStatusCol(h);
+  return { sh, h, rows, date: r => di >= 0 ? msDate(r[di]) : "", status: r => si >= 0 ? r[si] : "" };
+}
+function msStats(name, month){
+  const c = msContacts(name); if (!c) return null;
+  const lm = c.rows.filter(r => c.date(r).slice(0, 7) === month), real = r => !/^exclu/i.test(c.status(r));
+  return { month: lm.filter(real).length, qualified: lm.filter(r => /^(qualifié|commande)/i.test(c.status(r))).length, last: c.rows.map(c.date).filter(Boolean).sort().pop() || "" };
+}
+function msCell(v, tone){ if (tone && v) return el("span","pill" + (tone === "ok" ? " ok" : tone === "l2" ? " l2" : " l3"), v); const s = el("span","ms-c", v); if (v && v.length > 28) s.title = v; return s; }
+function msRowCard(h, r, title){
+  openModal(m => { const t = el("h3",null,title); t.id = "mtitle"; m.appendChild(t); const dl = el("dl","ms-dl");
+    h.forEach((k, i) => { if (!k || r[i] === "" || r[i] == null) return; dl.append(el("dt",null,k), el("dd",null,r[i])); }); m.appendChild(dl);
+    const a = el("div","actions"); a.appendChild(btn("Fermer","", () => closeModal())); m.appendChild(a); });
+}
+function msSection(root, name){
+  const all = sheetsOf(name).sort((a, b) => TAB_RANK(a.tab) - TAB_RANK(b.tab) || a.tab.localeCompare(b.tab, "fr"));
+  if (!all.length) return false;
+  const key = "msTab:" + msBase(name), cur = all.find(x => x.tab === S.ui[key]) || all[0];
+  const bar = el("div","ms-tabs"); all.forEach(x => { const b = el("button",null, x.tab); b.type = "button"; b.setAttribute("aria-selected", String(x === cur)); b.onclick = () => { S.ui[key] = x.tab; remember(); render(); }; bar.appendChild(b); });
+  root.appendChild(bar);
+  const rows = (cur.rows || []).filter(r => r.some(v => v !== ""));
+  if (/mode d/i.test(cur.tab)){ const box = el("div","ms-doc"); rows.forEach(r => { const t = r.filter(Boolean).join(" "); const p = el("p", /^[A-ZÀ-Ý][^.:]{0,40}$/.test(t) ? "ms-dh" : null, t); box.appendChild(p); }); root.appendChild(box); }
+  else if (/^contacts$|factur/i.test(cur.tab) && rows.length){
+    const h = rows[0]; let data = rows.slice(1);
+    const used = h.map((_, i) => data.some(r => r[i] !== "")), si = msStatusCol(h);
+    const tools = el("div","filters ag-f");
+    const q = el("input","search"); q.type = "search"; q.id = "ms-q"; q.placeholder = "Chercher un nom, un numéro, une commune"; q.value = S.ui.msQ || ""; q.oninput = () => { S.ui.msQ = q.value; renderSoon(); }; tools.appendChild(q);
+    if (si >= 0){ const vals = [...new Set(data.map(r => r[si]).filter(Boolean))].sort(); const g = el("div","fgroup"); const lb = el("label","flabel", h[si]); lb.htmlFor = "ms-st"; const sel = el("select","pick"); sel.id = "ms-st";
+      [["","Tous (" + data.length + ")"]].concat(vals.map(v => [v, v + " (" + data.filter(r => r[si] === v).length + ")"])).forEach(([v, l]) => { const o = el("option",null,l); o.value = v; sel.appendChild(o); });
+      sel.value = vals.includes(S.ui.msSt) ? S.ui.msSt : ""; sel.onchange = () => { S.ui.msSt = sel.value; remember(); render(); }; g.append(lb, sel); tools.appendChild(g); }
+    root.appendChild(tools);
+    const t = norm(S.ui.msQ); if (t) data = data.filter(r => norm(r.join(" ")).includes(t));
+    if (si >= 0 && S.ui.msSt && data.some(r => r[si] === S.ui.msSt)) data = data.filter(r => r[si] === S.ui.msSt);
+    const so = S.ui.msSort && S.ui.msSort.tab === cur.tab ? S.ui.msSort : null;
+    if (so && so.col < h.length){ const num = v => { const x = parseFloat(String(v).replace(/\s/g, "").replace(",", ".")); return isNaN(x) ? null : x; };
+      data = data.slice().sort((a, b) => { const A = a[so.col], B = b[so.col], da = msDate(A), db = msDate(B), na = num(A), nb = num(B);
+        const r = da && db ? da.localeCompare(db) || String(A).localeCompare(String(B)) : na != null && nb != null ? na - nb : String(A).localeCompare(String(B), "fr"); return so.dir * r; }); }
+    else data = data.slice().reverse();
+    const w = el("div","tw ms-tw"); const tb = el("table","t ms-t"); const trh = el("tr");
+    h.forEach((k, i) => { if (!used[i]) return; const th = el("th", i < 3 ? "ms-stick s" + i : null, k + (so && so.col === i ? (so.dir > 0 ? " ↑" : " ↓") : "")); th.onclick = () => { S.ui.msSort = { tab: cur.tab, col: i, dir: so && so.col === i ? -so.dir : 1 }; remember(); render(); }; trh.appendChild(th); });
+    const th0 = el("thead"); th0.appendChild(trh); tb.appendChild(th0); const body = el("tbody");
+    data.forEach(r => { const tr = el("tr","row"); tr.onclick = () => msRowCard(h, r, (r[2] || r[1] || "Ligne") + (r[0] ? ", n° " + r[0] : ""));
+      h.forEach((k, i) => { if (!used[i]) return; const c = el("td", i < 3 ? "ms-stick s" + i : null); c.appendChild(msCell(r[i], i === si ? msTone(r[i]) : "")); tr.appendChild(c); }); body.appendChild(tr); });
+    tb.appendChild(body); w.appendChild(tb);
+    root.appendChild(data.length ? w : el("p","empty", rows.length > 1 ? "Aucune ligne ne correspond." : "Aucune ligne pour l’instant."));
+  } else {
+    const w = el("div","tw ms-tw"); const tb = el("table","t ms-t ms-grid"); const body = el("tbody");
+    const hi = rows.findIndex(r => r.filter(Boolean).length >= 3 && r.every(v => String(v).length <= 40));
+    rows.forEach((r, ri) => { const tr = el("tr", ri === hi ? "ms-hr" : null); const n = Math.max(...rows.map(x => { let k = x.length; while (k && x[k - 1] === "") k--; return k; }));
+      for (let i = 0; i < n; i++){ const c = el(ri === hi ? "th" : "td"); c.appendChild(msCell(r[i] || "")); tr.appendChild(c); } body.appendChild(tr); });
+    tb.appendChild(body); w.appendChild(tb); root.appendChild(w);
+  }
+  const st = el("p","status","Copie du tableau Google Sheets, mise à jour automatiquement" + (cur.syncedAt ? " (dernière mise à jour le " + fmtFR(cur.syncedAt.slice(0, 10)) + " à " + cur.syncedAt.slice(11, 16).replace(":", " h ") + ", heure UTC)" : "") + ". Le client et l’agence continuent de remplir le Sheets. ");
+  if (cur.url){ const a = el("a",null,"Ouvrir le Sheets"); a.href = cur.url; a.target = "_blank"; a.rel = "noopener"; st.appendChild(a); }
+  root.appendChild(st);
+  return true;
+}
 function vMeta(root){
   loadMeta();
   const M = S.meta || { clients: [], leads: [] };
   const base = n => norm(n).replace(/\s*\(.*\)\s*$/, "").trim();
   const mc = n => M.clients.find(c => norm(c.name) === norm(n)) || M.clients.find(c => base(c.name) === base(n));
-  const names = [...new Set(S.d.campaigns.map(c => c.client).filter(Boolean).concat(M.clients.map(c => c.name)))]
+  const names = [...new Set(S.d.campaigns.map(c => c.client).filter(Boolean).concat(M.clients.map(c => c.name)).concat((S.d.msheets || []).filter(x => !S.d.campaigns.some(c => msBase(c.client) === msBase(x.client))).map(x => x.client)))]
     .sort((a, b) => { const ra = Math.min(...S.d.campaigns.filter(c => c.client === a).map(c => CAMP_RANK[c.status] ?? 3), 3), rb = Math.min(...S.d.campaigns.filter(c => c.client === b).map(c => CAMP_RANK[c.status] ?? 3), 3); return ra - rb || a.localeCompare(b, "fr"); });
   const cur = names.includes(S.ui.mtTab) ? S.ui.mtTab : "";
   const month = today().slice(0, 7);
@@ -657,14 +725,14 @@ function vMeta(root){
     const {w, tb} = table(["Client","Campagne","Budget","~Contacts ce mois","~Qualifiés ce mois","~Dernier contact"]);
     names.forEach(n => {
       const cs = S.d.campaigns.filter(c => c.client === n).sort((a, b) => (CAMP_RANK[a.status] ?? 3) - (CAMP_RANK[b.status] ?? 3));
-      const top = cs[0], ls = leadsOf(n), lm = ls.filter(l => (l.date || "").slice(0, 7) === month), c = mc(n);
+      const top = cs[0], ls = leadsOf(n), lm = ls.filter(l => (l.date || "").slice(0, 7) === month), c = mc(n), ms = msStats(n, month);
       const tr = el("tr","row"); tr.onclick = () => { S.ui.mtTab = n; remember(); render(); };
       td(tr, clientTag(n),"nw");
       td(tr, top ? el("span","pill" + (top.status === "En cours" ? " ok" : top.status === "Arrêtée" ? " l2" : ""), top.status + (cs.length > 1 ? " (" + cs.length + ")" : "")) : el("span","muted","Aucune"),"nw");
       td(tr, top ? top.budget || "—" : "—","nw");
-      td(tr, c ? lm.length + (c.goal ? " / " + c.goal : "") : "—","nw hm");
-      td(tr, c ? String(lm.filter(l => l.qualified === 1).length) : "—","nw hm");
-      td(tr, ls[0] ? fmtD(ls[0].date) : "—","nw hm");
+      td(tr, ms ? String(ms.month) : c ? lm.length + (c.goal ? " / " + c.goal : "") : "—","nw hm");
+      td(tr, ms ? String(ms.qualified) : c ? String(lm.filter(l => l.qualified === 1).length) : "—","nw hm");
+      td(tr, ms && ms.last ? fmtD(ms.last) : ls[0] ? fmtD(ls[0].date) : "—","nw hm");
       tb.appendChild(tr); });
     root.appendChild(names.length ? w : el("p","empty","Aucune campagne pour l’instant."));
     if (M.error) root.appendChild(el("p","status","Suivi des contacts indisponible : " + M.error));
@@ -684,8 +752,9 @@ function vMeta(root){
   const live = cs.filter(x => x.status === "En cours");
   kpi(String(live.length), live.length > 1 ? "campagnes en cours" : "campagne en cours");
   kpi(live[0] ? live[0].budget || "—" : "—", "budget en cours");
-  kpi(c ? lm.length + (c.goal ? " / " + c.goal : "") : "—", "contacts ce mois");
-  kpi(c ? String(lm.filter(l => l.qualified === 1).length) : "—", "qualifiés ce mois");
+  const ms = msStats(cur, month);
+  kpi(ms ? String(ms.month) : c ? lm.length + (c.goal ? " / " + c.goal : "") : "—", "contacts ce mois");
+  kpi(ms ? String(ms.qualified) : c ? String(lm.filter(l => l.qualified === 1).length) : "—", ms ? "qualifiés ou commandes ce mois" : "qualifiés ce mois");
   root.appendChild(k);
 
   root.appendChild(el("h3","mt-h","Campagnes"));
@@ -699,6 +768,7 @@ function vMeta(root){
   } else root.appendChild(el("p","empty","Aucune campagne pour ce client."));
 
   root.appendChild(el("h3","mt-h","Suivi des contacts"));
+  if (msSection(root, cur)) return;
   if (!c){ root.appendChild(el("p","empty","Ce client n’a pas le module Meta dans l’espace client : le suivi passe par le lien de la campagne.")); return; }
   root.appendChild(el("p","status", c.qualifiedDef ? "Contact qualifié : " + c.qualifiedDef : "Pas encore de définition écrite du contact qualifié : à fixer avec le client avant d’annoncer un chiffre."));
   if (!ls.length){ root.appendChild(el("p","empty","Aucun contact enregistré.")); return; }
@@ -1101,7 +1171,12 @@ function forwardMsg(m){
     const draw = () => { ls.textContent = ""; const t = q.value.trim().toLowerCase();
       keys.filter(k => !t || label(k).toLowerCase().includes(t)).forEach(k => {
         const b = el("button","fw-row"); b.type = "button"; const nm = el("span",null,label(k)); b.append(chAvatar(k, 36), nm);
-        b.onclick = async () => { if (!b.classList.contains("armed")){ ls.querySelectorAll(".fw-row.armed").forEach(x => { x.classList.remove("armed"); x.lastChild.textContent = x.dataset.l; }); b.dataset.l = label(k); b.classList.add("armed"); nm.textContent = "Confirmer le transfert à " + label(k); return; } closeModal(); try { await save("messages", null, Object.assign({ ch: k, who: me, text: m.text || "", at: new Date().toISOString(), fwd: m.who || "1" }, m.files ? { files: m.files } : {}, m.audio ? { audio: m.audio, dur: m.dur } : {}, m.wave ? { wave: m.wave } : {})); toast && toast("Message transféré à " + label(k)); } catch(e){} };
+        b.onclick = () => openModal(cm => {
+          const t = el("h3",null,"Transférer ce message ?"); t.id = "mtitle"; cm.appendChild(t);
+          cm.appendChild(el("p","muted","Il sera envoyé à " + label(k) + ", avec la mention « Transféré »."));
+          const pv = el("div","fw-pv"); pv.textContent = m.text || (m.audio ? "Message vocal" : (m.files || []).map(f => f.name).join(", ") || "Pièce jointe"); cm.appendChild(pv);
+          const a = el("div","actions"); a.append(btn("Annuler","", () => forwardMsg(m)), btn("Transférer","lemon", async () => { closeModal(); try { await save("messages", null, Object.assign({ ch: k, who: me, text: m.text || "", at: new Date().toISOString(), fwd: m.who || "1" }, m.files ? { files: m.files } : {}, m.audio ? { audio: m.audio, dur: m.dur } : {}, m.wave ? { wave: m.wave } : {})); toast("Message transféré à " + label(k)); } catch(e){} }));
+          cm.appendChild(a); });
         ls.appendChild(b); }); };
     q.oninput = draw; draw();
     const act = el("div","actions"); act.appendChild(btn("Annuler","", () => closeModal())); md.appendChild(act);
