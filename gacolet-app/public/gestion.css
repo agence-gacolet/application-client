@@ -516,3 +516,5 @@ details.box[open] summary::after{content:"\2212"}
 .msg-a button.rm{color:#FF5A4E;text-decoration:none;font-weight:600}
 .msg-a button.rm:hover{color:#FF7A70}
 .msg-a button.rm.armed{font-weight:700;text-decoration:underline}
+/* Agenda : en-tête fixe quel que soit l’affichage */
+@media (min-width:901px){.ag-head{flex-wrap:nowrap}.ag-head h1{white-space:nowrap;font-size:clamp(40px,4.6vw,80px)}.ag-head .tools{flex-wrap:nowrap;flex:none}}
