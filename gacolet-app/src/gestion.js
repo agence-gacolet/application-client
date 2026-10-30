@@ -134,7 +134,7 @@ module.exports = function (app, { db, wrap, root }) {
   }));
   const infoOf = u => { try { return JSON.parse(u.info || "{}"); } catch (e) { return {}; } };
   app.get("/api/g-me", auth, wrap(async (req, res) => {
-    const team = (await db.all("SELECT name, role, info FROM gusers WHERE disabled = 0 ORDER BY created_at")).map(r => ({ name: r.name, role: r.role, avatar: infoOf(r).avatar || "" }));
+    const team = (await db.all("SELECT name, role, info FROM gusers WHERE disabled = 0 ORDER BY created_at")).map(r => { const i = infoOf(r); return { name: r.name, role: r.role, avatar: i.avatar || "", email: i.email || "", tel: i.tel || "" }; });
     const row = req.user.secours ? null : await db.one("SELECT * FROM gusers WHERE id = ?", [req.user.id]);
     res.json({ user: Object.assign({}, req.user, row ? { info: infoOf(row) } : {}), team });
   }));
