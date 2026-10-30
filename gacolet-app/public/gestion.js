@@ -1151,7 +1151,6 @@ function openMore(){
     if (S.secours || !S.user){ const w = el("div","whobox"); w.appendChild(el("span","flabel","Je suis"));
     w.appendChild(segm(PEOPLE.map(p => [p,p]), S.me, p => { setMe(p); closeModal(); })); md.appendChild(w); }
     const o = el("div","actions"); o.style.justifyContent = "space-between";
-    const ag = el("a","btn sm","Espace clients"); ag.href = "/agence"; o.appendChild(ag);
     o.appendChild(btn("Se déconnecter","sm", () => window.GC && GC.logout())); md.appendChild(o);
   });
 }
@@ -1186,7 +1185,9 @@ function applyMe(r){
   if (S.secours){ meSel.textContent = ""; PEOPLE.forEach(p => { const o = el("option",null,p); o.value = p; meSel.appendChild(o); }); if (S.me) meSel.value = S.me; }
   const ac = $("#acct");
   if (ac && !S.secours){ ac.hidden = false; const ov = ac.querySelector(".av"); if (ov) ov.remove(); ac.prepend(avatarEl(u.name, 34, { src: (u.info || {}).avatar || "" })); $("#acct-name").textContent = u.name; $("#acct-role").textContent = (ROLE_LABEL[u.role] || "") + (S.preview ? ", aperçu" : ""); }
-  const fa = $("#foot-agence"); if (fa) fa.hidden = S.role !== "owner";
+  const toAcct = () => { S.ui.pmTab = "compte"; remember(); go("parametres"); };
+  if (ac){ ac.onclick = toAcct; ac.title = "Mon compte"; ac.setAttribute("role","button"); ac.tabIndex = 0; ac.onkeydown = e => { if (e.key === "Enter") toAcct(); }; }
+  const mn = $("#me-name"); if (mn && !S.secours) mn.onclick = toAcct;
   fromHash(); render();
 }
 
