@@ -21,7 +21,9 @@ const VIEWS = [
   ["accueil","Accueil"],["agenda","Agenda"],["taches","Tâches"],["messagerie","Messagerie"],["commercial","Commercial"],["clients","Calendrier clients"],
   ["montage","Prêt à monter"],["publications","Publications"],["campagnes","Campagnes"],["formation","Formation"],["parametres","Paramètres"],["fiches","Tableau clients"]
 ];
-const NAV_GROUPS = [["",["accueil"]],["Au quotidien",["agenda","taches","messagerie"]],["Clients",["fiches","commercial","clients"]],["Production",["montage","publications","campagnes"]],["Ressources",["formation"]],["Compte",["parametres"]]];
+const NAV_GROUPS = [["",["accueil"]],["Au quotidien",["agenda","taches","messagerie"]],["Gestion",["fiches","commercial","publications"]],["Meta",["campagnes"]],["Ressources",["formation"]],["Compte",["parametres"]]];
+/* Onglets fusionnés : le calendrier clients vit dans l’agenda, le montage dans les tâches. */
+const MERGED = { clients: ["agenda","agHub"], montage: ["taches","tHub"] };
 /* Rôles : ce que chaque siège voit. Le serveur applique les mêmes limites aux données. */
 const ROLE_LABEL = {owner:"Propriétaire", member:"Membre", commercial:"Commercial"};
 const ROLE_VIEWS = {
@@ -622,9 +624,100 @@ function vCampagnes(root){
   root.appendChild(S.d.campaigns.some(c => !cur || c.status === cur) ? w : el("p","empty", cur ? "Aucune campagne dans cette catégorie." : "Aucune campagne pour l’instant."));
 }
 
+/* ---------- Meta : une page par client ---------- */
+let META_LOAD = 0;
+function loadMeta(force){
+  if ((S.meta && !force) || META_LOAD) return; META_LOAD = 1;
+  GC.api("GET","/api/g-meta").then(r => { S.meta = r; }).catch(e => { S.meta = { clients: [], leads: [], error: e.message }; }).finally(() => { META_LOAD = 0; render(); });
+}
+const CAMP_RANK = { "En cours":0, "À lancer":1, "Arrêtée":2 };
+function vMeta(root){
+  loadMeta();
+  const M = S.meta || { clients: [], leads: [] };
+  const base = n => norm(n).replace(/\s*\(.*\)\s*$/, "").trim();
+  const mc = n => M.clients.find(c => norm(c.name) === norm(n)) || M.clients.find(c => base(c.name) === base(n));
+  const names = [...new Set(S.d.campaigns.map(c => c.client).filter(Boolean).concat(M.clients.map(c => c.name)))]
+    .sort((a, b) => { const ra = Math.min(...S.d.campaigns.filter(c => c.client === a).map(c => CAMP_RANK[c.status] ?? 3), 3), rb = Math.min(...S.d.campaigns.filter(c => c.client === b).map(c => CAMP_RANK[c.status] ?? 3), 3); return ra - rb || a.localeCompare(b, "fr"); });
+  const cur = names.includes(S.ui.mtTab) ? S.ui.mtTab : "";
+  const month = today().slice(0, 7);
+  const leadsOf = n => { const c = mc(n); return c ? M.leads.filter(l => l.client_id === c.id) : []; };
+
+  /* Onglets : vue d’ensemble puis un onglet par client */
+  const tabs = el("div","mt-tabs"); tabs.setAttribute("role","tablist");
+  [["","Vue d’ensemble"]].concat(names.map(n => [n, n])).forEach(([v, l]) => {
+    const b = el("button",null); b.type = "button"; b.setAttribute("role","tab"); b.setAttribute("aria-selected", String(v === cur));
+    if (v){ const d = el("span","dot"); d.style.setProperty("--c", colorOf(v)); b.appendChild(d); if (S.d.campaigns.some(c => c.client === v && c.status === "En cours")) b.classList.add("live"); }
+    b.appendChild(document.createTextNode(l)); b.onclick = () => { S.ui.mtTab = v; remember(); render(); }; tabs.appendChild(b); });
+
+  requestAnimationFrame(() => { const s = tabs.querySelector("[aria-selected=true]"); if (s) tabs.scrollLeft = s.offsetLeft - tabs.offsetLeft - tabs.clientWidth / 2 + s.offsetWidth / 2; });
+  if (!cur){
+    root.appendChild(head("Meta", "Publicité Meta, un onglet par client. Le budget est payé par le client directement à Meta.", [addBtn("Nouvelle campagne", () => editCampaign({}))]));
+    root.appendChild(tabs);
+    const {w, tb} = table(["Client","Campagne","Budget","~Contacts ce mois","~Qualifiés ce mois","~Dernier contact"]);
+    names.forEach(n => {
+      const cs = S.d.campaigns.filter(c => c.client === n).sort((a, b) => (CAMP_RANK[a.status] ?? 3) - (CAMP_RANK[b.status] ?? 3));
+      const top = cs[0], ls = leadsOf(n), lm = ls.filter(l => (l.date || "").slice(0, 7) === month), c = mc(n);
+      const tr = el("tr","row"); tr.onclick = () => { S.ui.mtTab = n; remember(); render(); };
+      td(tr, clientTag(n),"nw");
+      td(tr, top ? el("span","pill" + (top.status === "En cours" ? " ok" : top.status === "Arrêtée" ? " l2" : ""), top.status + (cs.length > 1 ? " (" + cs.length + ")" : "")) : el("span","muted","Aucune"),"nw");
+      td(tr, top ? top.budget || "—" : "—","nw");
+      td(tr, c ? lm.length + (c.goal ? " / " + c.goal : "") : "—","nw hm");
+      td(tr, c ? String(lm.filter(l => l.qualified === 1).length) : "—","nw hm");
+      td(tr, ls[0] ? fmtD(ls[0].date) : "—","nw hm");
+      tb.appendChild(tr); });
+    root.appendChild(names.length ? w : el("p","empty","Aucune campagne pour l’instant."));
+    if (M.error) root.appendChild(el("p","status","Suivi des contacts indisponible : " + M.error));
+    else root.appendChild(el("p","status","Contacts : ceux de l’espace client (module Meta). Ouvre un client pour le détail."));
+    return;
+  }
+
+  const c = mc(cur), cs = S.d.campaigns.filter(x => x.client === cur).sort((a, b) => (CAMP_RANK[a.status] ?? 3) - (CAMP_RANK[b.status] ?? 3));
+  const ls = leadsOf(cur), lm = ls.filter(l => (l.date || "").slice(0, 7) === month);
+  const tools = [addBtn("Nouvelle campagne", () => editCampaign({ client: cur }))];
+  if (c) tools.push(btn("Ajouter un contact","", () => addLead(c)));
+  root.appendChild(head(cur, "Publicité Meta, budget payé par le client directement à Meta.", tools));
+  root.appendChild(tabs);
+
+  const k = el("div","mt-kpis");
+  const kpi = (v, l) => { const b = el("div","mt-kpi"); b.append(el("b",null,v), el("span",null,l)); k.appendChild(b); };
+  const live = cs.filter(x => x.status === "En cours");
+  kpi(String(live.length), live.length > 1 ? "campagnes en cours" : "campagne en cours");
+  kpi(live[0] ? live[0].budget || "—" : "—", "budget en cours");
+  kpi(c ? lm.length + (c.goal ? " / " + c.goal : "") : "—", "contacts ce mois");
+  kpi(c ? String(lm.filter(l => l.qualified === 1).length) : "—", "qualifiés ce mois");
+  root.appendChild(k);
+
+  root.appendChild(el("h3","mt-h","Campagnes"));
+  if (cs.length){
+    const {w, tb} = table(["Statut","Budget","Lancée le","À savoir","Suivi"]);
+    cs.forEach(x => { const tr = el("tr","row"); tr.onclick = () => editCampaign(x);
+      const sel = el("select","inl"); CAMP_STATUS.forEach(v => { const o = el("option",null,v); o.value = v; sel.appendChild(o); }); sel.value = x.status; sel.disabled = !writable(); sel.onclick = e => e.stopPropagation(); sel.onchange = () => patch("campaigns", x.id, {status:sel.value}).then(() => toast("Campagne passée en « "+sel.value+" »."));
+      td(tr, sel); td(tr, x.budget,"nw"); td(tr, fmtFR(x.launchedAt),"nw"); td(tr, el("div","note",x.note));
+      const l = linkNode(x.link, "Tableau"); if (l instanceof Node) l.onclick = e => e.stopPropagation(); td(tr, l); tb.appendChild(tr); });
+    root.appendChild(w);
+  } else root.appendChild(el("p","empty","Aucune campagne pour ce client."));
+
+  root.appendChild(el("h3","mt-h","Suivi des contacts"));
+  if (!c){ root.appendChild(el("p","empty","Ce client n’a pas le module Meta dans l’espace client : le suivi passe par le lien de la campagne.")); return; }
+  root.appendChild(el("p","status", c.qualifiedDef ? "Contact qualifié : " + c.qualifiedDef : "Pas encore de définition écrite du contact qualifié : à fixer avec le client avant d’annoncer un chiffre."));
+  if (!ls.length){ root.appendChild(el("p","empty","Aucun contact enregistré.")); return; }
+  const {w, tb} = table(["Date","Contact","~Détail","Qualifié"]);
+  let mo2 = "";
+  ls.forEach(l => { const m = (l.date || "").slice(0, 7); if (m !== mo2){ mo2 = m; const d = parseISO(l.date); band(tb, (MONTHS[d.getMonth()] + " " + d.getFullYear()).toUpperCase(), ls.filter(x => (x.date || "").slice(0, 7) === m).length, 4); }
+    const tr = el("tr","row"); td(tr, fmtD(l.date),"nw"); td(tr, l.title,"ttl w"); td(tr, el("div","note",l.detail),"hm");
+    const s2 = segm([[1,"Oui"],[0,"Non"],[null,"À voir"]], l.qualified === 1 ? 1 : l.qualified === 0 ? 0 : null, async v => { if (!writable()) return; try { await GC.api("PATCH","/api/g-meta/lead/" + l.id, { qualified: v }); l.qualified = v; render(); } catch(e){ toast(e.message); } });
+    s2.style.transform = "scale(.88)"; s2.style.transformOrigin = "left center"; td(tr, s2,"nw"); tb.appendChild(tr); });
+  root.appendChild(w);
+}
+function addLead(c){
+  openForm({ key:"ld", title: "Nouveau contact, " + c.name, values: { date: today() },
+    fields:[{k:"date",label:"Date",type:"date",half:true,req:"Indique la date."},{k:"title",label:"Contact",half:true,ph:"Nom, ou objet de la demande",req:"Indique le contact."},{k:"detail",label:"Détail",type:"textarea"}],
+    onSave: async out => { try { await GC.api("POST","/api/g-meta/lead", Object.assign({ clientId: c.id }, out)); } catch(e){ toast(e.message); throw e; } loadMeta(true); } });
+}
+
 /* ---------- Prêt à monter ---------- */
 function vMontage(root){
-  root.appendChild(head("Prêt à monter", "Les tournages dont les rushs attendent le montage.", [addBtn("Retour de tournage", () => editRush({client:S.ui.ruClient||""}))]));
+  root.appendChild(head("Montage", "Les tournages dont les rushs attendent le montage.", [addBtn("Retour de tournage", () => editRush({client:S.ui.ruClient||""}))]));
   const f = el("div","filters"); const g = el("div","fgroup"); const lb = el("label","flabel","Client"); lb.htmlFor = "ru-client"; g.appendChild(lb);
   const sel = el("select","pick"); sel.id = "ru-client";
   const used = new Set(S.d.rushes.map(r => r.client).filter(Boolean)); const names = clientNames(); used.forEach(n => { if (!names.includes(n)) names.push(n); });
@@ -1228,9 +1321,24 @@ function vFormation(root){
 }
 
 /* ---------- Navigation ---------- */
-const RENDER = {fiches:vFiches, parametres:vParametres, accueil:vAccueil, agenda:vAgenda, taches:vTaches, commercial:vCommercial, campagnes:vCampagnes, montage:vMontage, publications:vPublications, clients:vClients, messagerie:vMessagerie, formation:vFormation};
-function go(v){ if (location.hash !== "#"+v) location.hash = v; else { S.view = v; render(); } }
-function fromHash(){ let h = (location.hash||"").replace("#",""); if (h === "editorial"){ S.ui.agClient = AGENCE; if (!S.ui.agLayers.includes("posts")) S.ui.agLayers = S.ui.agLayers.concat("posts"); h = "agenda"; } S.view = RENDER[h] && canSee(h) ? h : "accueil"; }
+function hubTabs(root, opts, cur, key){
+  const bar = el("div","hub"); bar.setAttribute("role","tablist");
+  opts.forEach(([v, l]) => { const b = el("button",null,l); b.type = "button"; b.setAttribute("role","tab"); b.setAttribute("aria-selected", String(v === cur)); b.onclick = () => { S.ui[key] = v; remember(); render(); }; bar.appendChild(b); });
+  root.insertBefore(bar, root.firstChild);
+}
+function vAgendaHub(root){
+  const opts = [["agenda","Agenda"]].concat(canSee("clients") ? [["clients","Calendrier clients"]] : []);
+  const cur = opts.some(o => o[0] === S.ui.agHub) ? S.ui.agHub : "agenda";
+  (cur === "clients" ? vClients : vAgenda)(root); if (opts.length > 1) hubTabs(root, opts, cur, "agHub");
+}
+function vTachesHub(root){
+  const opts = [["taches","Tâches"]].concat(canSee("montage") ? [["montage","Montage"]] : []);
+  const cur = opts.some(o => o[0] === S.ui.tHub) ? S.ui.tHub : "taches";
+  (cur === "montage" ? vMontage : vTaches)(root); if (opts.length > 1) hubTabs(root, opts, cur, "tHub");
+}
+const RENDER = {fiches:vFiches, parametres:vParametres, accueil:vAccueil, agenda:vAgendaHub, taches:vTachesHub, commercial:vCommercial, campagnes:vMeta, montage:vMontage, publications:vPublications, clients:vClients, messagerie:vMessagerie, formation:vFormation};
+function go(v){ if (MERGED[v]){ S.ui[MERGED[v][1]] = v; remember(); v = MERGED[v][0]; } if (location.hash !== "#"+v) location.hash = v; else { S.view = v; render(); } }
+function fromHash(){ let h = (location.hash||"").replace("#",""); if (h === "editorial"){ S.ui.agClient = AGENCE; if (!S.ui.agLayers.includes("posts")) S.ui.agLayers = S.ui.agLayers.concat("posts"); h = "agenda"; } if (MERGED[h] && canSee(h)){ S.ui[MERGED[h][1]] = h; h = MERGED[h][0]; } S.view = RENDER[h] && canSee(h) ? h : "accueil"; }
 window.addEventListener("hashchange", () => { fromHash(); render(); window.scrollTo(0,0); });
 const ICONS = {
   fiches:'<rect x="4" y="4.5" width="16" height="15" rx="1.5"/><path d="M4 9.5h16M9.5 9.5v10"/>',
@@ -1269,7 +1377,7 @@ function renderTabs(){
 }
 function openMore(){
   openModal(md => { md.classList.add("sheet"); const t = el("h3",null,"Menu"); t.id = "mtitle"; md.appendChild(t);
-    const l = el("nav","morelist"); VIEWS.filter(([k]) => canSee(k) && !(S.role && S.role !== "owner" ? ["accueil","agenda","taches","messagerie"] : MOBILE_MAIN).includes(k)).forEach(([k,lab]) => { const a = el("a"); a.href = "#"+k; a.appendChild(ico(k)); a.appendChild(el("span",null,lab)); if (k === S.view) a.setAttribute("aria-current","page"); a.onclick = () => closeModal(); l.appendChild(a); }); md.appendChild(l);
+    const l = el("nav","morelist"); NAV_GROUPS.flatMap(g => g[1]).map(k => [k, SHORT[k]]).filter(([k]) => canSee(k) && !(S.role && S.role !== "owner" ? ["accueil","agenda","taches","messagerie"] : MOBILE_MAIN).includes(k)).forEach(([k,lab]) => { const a = el("a"); a.href = "#"+k; a.appendChild(ico(k)); a.appendChild(el("span",null,lab)); if (k === S.view) a.setAttribute("aria-current","page"); a.onclick = () => closeModal(); l.appendChild(a); }); md.appendChild(l);
     if (S.secours || !S.user){ const w = el("div","whobox"); w.appendChild(el("span","flabel","Je suis"));
     w.appendChild(segm(PEOPLE.map(p => [p,p]), S.me, p => { setMe(p); closeModal(); })); md.appendChild(w); }
     const o = el("div","actions"); o.style.justifyContent = "space-between";
@@ -1343,11 +1451,11 @@ function pmField(label, type, value, ac){ const l = el("label","pm-f"); l.append
 async function reloadUsers(){ try { const r = await GC.api("GET","/api/g-users"); S.users = r.users; } catch(e){ toast(e.message); if (!S.users) S.users = []; } render(); }
 
 function vParametres(root){
-  const tabs = [["compte","Mon compte"],["notif","Notifications"]].concat(S.role === "owner" ? [["equipe","Équipe et accès"]] : []).concat([["cgu","Conditions"]]);
+  const tabs = [["compte","Mon compte"],["notif","Notifications"]].concat(S.role === "owner" ? [["equipe","Équipe et accès"],["codes","Codes clients"]] : []).concat([["cgu","Conditions"]]);
   const tab = tabs.some(t => t[0] === S.ui.pmTab) ? S.ui.pmTab : (S.secours ? "equipe" : "compte");
   root.appendChild(head("Paramètres", "Ton compte, tes notifications, l’équipe et les règles de l’application.", [segm(tabs, tab, v => { S.ui.pmTab = v; remember(); render(); })]));
   const w = el("div","pm"); root.appendChild(w);
-  ({compte:pmCompte, notif:pmNotif, equipe:pmEquipe, cgu:pmCgu})[tab](w);
+  ({compte:pmCompte, notif:pmNotif, equipe:pmEquipe, codes:pmCodes, cgu:pmCgu})[tab](w);
 }
 
 function pmCompte(w){
@@ -1413,6 +1521,59 @@ function pmNotif(w){
   w.appendChild(c);
 }
 
+/* Codes clients : un code par client, partagé par toutes les personnes de ce client */
+const MOD_LABEL = { "com":"Réseaux sociaux", "meta":"Publicité Meta", "com,meta":"Réseaux et Meta" };
+async function reloadCodes(){ try { const r = await GC.api("GET","/api/g-codes"); S.codes = r.clients; } catch(e){ toast(e.message); if (!S.codes) S.codes = []; } render(); }
+function copyCode(code){ (navigator.clipboard ? navigator.clipboard.writeText(code) : Promise.reject()).then(() => toast("Code " + code + " copié."), () => toast(code)); }
+function pmCodes(w){
+  if (S.role !== "owner"){ w.appendChild(pmCard("Codes clients", "Réservé aux propriétaires.")); return; }
+  if (!S.codes){ w.appendChild(el("p","empty","Chargement des clients…")); reloadCodes(); return; }
+  const c = pmCard("Codes clients", "Un code par client. Toute personne qui s’inscrit avec ce code est rattachée à ce client et ne voit que ses informations : pour un associé, donne-lui le même code. Renouveler un code bloque les nouvelles inscriptions avec l’ancien, sans déconnecter les personnes déjà inscrites.");
+  const top = el("div","pm-actions"); const q = el("input","search"); q.type = "search"; q.id = "cd-q"; q.placeholder = "Chercher un client"; q.value = S.ui.cdQ || ""; q.oninput = () => { S.ui.cdQ = q.value; renderSoon(); };
+  top.append(q, btn("Nouveau client","lemon", () => editCode({}))); c.appendChild(top);
+  const t = norm(S.ui.cdQ), rows = S.codes.filter(x => !t || norm(x.name + " " + x.code).includes(t)).sort((a, b) => (b.active - a.active) || a.name.localeCompare(b.name, "fr"));
+  const {w: tw, tb} = table(["Client","Code","~Services","Personnes",""]);
+  rows.forEach(x => { const tr = el("tr","row" + (x.active ? "" : " done")); tr.onclick = () => editCode(x);
+    td(tr, x.name,"ttl"); td(tr, el("code","cd-code", x.code),"nw"); td(tr, MOD_LABEL[x.modules] || x.modules,"nw hm");
+    td(tr, x.people.length ? x.people.length + (x.people.length > 1 ? " personnes" : " personne") : el("span","muted","Personne"),"nw");
+    const a = el("div","cd-act");
+    const cp = btn("Copier","sm", e => { e.stopPropagation(); copyCode(x.code); });
+    const rn = btn("Renouveler","sm", async e => { e.stopPropagation(); if (!rn.classList.contains("armed")){ rn.classList.add("armed"); rn.textContent = "Confirmer"; setTimeout(() => { rn.classList.remove("armed"); rn.textContent = "Renouveler"; }, 3000); return; }
+      try { const r = await GC.api("PATCH","/api/g-codes/" + x.id, { renew: true }); toast("Nouveau code pour " + x.name + " : " + r.code); } catch(err){ toast(err.message); } reloadCodes(); });
+    a.append(cp, rn); if (!x.active) a.appendChild(el("span","pill l2","Désactivé")); td(tr, a,"nw"); tb.appendChild(tr); });
+  c.appendChild(rows.length ? tw : el("p","empty", t ? "Aucun client ne correspond." : "Aucun client pour l’instant."));
+  w.appendChild(c);
+}
+function editCode(x){
+  const isNew = !x.id;
+  openModal(m => {
+    const h = el("h3",null, isNew ? "Nouveau client" : x.name); h.id = "mtitle"; m.appendChild(h);
+    if (!isNew){ const r = el("div","cd-big"); r.append(el("code","cd-code", x.code), btn("Copier","sm", () => copyCode(x.code))); m.appendChild(r); }
+    const f = el("form","form cd-form"); f.noValidate = true;
+    const fld = (label, inp, half) => { const l = el("label", half ? null : "full"); l.appendChild(el("span",null,label)); l.appendChild(inp); f.appendChild(l); return inp; };
+    const iN = fld("Nom du client", Object.assign(el("input"), { value: x.name || "", required: true }));
+    const iM = el("select"); Object.entries(MOD_LABEL).forEach(([v, l]) => { const o = el("option",null,l); o.value = v; iM.appendChild(o); }); iM.value = x.modules || "com"; fld("Services de l’espace client", iM, true);
+    const iF = fld("Formule", Object.assign(el("input"), { value: x.formula || "", placeholder: "Ex. Pack réseaux" }), true);
+    const iG = fld("Objectif de contacts par mois (Meta)", Object.assign(el("input"), { type: "number", min: 0, value: x.contacts_goal || "" }), true);
+    const iA = el("select"); [["1","Actif"],["0","Désactivé"]].forEach(([v,l]) => { const o = el("option",null,l); o.value = v; iA.appendChild(o); }); iA.value = x.active === 0 ? "0" : "1"; if (!isNew) fld("Accès", iA, true);
+    const iQ = fld("Définition écrite du contact qualifié (Meta)", Object.assign(el("textarea"), { rows: 3, value: x.qualified_definition || "" }));
+    m.appendChild(f);
+    if (!isNew){
+      m.appendChild(el("h4","cd-h", "Personnes inscrites"));
+      if (!x.people.length) m.appendChild(el("p","muted","Personne ne s’est encore inscrit avec ce code."));
+      x.people.forEach(u => { const r = el("div","cd-p"); r.append(el("span",null, (u.prenom + " " + u.nom).trim() + (u.email ? ", " + u.email : "")));
+        const b = btn("Retirer l’accès","sm rm", async () => { if (!b.classList.contains("armed")){ b.classList.add("armed"); b.textContent = "Confirmer"; setTimeout(() => { b.classList.remove("armed"); b.textContent = "Retirer l’accès"; }, 3000); return; }
+          try { await GC.api("DELETE","/api/g-codes/user/" + u.id); x.people = x.people.filter(y => y !== u); r.remove(); toast("Accès retiré."); reloadCodes(); } catch(e){ toast(e.message); } });
+        r.appendChild(b); m.appendChild(r); });
+    }
+    const act = el("div","actions");
+    act.append(btn("Annuler","", () => closeModal()), btn(isNew ? "Créer et générer le code" : "Enregistrer","lemon", async () => {
+      if (!iN.value.trim()){ iN.focus(); toast("Indique le nom du client."); return; }
+      const body = { name: iN.value.trim(), modules: iM.value.split(","), formula: iF.value.trim(), goal: Number(iG.value) || 0, qualifiedDef: iQ.value.trim() };
+      try { if (isNew){ const r = await GC.api("POST","/api/g-codes", body); toast("Code créé : " + r.code); copyCode(r.code); } else { body.active = iA.value === "1"; await GC.api("PATCH","/api/g-codes/" + x.id, body); toast("Client enregistré."); } closeModal(); reloadCodes(); S.meta = null; } catch(e){ toast(e.message); } }));
+    m.appendChild(act);
+  });
+}
 function pmEquipe(w){
   if (S.role !== "owner"){ w.appendChild(pmCard("Équipe et accès", "Réservé aux propriétaires.")); return; }
   if (!S.users){ w.appendChild(el("p","empty","Chargement des comptes…")); reloadUsers(); return; }
