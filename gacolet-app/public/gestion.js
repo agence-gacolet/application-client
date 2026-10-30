@@ -748,9 +748,22 @@ function vAgenda(root){
     opts.forEach(([v,l]) => { const o = el("option",null,l); o.value = v; s.appendChild(o); }); s.value = val; s.onchange = () => { on(s.value); remember(); render(); }; g.append(lb, s); f.appendChild(g); };
   dd("ag-client","Client", [["","Tous les clients"]].concat(clientNames().map(n => [n,n])), S.ui.agClient, x => { S.ui.agClient = x; if (x === AGENCE && !S.ui.agLayers.includes("posts")) S.ui.agLayers = S.ui.agLayers.concat("posts"); });
   dd("ag-who","Qui", [["","Tout le monde"]].concat(PEOPLE.map(p => [p,p])), S.ui.agWho, x => { S.ui.agWho = x; });
+  /* Un seul menu « Afficher » : tout, un type d’événement, ou une autre catégorie */
   const allL = LAYERS.map(x => x[0]);
-  dd("ag-layer","Afficher", [["","Tout"]].concat(LAYERS), S.ui.agLayers.length === 1 ? S.ui.agLayers[0] : "", x => { S.ui.agLayers = x ? [x] : allL.slice(); if (x !== "events") S.ui.agTypes = EV_TYPES.slice(); });
-  if (S.ui.agLayers.includes("events")) dd("ag-type","Type", [["","Tous les types"]].concat(EV_TYPES.map(t => [t,t])), S.ui.agTypes.length === 1 ? S.ui.agTypes[0] : "", x => { S.ui.agTypes = x ? [x] : EV_TYPES.slice(); });
+  const curShow = S.ui.agLayers.length === 1 && S.ui.agLayers[0] === "events" && S.ui.agTypes.length === 1 ? "ev:" + S.ui.agTypes[0] : S.ui.agLayers.length === 1 && S.ui.agLayers[0] !== "events" ? S.ui.agLayers[0] : S.ui.agLayers.length === 1 ? "events" : "";
+  { const g = el("div","fgroup"); const lb = el("label","flabel","Afficher"); lb.htmlFor = "ag-show"; const s = el("select","pick"); s.id = "ag-show";
+    const opt = (p, v, l) => { const o = el("option",null,l); o.value = v; p.appendChild(o); };
+    opt(s, "", "Tout");
+    const g1 = document.createElement("optgroup"); g1.label = "Événements"; opt(g1, "events", "Tous les événements"); EV_TYPES.forEach(t => opt(g1, "ev:"+t, t === "Tournage" ? "Tournages" : t === "Rendez-vous" ? "Rendez-vous" : t)); s.appendChild(g1);
+    const g2 = document.createElement("optgroup"); g2.label = "Autres"; LAYERS.filter(x => x[0] !== "events").forEach(([k,l]) => opt(g2, k, l)); s.appendChild(g2);
+    s.value = curShow;
+    s.onchange = () => { const x = s.value;
+      if (!x){ S.ui.agLayers = allL.slice(); S.ui.agTypes = EV_TYPES.slice(); }
+      else if (x === "events"){ S.ui.agLayers = ["events"]; S.ui.agTypes = EV_TYPES.slice(); }
+      else if (x.startsWith("ev:")){ S.ui.agLayers = ["events"]; S.ui.agTypes = [x.slice(3)]; }
+      else { S.ui.agLayers = [x]; S.ui.agTypes = EV_TYPES.slice(); }
+      remember(); render(); };
+    g.append(lb, s); f.appendChild(g); }
   root.appendChild(f);
   const items = agendaItems(); const map = {}; items.forEach(i => (map[i.date] = map[i.date] || []).push(i));
   if (v === "month"){
