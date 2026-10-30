@@ -841,13 +841,16 @@ function agAgence(root, m){
 /* ---------- Messagerie ---------- */
 const CHANNELS = [["general","Général"]];
 const MSG_ROLE = {Gabriel:["main","shoot"], Clara:["main"], Matis:["shoot"]};
-function msgChannels(mode){ const pre = mode === "shoot" ? "tg:" : ""; return CHANNELS.map(c => pre + c[0]).concat(clientNames().filter(n => n !== AGENCE).map(n => pre + "c:" + n)); }
+function dmKey(a, b){ return "dm:" + [a, b].sort().join("|"); }
+function dmOther(k){ const me = S.me || "Gabriel"; return String(k).slice(3).split("|").find(n => n !== me) || me; }
+function dmChannels(){ const me = S.me || "Gabriel"; const set = new Set((S.ui.dmOpen || []).filter(k => k.startsWith("dm:") && k.slice(3).split("|").includes(me))); S.d.messages.forEach(m => { if (String(m.ch).startsWith("dm:") && m.ch.slice(3).split("|").includes(me)) set.add(m.ch); }); return [...set]; }
+function msgChannels(mode){ const pre = mode === "shoot" ? "tg:" : ""; return CHANNELS.map(c => pre + c[0]).concat(mode === "shoot" ? [] : dmChannels()).concat(clientNames().filter(n => n !== AGENCE).map(n => pre + "c:" + n)); }
 function seenKey(k){ return "seen_" + (S.me || "Gabriel") + "_" + k; }
 function unreadIn(k){ const me = S.me || "Gabriel", s = S.ui[seenKey(k)] || ""; return S.d.messages.filter(m => m.ch === k && m.who !== me && (m.at || "") > s).length; }
 function unreadMode(mode){ return msgChannels(mode).reduce((n, k) => n + unreadIn(k), 0); }
 function unreadRole(){ return ["main","shoot"].reduce((n, m) => n + unreadMode(m), 0); }
 function shootLabel(e){ return fmtD(e.date) + ", " + e.client; }
-function chName(k){ k = k.replace(/^tg:/, ""); const c = CHANNELS.find(x => x[0] === k); return c ? c[1] : k.replace(/^c:/, ""); }
+function chName(k){ if (String(k).startsWith("dm:")) return dmOther(k); k = k.replace(/^tg:/, ""); const c = CHANNELS.find(x => x[0] === k); return c ? c[1] : k.replace(/^c:/, ""); }
 /* ---------- Messages vocaux ---------- */
 let REC = null;
 const AUDIO_EL = new Map();
@@ -914,7 +917,7 @@ function avatarEl(name, size, opts){
   if (src){ const i = document.createElement("img"); i.src = src; i.alt = ""; i.loading = "lazy"; a.appendChild(i); return a; }
   a.textContent = initials(name); a.style.background = opts.color || avColor(name); return a;
 }
-function chAvatar(k, size){ const base = String(k).replace(/^tg:/, ""); if (base.startsWith("c:")){ const n = base.slice(2); return avatarEl(n, size, { src: "", color: colorOf(n) }); } return avatarEl("Équipe", size, { logo: true }); }
+function chAvatar(k, size){ if (String(k).startsWith("dm:")) return avatarEl(dmOther(k), size); const base = String(k).replace(/^tg:/, ""); if (base.startsWith("c:")){ const n = base.slice(2); return avatarEl(n, size, { src: "", color: colorOf(n) }); } return avatarEl("Équipe", size, { logo: true }); }
 
 /* ---------- Pièces jointes ---------- */
 
@@ -949,6 +952,37 @@ async function addFiles(ch, list){
 }
 
 /* ---------- Messagerie (façon messagerie de téléphone) ---------- */
+function newDm(){
+  const me = S.me || "Gabriel";
+  openModal(m => {
+    const t = el("h3",null,"Nouvelle conversation privée"); t.id = "mtitle"; m.appendChild(t);
+    m.appendChild(el("p","muted","Visible uniquement par vous deux."));
+    const l = el("div","dm-list");
+    (S.team || []).filter(x => x.name !== me).forEach(x => { const b = el("button","wa-row"); b.type = "button"; const tx = el("span","wa-rtx"); tx.append(el("b",null,x.name), el("small",null,ROLE_LABEL[x.role] || ""));
+      b.append(avatarEl(x.name, 40), tx); b.onclick = () => { const k = dmKey(me, x.name); S.ui.dmOpen = [...new Set((S.ui.dmOpen || []).concat(k))]; S.ui.msgMode = "main"; S.ui.msgCh = k; S.ui.waConv = true; remember(); closeModal(); go("messagerie"); render(); }; l.appendChild(b); });
+    if (!l.children.length) l.appendChild(el("p","muted","Personne d’autre dans l’équipe pour l’instant."));
+    m.appendChild(l);
+  });
+}
+function gifPicker(ch, me){
+  openModal(m => {
+    m.classList.add("gif-modal");
+    const t = el("h3",null,"GIF"); t.id = "mtitle"; m.appendChild(t);
+    const q = el("input","gif-q"); q.type = "search"; q.placeholder = "Rechercher un GIF"; m.appendChild(q);
+    const grid = el("div","gif-grid"); m.appendChild(grid);
+    m.appendChild(el("p","gif-by","Propulsé par GIPHY"));
+    let tm = 0, seq = 0;
+    const load = async () => { const my = ++seq; grid.textContent = ""; grid.appendChild(el("p","muted","Chargement…"));
+      try { const r = await GC.api("GET","/api/g-gifs?q=" + encodeURIComponent(q.value.trim())); if (my !== seq) return; grid.textContent = "";
+        if (!r.gifs.length) grid.appendChild(el("p","muted","Aucun GIF trouvé."));
+        r.gifs.forEach(g => { const b = el("button","gif-it"); b.type = "button"; b.title = g.title || "GIF"; const i = document.createElement("img"); i.src = g.small || g.url; i.alt = g.title || "GIF"; i.loading = "lazy"; b.appendChild(i);
+          b.onclick = async () => { closeModal(); try { await save("messages", null, { ch, who: me, text: "", at: new Date().toISOString(), files: [{ url: g.url, name: "GIF", type: "image/gif", gif: true }] }); } catch(e){} };
+          grid.appendChild(b); }); }
+      catch(x){ if (my !== seq) return; grid.textContent = ""; grid.appendChild(el("p","muted", x.message)); } };
+    q.oninput = () => { clearTimeout(tm); tm = setTimeout(load, 350); };
+    load(); setTimeout(() => q.focus(), 50);
+  });
+}
 function waTime(at){ const d = new Date(at || 0), k = iso(d); if (k === today()) return d.getHours() + " h " + String(d.getMinutes()).padStart(2,"0"); if (k === addDays(today(), -1)) return "Hier"; return fmtD(k); }
 function vMessagerie(root){
   const me = S.me || "Gabriel";
@@ -957,22 +991,25 @@ function vMessagerie(root){
   let ch = mode === "shoot" ? (S.ui.msgShoot || "") : (S.ui.msgCh || "general");
   if (!msgChannels(mode).includes(ch)) ch = mode === "shoot" ? "tg:general" : "general";
   if (unreadIn(ch) && (S.ui.waConv || !window.matchMedia("(max-width:900px)").matches)){ S.ui[seenKey(ch)] = new Date().toISOString(); remember(); setTimeout(renderTabs, 0); }
-  root.appendChild(head("Messagerie", mode === "shoot" ? "Les fils tournage, mêmes sujets et mêmes clients" : "L’équipe et les clients", [(() => { const sg = segm([["main","Principal"],["shoot","Tournage"]], mode, v => { S.ui.msgMode = v; S.ui.waConv = false; remember(); render(); }); [...sg.querySelectorAll("button")].forEach((b, i) => { const n = unreadMode(i ? "shoot" : "main"); if (n) b.appendChild(el("span","cnt",String(n))); }); return sg; })()]));
+  const sgEl = ((() => { const sg = segm([["main","Principal"],["shoot","Tournage"]], mode, v => { S.ui.msgMode = v; S.ui.waConv = false; remember(); render(); }); [...sg.querySelectorAll("button")].forEach((b, i) => { const n = unreadMode(i ? "shoot" : "main"); if (n) b.appendChild(el("span","cnt",String(n))); }); return sg; })());
   const wrap = el("div","wa " + (S.ui.waConv ? "show-conv" : "show-list"));
 
   /* Liste des conversations */
   const side = el("nav","wa-list");
+  const top = el("div","wa-top"); const plus = el("button","wa-new"); plus.type = "button"; plus.title = "Nouvelle conversation privée"; plus.setAttribute("aria-label", plus.title); plus.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>'; plus.onclick = () => newDm();
+  const tl = el("div","wa-tl"); tl.append(el("h1",null,"Messagerie"), plus); top.append(tl, sgEl); side.appendChild(top);
   const lastOf = {}; S.d.messages.forEach(m => { if (!lastOf[m.ch] || (m.at || "") > (lastOf[m.ch].at || "")) lastOf[m.ch] = m; });
   const row = (k, label) => {
     const b = el("button","wa-row"); b.type = "button"; b.setAttribute("aria-pressed", String(k === ch));
     const lm = lastOf[k], un = k === ch && S.ui.waConv !== false ? 0 : unreadIn(k);
     const tx = el("span","wa-rtx"); const top = el("span","wa-rtop"); top.append(el("b",null,label), el("small",null, lm ? waTime(lm.at) : ""));
-    const bot = el("span","wa-rbot"); bot.append(el("span",null, lm ? (lm.who === me ? "Toi : " : lm.who + " : ") + msgPreview(lm) : "Aucun message")); if (un) bot.appendChild(el("span","cnt",String(un)));
+    const bot = el("span","wa-rbot"); bot.append(el("span",null, lm ? (lm.who === me ? "Toi : " : String(k).startsWith("dm:") ? "" : lm.who + " : ") + msgPreview(lm) : "Aucun message")); if (un) bot.appendChild(el("span","cnt",String(un)));
     tx.append(top, bot); b.append(chAvatar(k, 44), tx); if (un) b.classList.add("unread");
     b.onclick = () => { if (mode === "shoot") S.ui.msgShoot = k; else S.ui.msgCh = k; S.ui[seenKey(k)] = new Date().toISOString(); S.ui.waConv = true; remember(); render(); };
     side.appendChild(b);
   };
   side.appendChild(el("span","wa-lab","Équipe")); CHANNELS.forEach(([k,l]) => row(pre+k, l));
+  if (mode !== "shoot"){ const dms = dmChannels(); if (dms.length){ side.appendChild(el("span","wa-lab","Privé")); dms.sort((a, b) => ((lastOf[b] || {}).at || "").localeCompare((lastOf[a] || {}).at || "")).forEach(k => row(k, dmOther(k))); } }
   side.appendChild(el("span","wa-lab","Clients"));
   clientNames().filter(n => n !== AGENCE).map(n => [pre+"c:"+n, n]).sort((a, b) => ((lastOf[b[0]] || {}).at || "").localeCompare((lastOf[a[0]] || {}).at || "") || a[1].localeCompare(b[1])).forEach(([k, n]) => row(k, n));
 
@@ -981,7 +1018,8 @@ function vMessagerie(root){
   const hd = el("header","wa-head");
   const back = el("button","wa-back"); back.type = "button"; back.setAttribute("aria-label","Retour aux conversations"); back.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>'; back.onclick = () => { S.ui.waConv = false; remember(); render(); };
   const ht = el("div","wa-htx"); const isCli = ch.replace(/^tg:/,"").startsWith("c:");
-  ht.append(el("b",null,(mode === "shoot" ? "Tournage, " : "") + chName(ch)), el("small",null, isCli ? "Échanges de l’équipe sur ce client" : (S.team || []).map(t => t.name).join(", ")));
+  const isDm = ch.startsWith("dm:");
+  ht.append(el("b",null,(mode === "shoot" ? "Tournage, " : "") + chName(ch)), el("small",null, isDm ? "Conversation privée, visible de vous deux seulement" : isCli ? "Échanges de l’équipe sur ce client" : (S.team || []).map(t => t.name).join(", ")));
   hd.append(back, chAvatar(ch, 40), ht); main.appendChild(hd);
   const list = el("div","wa-msgs"); list.id = "chat-list";
   const msgs = S.d.messages.filter(m => m.ch === ch).sort((a,b) => (a.at||"").localeCompare(b.at||""));
@@ -1000,6 +1038,7 @@ function vMessagerie(root){
     if (m.text) bub.appendChild(el("div","wa-txt", m.text));
     bub.appendChild(el("span","wa-time", md.getHours()+" h "+String(md.getMinutes()).padStart(2,"0")));
     const col = el("div","wa-col"); col.appendChild(bub);
+    bub.onclick = e => { if (e.target.closest("a,button,audio,video")) return; line.classList.toggle("open"); };
     const act = el("div","msg-a");
     const tk = el("button",null,"En faire une tâche"); tk.onclick = () => editTask({who: me, title: (m.text || (m.audio ? "Écouter le message vocal" : "Voir le fichier de " + m.who)).slice(0,120), client: ch.replace(/^tg:/, "").startsWith("c:") ? ch.replace(/^tg:/, "").slice(2) : ""}); act.appendChild(tk);
     if (mine || S.role === "owner"){ const del = el("button","rm","Retirer"); let armed = false; del.onclick = () => { if (!armed){ armed = true; del.textContent = "Confirmer"; del.classList.add("armed"); setTimeout(() => { armed = false; del.textContent = "Retirer"; del.classList.remove("armed"); }, 3000); return; } AUDIO_EL.delete(m.id); remove("messages", m.id); }; act.appendChild(del); }
@@ -1018,6 +1057,7 @@ function vMessagerie(root){
   }
   const bar = el("div","wa-bar");
   const fi = el("input"); fi.type = "file"; fi.multiple = true; fi.hidden = true; fi.onchange = () => { addFiles(ch, [...fi.files]); fi.value = ""; };
+  const gif = el("button","wa-ic wa-gif","GIF"); gif.type = "button"; gif.title = "Envoyer un GIF"; gif.onclick = () => gifPicker(ch, me);
   const clip = el("button","wa-ic"); clip.type = "button"; clip.title = "Joindre une photo, une vidéo ou un fichier"; clip.setAttribute("aria-label", clip.title);
   clip.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5 12.4 19a5 5 0 0 1-7.1-7.1l8-8a3.4 3.4 0 0 1 4.8 4.8l-8 8a1.7 1.7 0 0 1-2.4-2.4l7.3-7.3"/></svg>';
   clip.onclick = () => fi.click();
@@ -1042,7 +1082,7 @@ function vMessagerie(root){
     const cb = btn("Annuler","", () => recStop(true)); const ok = btn("Envoyer le vocal","lemon", () => recStop(false));
     form.onsubmit = e => { e.preventDefault(); recStop(false); };
     bar.append(rb, cb, ok);
-  } else { setBtn(); bar.append(fi, clip, ta, go2); }
+  } else { setBtn(); bar.append(fi, clip, gif, ta, go2); }
   form.appendChild(bar);
   main.ondragover = e => { e.preventDefault(); main.classList.add("drop"); };
   main.ondragleave = () => main.classList.remove("drop");
@@ -1161,6 +1201,7 @@ function render(){
   const root = $("#app");
   const focusId = document.activeElement && document.activeElement.id; const caret = focusId && document.activeElement.selectionStart;
   root.textContent = "";
+  document.body.classList.toggle("chat-full", S.view === "messagerie" && !S.failed && !!S.ready);
   if (S.failed){ root.appendChild(head("Gestionnaire", "")); root.appendChild(el("p","empty",S.failed)); return; }
   if (!S.ready){ root.appendChild(head(VIEWS.find(v => v[0] === S.view)[1], "Chargement des données de l’agence…")); root.appendChild(el("p","empty","Les tâches, le commercial, les campagnes, les calendriers et l’agenda s’affichent dans un instant.")); return; }
   try { RENDER[S.view](root); } catch(x){ root.appendChild(el("p","err","Affichage impossible : "+(x && x.message))); console.error(x); }
