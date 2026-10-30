@@ -1241,7 +1241,7 @@ function voiceHere(room){
   S.d.messages.filter(m => m.ch === "voix" && m.voice === room && Date.parse(m.at) > lim).sort((a, b) => (a.at || "").localeCompare(b.at || "")).forEach(m => { last[m.who] = m; });
   return Object.values(last).filter(m => !m.left).map(m => m.who);
 }
-async function joinVoice(room, label){
+async function joinVoice(room, label, screen){
   const me = S.me || "Gabriel";
   let v = (S.d.meta || []).find(x => x.id === "voice");
   if (!v || !v.token){
@@ -1250,7 +1250,7 @@ async function joinVoice(room, label){
     try { await save("meta", "voice", { token: tok }); } catch(e){ toast(e.message); return; }
     v = { token: tok };
   }
-  const url = "https://meet.jit.si/Gacolet-" + room + "-" + v.token + "#userInfo.displayName=" + encodeURIComponent(JSON.stringify(me)) + "&config.startWithVideoMuted=true&config.prejoinConfig.enabled=false&config.subject=" + encodeURIComponent(JSON.stringify(label));
+  const url = "https://meet.jit.si/Gacolet-" + room + "-" + v.token + "#userInfo.displayName=" + encodeURIComponent(JSON.stringify(me)) + "&config.startWithVideoMuted=true&config.prejoinConfig.enabled=false&config.subject=" + encodeURIComponent(JSON.stringify(label)) + (screen ? "&config.startScreenSharing=true" : "");
   window.open(url, "gacolet-voix-" + room);
   try { await save("messages", null, { ch: "voix", voice: room, who: me, text: "", at: new Date().toISOString() }); } catch(e){}
 }
@@ -1262,10 +1262,10 @@ function vVocal(root){
     const c = el("section","vx-card" + (here.length ? " live" : "")); const ic = el("span","wa-vic"); ic.innerHTML = HEADSET;
     const hd = el("div","vx-hd"); const tt = el("div"); tt.append(el("h2",null,l), el("p","muted",sub)); hd.append(ic, tt); c.appendChild(hd);
     const ppl = el("div","vx-ppl"); if (here.length) here.forEach(n => { const p = el("span","vx-p"); p.append(avatarEl(n, 28), el("span",null,n)); ppl.appendChild(p); }); else ppl.appendChild(el("span","muted","Personne pour l’instant")); c.appendChild(ppl);
-    const a = el("div","vx-act"); a.appendChild(btn(mine ? "Rouvrir la fenêtre" : "Rejoindre", "lemon", () => joinVoice(k, l))); if (mine) a.appendChild(btn("Quitter","", () => leaveVoice(k))); c.appendChild(a);
+    const a = el("div","vx-act"); a.appendChild(btn(mine ? "Rouvrir la fenêtre" : "Rejoindre", "lemon", () => joinVoice(k, l))); a.appendChild(btn("Partager mon écran","", () => joinVoice(k, l, true))); if (mine) a.appendChild(btn("Quitter","", () => leaveVoice(k))); c.appendChild(a);
     g.appendChild(c); });
   root.appendChild(g);
-  root.appendChild(el("p","status","On arrive micro ouvert et caméra coupée. Les boutons en bas de la fenêtre activent la caméra et le partage d’écran. Le premier qui ouvre un salon peut devoir se connecter avec Google : c’est demandé par Jitsi, le service utilisé."));
+  root.appendChild(el("p","status","On arrive micro ouvert et caméra coupée. « Partager mon écran » ouvre le salon en demandant tout de suite quelle fenêtre ou quel écran montrer. Le premier qui ouvre un salon peut devoir se connecter avec Google : c’est demandé par Jitsi, le service utilisé."));
 }
 async function leaveVoice(room){ try { await save("messages", null, { ch: "voix", voice: room, who: S.me || "Gabriel", text: "", left: true, at: new Date().toISOString() }); } catch(e){} }
 function vMessagerie(root){
