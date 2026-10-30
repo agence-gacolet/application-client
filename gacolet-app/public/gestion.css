@@ -927,3 +927,17 @@ details.box[open] summary::after{content:"\2212"}
   .tw:not(.ms-tw) tr.row td:first-child:has(input[type=checkbox]) ~ td.ttl,.tw:not(.ms-tw) tr.row td:first-child:has(input[type=checkbox]) ~ td.w{flex:1 1 calc(100% - 44px)}
   .vc-ctl{position:static;background:none;padding:4px 0 0}
 }
+/* Téléphone : rien ne doit bouger sur les côtés, pas de zoom intempestif */
+html,body{overflow-x:hidden;overscroll-behavior-x:none;-webkit-text-size-adjust:100%}
+a,button,select,label,.row{touch-action:manipulation}
+@media (max-width:900px){
+  .wa{grid-template-columns:minmax(0,1fr)}
+  .wa-conv,.wa-list{min-width:0;max-width:100vw}
+  .wa-head{min-width:0}
+  .wa-htx small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .wa-img,.wa-vid,.wa-file{max-width:min(260px,62vw)}
+  body.chat-full{overflow:hidden;overscroll-behavior:none;position:fixed;inset:0;width:100%}
+  .wa-msgs{overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+  input,select,textarea,.wa-bar textarea{font-size:16px}
+}
+html{touch-action:pan-x pan-y}
