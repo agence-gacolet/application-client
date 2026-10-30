@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Gacolet Gestion</title>
+<meta name="theme-color" content="#090908">
+<meta name="robots" content="noindex">
+<link rel="manifest" href="/gestion.webmanifest">
+<link rel="icon" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Gestion">
+<link rel="preload" href="/fonts/inter.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/bebas-neue.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/gestion.css">
+</head>
+<body>
+<div class="shell" id="shell" hidden>
+  <aside class="side">
+    <a class="logo" href="#accueil" aria-label="Accueil"><span>AGENCE</span><span>GACOLET</span></a>
+    <nav class="nav" id="tabs" aria-label="Modules"></nav>
+    <div class="side-foot">
+      <label class="me" for="me"><span>Je suis</span>
+        <select id="me"><option value="Gabriel">Gabriel</option><option value="Matis">Matis</option><option value="Clara">Clara</option></select>
+      </label>
+      <a class="foot-link" href="/agence">Espace clients</a>
+      <button class="foot-link" type="button" id="logout">Se déconnecter</button>
+    </div>
+  </aside>
+  <header class="mbar">
+    <span class="logo sm"><span>AGENCE</span><span>GACOLET</span></span>
+    <span class="mbar-title" id="mbar-title"></span>
+    <svg class="mark mb" viewBox="140 158 561 281" aria-hidden="true"><path transform="matrix(1,0,0,-1,700.5803,436.46803)" d="M0 0-147.532-1.615-193.477 45.57-273.888 22.275-261.335 93.466-366.182 35.258-183.556 179.076Z"/><path transform="matrix(1,0,0,-1,232.1747,348.0155)" d="M0 0V0L-91.997-90.068 179.263 118.781 271.552 107.27 190.836 189.479 31.32 30.024"/></svg>
+    <button class="mbar-me" type="button" id="me-name" aria-label="Changer de personne"></button>
+  </header>
+  <main class="main"><svg class="mark" viewBox="140 158 561 281" aria-hidden="true"><path transform="matrix(1,0,0,-1,700.5803,436.46803)" d="M0 0-147.532-1.615-193.477 45.57-273.888 22.275-261.335 93.466-366.182 35.258-183.556 179.076Z"/><path transform="matrix(1,0,0,-1,232.1747,348.0155)" d="M0 0V0L-91.997-90.068 179.263 118.781 271.552 107.27 190.836 189.479 31.32 30.024"/></svg><div class="in" id="app"></div></main>
+  <nav class="mtabs" id="mtabs" aria-label="Modules"></nav>
+  <p class="offline" role="status">Hors connexion : les modifications reprendront au retour du réseau.</p>
+</div>
+
+<section class="login" id="login" hidden>
+  <form class="login-card" id="login-form">
+    <span class="logo lg"><span>AGENCE</span><span>GACOLET</span></span>
+    <h1>Gestion</h1>
+    <p>Espace interne de l’agence.</p>
+    <label for="pw">Mot de passe de l’agence</label>
+    <input id="pw" type="password" autocomplete="current-password" required>
+    <p class="err" id="login-err" role="alert"></p>
+    <button class="btn solid" type="submit">Entrer</button>
+  </form>
+</section>
+
+<div class="overlay" id="overlay" role="dialog" aria-modal="true" aria-labelledby="mtitle"><div class="modal" id="modal"></div></div>
+
+<script src="/gc-db.js"></script>
+<script>
+(function () {
+  const shell = document.getElementById("shell"), login = document.getElementById("login");
+  function boot() {
+    login.hidden = true; shell.hidden = false;
+    const s = document.createElement("script"); s.src = "/gestion.js?v=1"; document.body.appendChild(s);
+  }
+  window.addEventListener("gc-logout", () => location.reload());
+  document.getElementById("logout").onclick = () => GC.logout();
+  document.getElementById("me-name").onclick = () => { const m = document.querySelector(".morebtn"); if (m) m.click(); };
+  if (GC.loggedIn()) return boot();
+  login.hidden = false;
+  const f = document.getElementById("login-form"), err = document.getElementById("login-err");
+  document.getElementById("pw").focus();
+  f.onsubmit = async e => {
+    e.preventDefault(); err.textContent = "";
+    const b = f.querySelector("button"); b.disabled = true;
+    try { await GC.login(document.getElementById("pw").value); boot(); }
+    catch (x) { err.textContent = x.message; b.disabled = false; }
+  };
+})();
+</script>
+</body>
+</html>

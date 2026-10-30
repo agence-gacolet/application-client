@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1">
+<title>Gacolet</title>
+<meta name="description" content="Votre espace client Agence Gacolet : validations, planning, résultats et demandes.">
+<meta name="theme-color" content="#0F0F0E">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="/icon-mac-512.png">
+<link rel="apple-touch-icon" sizes="512x512" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Gacolet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="top" hidden>
+  <div class="wrap">
+    <span class="logo">AGENCE<br>GACOLET</span>
+    <div class="who"><b id="cname"></b><span id="cform"></span></div>
+    <button class="icon-btn" id="refresh" aria-label="Actualiser">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>
+    </button>
+  </div>
+</header>
+<main class="wrap" id="app"></main>
+<nav class="tabs" aria-label="Sections" hidden><div class="wrap"><div class="bar" id="tabs"></div></div></nav>
+<script src="/app.js"></script>
+</body>
+</html>

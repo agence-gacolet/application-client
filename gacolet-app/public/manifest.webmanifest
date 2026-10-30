@@ -1,0 +1,38 @@
+{
+  "name": "Agence Gacolet",
+  "short_name": "Gacolet",
+  "description": "Votre espace client : validations, planning, résultats et demandes.",
+  "lang": "fr",
+  "start_url": "/#accueil",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0F0F0E",
+  "theme_color": "#0F0F0E",
+  "icons": [
+    {
+      "src": "/icon-mac-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-mac-1024.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon-1024.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
