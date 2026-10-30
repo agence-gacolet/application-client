@@ -1233,41 +1233,153 @@ function gifPicker(ch, me){
   });
 }
 function waTime(at){ const d = new Date(at || 0), k = iso(d); if (k === today()) return d.getHours() + " h " + String(d.getMinutes()).padStart(2,"0"); if (k === addDays(today(), -1)) return "Hier"; return fmtD(k); }
-/* Salons vocaux : visio, partage d’écran et réunions, ouverts dans une fenêtre Jitsi. Le lien secret du salon est rangé dans « meta/voice ». */
+/* Salons vocaux intégrés : son, caméra et partage d’écran de pair à pair (WebRTC). Le serveur ne relaie que la mise en relation. */
 const VOICE = [["equipe","Salon équipe","Discussions au fil de la journée"],["tournage","Salon tournage","Préparer et suivre les tournages"],["reunion","Réunion","Points d’équipe, réunions avec un client"]];
 const HEADSET = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3.5" y="13.5" width="4" height="6.5" rx="1.5"/><rect x="16.5" y="13.5" width="4" height="6.5" rx="1.5"/></svg>';
-function voiceHere(room){
-  const lim = Date.now() - 90 * 60000, last = {};
-  S.d.messages.filter(m => m.ch === "voix" && m.voice === room && Date.parse(m.at) > lim).sort((a, b) => (a.at || "").localeCompare(b.at || "")).forEach(m => { last[m.who] = m; });
-  return Object.values(last).filter(m => !m.left).map(m => m.who);
+const VC_ICO = {
+  mic:'<svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
+  micOff:'<svg viewBox="0 0 24 24"><path d="M15 9.3V6a3 3 0 0 0-5.7-1.3M9 9v2a3 3 0 0 0 4.6 2.5M5 11a7 7 0 0 0 11.3 5.5M19 11a7 7 0 0 1-.6 2.8M12 18v3M4 4l16 16"/></svg>',
+  cam:'<svg viewBox="0 0 24 24"><rect x="3" y="6.5" width="13" height="11" rx="2"/><path d="m16 10.5 5-3v9l-5-3"/></svg>',
+  screen:'<svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="12" rx="1.5"/><path d="M8 20h8M12 16.5V20M12 13V8M9.5 10.5 12 8l2.5 2.5"/></svg>',
+  leave:'<svg viewBox="0 0 24 24"><path d="M4.5 13.5c4.6-4 10.4-4 15 0l-1.8 2.3-3-1.2v-2.2a9 9 0 0 0-5.4 0v2.2l-3 1.2z"/></svg>'
+};
+const VC = { room: "", label: "", pid: "", local: null, video: null, kind: "", muted: false, peers: new Map(), polling: false, speak: {} };
+S.rtc = { rooms: {} };
+function voiceHere(room){ return (S.rtc.rooms[room] || []).slice(); }
+let RTC_T = 0;
+async function rtcState(){ try { const r = await GC.api("GET","/api/rtc/state"); const a = JSON.stringify(S.rtc.rooms); S.rtc.rooms = r.rooms || {}; if (JSON.stringify(S.rtc.rooms) !== a){ if (S.view === "vocal") render(); else renderTabs(); } } catch(e){} }
+function rtcTick(){ clearTimeout(RTC_T); if (S.ready && GC.loggedIn && GC.loggedIn()) rtcState(); RTC_T = setTimeout(rtcTick, VC.room || S.view === "vocal" ? 4000 : 15000); }
+const rtcSend = (to, data) => GC.api("POST","/api/rtc/signal",{ room: VC.room, pid: VC.pid, to, data }).catch(() => {});
+function vcPeer(pid, name){
+  if (VC.peers.has(pid)) return VC.peers.get(pid);
+  const pc = new RTCPeerConnection({ iceServers: [{ urls: ["stun:stun.l.google.com:19302","stun:stun1.l.google.com:19302"] }] });
+  const P = { pid, name, pc, polite: VC.pid > pid, makingOffer: false, ignoreOffer: false, stream: new MediaStream(), audio: document.createElement("audio"), vsender: null };
+  P.audio.autoplay = true; P.audio.srcObject = P.stream; vcBox().appendChild(P.audio);
+  VC.local.getAudioTracks().forEach(t => pc.addTrack(t, VC.local));
+  if (VC.video) P.vsender = pc.addTrack(VC.video, VC.local);
+  pc.ontrack = e => { if (!P.stream.getTracks().includes(e.track)) P.stream.addTrack(e.track); e.track.onended = e.track.onmute = e.track.onunmute = () => vcRender(); P.stream.onremovetrack = () => vcRender(); vcMeter(pid, P.stream); vcRender(); };
+  pc.onicecandidate = e => { if (e.candidate) rtcSend(pid, { candidate: e.candidate }); };
+  pc.onnegotiationneeded = async () => { try { P.makingOffer = true; await pc.setLocalDescription(); rtcSend(pid, { description: pc.localDescription }); } catch(e){} finally { P.makingOffer = false; } };
+  pc.onconnectionstatechange = () => vcRender();
+  VC.peers.set(pid, P); vcRender(); return P;
 }
-async function joinVoice(room, label, screen){
-  const me = S.me || "Gabriel";
-  let v = (S.d.meta || []).find(x => x.id === "voice");
-  if (!v || !v.token){
-    if (S.role !== "owner"){ toast("Un propriétaire doit ouvrir les salons une première fois."); return; }
-    const tok = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(36).padStart(2, "0")).join("").slice(0, 18);
-    try { await save("meta", "voice", { token: tok }); } catch(e){ toast(e.message); return; }
-    v = { token: tok };
+async function vcSignal(from, data){
+  const P = VC.peers.get(from); if (!P) return; const pc = P.pc;
+  try {
+    if (data.description){
+      const offerCollision = data.description.type === "offer" && (P.makingOffer || pc.signalingState !== "stable");
+      P.ignoreOffer = !P.polite && offerCollision; if (P.ignoreOffer) return;
+      await pc.setRemoteDescription(data.description);
+      if (data.description.type === "offer"){ await pc.setLocalDescription(); rtcSend(from, { description: pc.localDescription }); }
+    } else if (data.candidate){ try { await pc.addIceCandidate(data.candidate); } catch(e){ if (!P.ignoreOffer) throw e; } }
+  } catch(e){ console.warn(e); }
+}
+function vcDrop(pid){ const P = VC.peers.get(pid); if (!P) return; try { P.pc.close(); } catch(e){} P.audio.remove(); VC.peers.delete(pid); delete VC.speak[pid]; vcRender(); }
+async function vcPoll(){
+  VC.polling = true; const room = VC.room, pid = VC.pid;
+  while (VC.room === room && VC.pid === pid){
+    try { const r = await GC.api("GET","/api/rtc/poll?room=" + room + "&pid=" + pid);
+      if (r.gone){ toast("La connexion au salon a été perdue."); vcLeave(true); break; }
+      for (const ev of r.events || []){
+        if (ev.type === "join") vcPeer(ev.pid, ev.name);
+        else if (ev.type === "leave") vcDrop(ev.pid);
+        else if (ev.type === "signal"){ if (!VC.peers.has(ev.from)) continue; await vcSignal(ev.from, ev.data); }
+      }
+    } catch(e){ await new Promise(r => setTimeout(r, 2000)); }
   }
-  const url = "https://meet.jit.si/Gacolet-" + room + "-" + v.token + "#userInfo.displayName=" + encodeURIComponent(JSON.stringify(me)) + "&config.startWithVideoMuted=true&config.prejoinConfig.enabled=false&config.subject=" + encodeURIComponent(JSON.stringify(label)) + (screen ? "&config.startScreenSharing=true" : "");
-  window.open(url, "gacolet-voix-" + room);
-  try { await save("messages", null, { ch: "voix", voice: room, who: me, text: "", at: new Date().toISOString() }); } catch(e){}
+  VC.polling = false;
+}
+let VC_AC = null;
+function vcMeter(id, stream){
+  if (!stream.getAudioTracks().length) return;
+  try { VC_AC = VC_AC || new (window.AudioContext || window.webkitAudioContext)(); const src = VC_AC.createMediaStreamSource(stream), an = VC_AC.createAnalyser(); an.fftSize = 512; src.connect(an);
+    const buf = new Uint8Array(an.frequencyBinCount);
+    const tick = () => { if (!VC.room || (id !== "me" && !VC.peers.has(id))) return; an.getByteFrequencyData(buf); let s = 0; for (const v of buf) s += v; const on = s / buf.length > 18 && !(id === "me" && VC.muted);
+      if (on !== !!VC.speak[id]){ VC.speak[id] = on; document.querySelectorAll('[data-vc="' + id + '"]').forEach(x => x.classList.toggle("talk", on)); } setTimeout(tick, 200); };
+    tick(); } catch(e){}
+}
+async function vcJoin(room, label){
+  if (VC.room === room){ go("vocal"); return; }
+  if (VC.room) await vcLeave();
+  let local; try { local = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); } catch(e){ toast("Micro refusé ou introuvable : autorise le micro pour rejoindre le salon."); return; }
+  let r; try { r = await GC.api("POST","/api/rtc/join",{ room }); } catch(e){ local.getTracks().forEach(t => t.stop()); toast(e.message); return; }
+  Object.assign(VC, { room, label, pid: r.pid, local, video: null, kind: "", muted: false, speak: {} });
+  vcMeter("me", local);
+  (r.peers || []).forEach(p => vcPeer(p.pid, p.name));
+  vcPoll(); rtcTick(); vcRender(); if (S.view === "vocal") render();
+}
+async function vcLeave(silent){
+  if (!VC.room) return; const room = VC.room, pid = VC.pid;
+  [...VC.peers.keys()].forEach(vcDrop);
+  if (VC.local) VC.local.getTracks().forEach(t => t.stop()); if (VC.video) VC.video.stop();
+  Object.assign(VC, { room: "", label: "", pid: "", local: null, video: null, kind: "" });
+  if (!silent) GC.api("POST","/api/rtc/leave",{ room, pid }).catch(() => {});
+  vcRender(); rtcTick(); if (S.view === "vocal") render();
+}
+function vcMute(){ VC.muted = !VC.muted; if (VC.local) VC.local.getAudioTracks().forEach(t => { t.enabled = !VC.muted; }); vcRender(); if (S.view === "vocal") render(); }
+async function vcVideo(kind){
+  if (VC.kind === kind){ vcStopVideo(); return; }
+  let track;
+  try { const st = kind === "screen" ? await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 }, audio: false }) : await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } }); track = st.getVideoTracks()[0]; }
+  catch(e){ if (kind !== "screen") toast("Caméra refusée ou introuvable."); return; }
+  if (VC.video){ const old = VC.video; VC.local.removeTrack(old); VC.local.addTrack(track); VC.video = track; VC.peers.forEach(P => { if (P.vsender) P.vsender.replaceTrack(track); else P.vsender = P.pc.addTrack(track, VC.local); }); old.stop(); }
+  else { VC.video = track; VC.local.addTrack(track); VC.peers.forEach(P => { P.vsender = P.pc.addTrack(track, VC.local); }); }
+  VC.kind = kind; track.onended = () => { if (VC.video === track) vcStopVideo(); };
+  vcRender(); if (S.view === "vocal") render();
+}
+function vcStopVideo(){
+  if (!VC.video) return; const t = VC.video; VC.video = null; VC.kind = "";
+  VC.peers.forEach(P => { if (P.vsender){ try { P.pc.removeTrack(P.vsender); } catch(e){} P.vsender = null; } });
+  try { VC.local.removeTrack(t); } catch(e){} t.stop(); vcRender(); if (S.view === "vocal") render();
+}
+function vcBox(){ let b = document.getElementById("vc-audio"); if (!b){ b = el("div"); b.id = "vc-audio"; b.hidden = true; document.body.appendChild(b); } return b; }
+function vcBtn(ico, label, on, fn, cls){ const b = el("button","vc-b" + (on ? " on" : "") + (cls ? " " + cls : "")); b.type = "button"; b.title = label; b.setAttribute("aria-label", label); b.innerHTML = VC_ICO[ico]; b.onclick = fn; return b; }
+function vcControls(){ const c = el("div","vc-ctl");
+  c.append(vcBtn(VC.muted ? "micOff" : "mic", VC.muted ? "Activer le micro" : "Couper le micro", VC.muted, vcMute, VC.muted ? "warn" : ""),
+    vcBtn("cam", VC.kind === "cam" ? "Couper la caméra" : "Activer la caméra", VC.kind === "cam", () => vcVideo("cam")),
+    vcBtn("screen", VC.kind === "screen" ? "Arrêter le partage d’écran" : "Partager l’écran", VC.kind === "screen", () => vcVideo("screen")),
+    vcBtn("leave", "Quitter le salon", false, () => vcLeave(), "end"));
+  return c; }
+/* Barre d’appel flottante, visible dans tous les onglets pendant un appel */
+function vcRender(){
+  let bar = document.getElementById("vc-bar");
+  if (!VC.room || S.view === "vocal"){ if (bar) bar.remove(); if (S.view === "vocal" && VC.room) vcStage(); return; }
+  if (!bar){ bar = el("div","vc-bar"); bar.id = "vc-bar"; document.body.appendChild(bar); }
+  bar.textContent = "";
+  const info = el("button","vc-info"); info.type = "button"; info.onclick = () => go("vocal");
+  info.append(el("b",null,VC.label), el("small",null, VC.peers.size ? (VC.peers.size + 1) + " dans le salon" : "Seul dans le salon"));
+  bar.append(info, vcControls());
+}
+function vcTile(id, name, stream, isMe){
+  const t = el("div","vc-tile"); t.dataset.vc = id; if (VC.speak[id]) t.classList.add("talk");
+  const v = stream && stream.getVideoTracks().find(x => x.readyState === "live" && !x.muted);
+  if (v){ const vid = document.createElement("video"); vid.autoplay = true; vid.playsInline = true; vid.muted = true; vid.srcObject = new MediaStream([v]); if (isMe && VC.kind === "cam") vid.classList.add("mirror"); t.appendChild(vid); t.classList.add("has-v"); }
+  else t.appendChild(avatarEl(name, 84));
+  const lb = el("span","vc-name", name + (isMe ? " (toi)" : "")); if (isMe && VC.muted) lb.appendChild(el("i",null," micro coupé")); t.appendChild(lb);
+  return t;
+}
+function vcStage(){
+  const st = document.getElementById("vc-stage"); if (!st) return; st.textContent = "";
+  const me = S.me || "Gabriel"; const grid = el("div","vc-grid n" + Math.min(VC.peers.size + 1, 6));
+  grid.appendChild(vcTile("me", me, VC.local, true));
+  VC.peers.forEach(P => grid.appendChild(vcTile(P.pid, P.name, P.stream, false)));
+  const hd = el("div","vc-sh"); hd.append(el("b",null,VC.label), el("span","muted", VC.peers.size ? (VC.peers.size + 1) + " personnes" : "En attente des autres"));
+  st.append(hd, grid, vcControls());
 }
 function vVocal(root){
-  const me = S.me || "Gabriel";
-  root.appendChild(head("Vocal", "Salons vocaux de l’agence : la visio, le partage d’écran et les réunions se lancent dans la fenêtre qui s’ouvre."));
+  root.appendChild(head("Vocal", "Salons vocaux de l’agence, directement dans l’application : micro, caméra et partage d’écran."));
+  if (VC.room){ const st = el("section","vc-stage"); st.id = "vc-stage"; root.appendChild(st); setTimeout(vcStage, 0); }
   const g = el("div","vx-grid");
-  VOICE.forEach(([k, l, sub]) => { const here = voiceHere(k), mine = here.includes(me);
-    const c = el("section","vx-card" + (here.length ? " live" : "")); const ic = el("span","wa-vic"); ic.innerHTML = HEADSET;
+  VOICE.forEach(([k, l, sub]) => { const here = voiceHere(k), mine = VC.room === k;
+    const c = el("section","vx-card" + (here.length ? " live" : "") + (mine ? " mine" : "")); const ic = el("span","wa-vic"); ic.innerHTML = HEADSET;
     const hd = el("div","vx-hd"); const tt = el("div"); tt.append(el("h2",null,l), el("p","muted",sub)); hd.append(ic, tt); c.appendChild(hd);
     const ppl = el("div","vx-ppl"); if (here.length) here.forEach(n => { const p = el("span","vx-p"); p.append(avatarEl(n, 28), el("span",null,n)); ppl.appendChild(p); }); else ppl.appendChild(el("span","muted","Personne pour l’instant")); c.appendChild(ppl);
-    const a = el("div","vx-act"); a.appendChild(btn(mine ? "Rouvrir la fenêtre" : "Rejoindre", "lemon", () => joinVoice(k, l))); a.appendChild(btn("Partager mon écran","", () => joinVoice(k, l, true))); if (mine) a.appendChild(btn("Quitter","", () => leaveVoice(k))); c.appendChild(a);
+    const a = el("div","vx-act"); a.appendChild(mine ? btn("Quitter","", () => vcLeave()) : btn(VC.room ? "Changer de salon" : "Rejoindre","lemon", () => vcJoin(k, l))); c.appendChild(a);
     g.appendChild(c); });
   root.appendChild(g);
-  root.appendChild(el("p","status","On arrive micro ouvert et caméra coupée. « Partager mon écran » ouvre le salon en demandant tout de suite quelle fenêtre ou quel écran montrer. Le premier qui ouvre un salon peut devoir se connecter avec Google : c’est demandé par Jitsi, le service utilisé."));
+  root.appendChild(el("p","status","Le son et l’image passent directement d’un ordinateur à l’autre. On peut changer d’onglet pendant un appel : une barre reste en bas de l’écran. Le navigateur demande l’accès au micro la première fois."));
 }
-async function leaveVoice(room){ try { await save("messages", null, { ch: "voix", voice: room, who: S.me || "Gabriel", text: "", left: true, at: new Date().toISOString() }); } catch(e){} }
+window.addEventListener("beforeunload", () => { if (VC.room) navigator.sendBeacon && fetch("/api/rtc/leave", { method: "POST", keepalive: true, headers: { "Content-Type": "application/json", "Authorization": "Bearer " + (localStorage.getItem("gacolet-gestion-cle") || "") }, body: JSON.stringify({ room: VC.room, pid: VC.pid }) }).catch(() => {}); });
 function vMessagerie(root){
   const me = S.me || "Gabriel";
   const mode = S.ui.msgMode || "main";
@@ -1511,6 +1623,8 @@ function render(){
   else if (S.canWrite === false) root.insertBefore(el("p","status","Consultation seule."), root.firstChild);
   if (focusId){ const f = document.getElementById(focusId); if (f){ f.focus(); try { if (caret != null) f.setSelectionRange(caret, caret); } catch(e){} } }
   { const n = S.ready ? unreadRole() : 0; document.title = (n ? "(" + n + ") " : "") + "Gacolet"; }
+  if (S.ready && !RTC_T) rtcTick();
+  vcRender();
 }
 
 /* ---------- Compte connecté ---------- */
