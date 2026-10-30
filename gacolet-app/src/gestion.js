@@ -235,6 +235,68 @@ module.exports = function (app, { db, wrap, root }) {
     res.json({ url: "/?apercu=" + u.token });
   }));
 
+  // ---------- Meta : suivi des contacts par client (tables de l’espace client) ----------
+  const metaRole = (req, res, next) => req.user && (req.user.role === "owner" || req.user.role === "commercial") ? next() : res.status(403).json({ error: "Réservé aux propriétaires et aux commerciaux." });
+  app.get("/api/g-meta", auth, metaRole, wrap(async (req, res) => {
+    const cl = (await db.all("SELECT id, name, modules, contacts_goal, qualified_definition, active FROM clients ORDER BY name")).filter(c => c.active && String(c.modules || "").split(",").includes("meta"));
+    const ids = cl.map(c => c.id);
+    const leads = ids.length ? await db.all("SELECT id, client_id, date, title, detail, qualified, created_at FROM leads WHERE client_id IN (" + ids.map(() => "?").join(",") + ") ORDER BY date DESC, id DESC LIMIT 2000", ids) : [];
+    res.json({ clients: cl.map(c => ({ id: c.id, name: c.name, goal: Number(c.contacts_goal) || 0, qualifiedDef: c.qualified_definition || "" })), leads });
+  }));
+  app.post("/api/g-meta/lead", auth, metaRole, wrap(async (req, res) => {
+    const b = req.body || {}, cid = Number(b.clientId), date = String(b.date || "").slice(0, 10), title = String(b.title || "").trim().slice(0, 200);
+    if (!cid || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !title) return res.status(400).json({ error: "Client, date et contact sont obligatoires." });
+    const c = await db.one("SELECT id, modules FROM clients WHERE id = ?", [cid]);
+    if (!c) return res.status(404).json({ error: "Client introuvable." });
+    const r = await db.run("INSERT INTO leads (client_id, date, title, detail, created_at) VALUES (?,?,?,?,?)", [cid, date, title, String(b.detail || "").slice(0, 2000), new Date().toISOString()]);
+    res.json({ ok: true, id: r.id });
+  }));
+  app.patch("/api/g-meta/lead/:id", auth, metaRole, wrap(async (req, res) => {
+    const q = req.body && req.body.qualified; const v = q === 1 || q === 0 ? q : null;
+    await db.run("UPDATE leads SET qualified = ?, qualified_at = ? WHERE id = ?", [v, new Date().toISOString(), Number(req.params.id)]);
+    res.json({ ok: true });
+  }));
+  app.delete("/api/g-meta/lead/:id", auth, metaRole, wrap(async (req, res) => {
+    await db.run("DELETE FROM leads WHERE id = ?", [Number(req.params.id)]);
+    res.json({ ok: true });
+  }));
+
+  // ---------- Codes clients (espace client) : réservé aux propriétaires ----------
+  const ALPHA = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const rnd = n => Array.from(crypto.randomBytes(n), b => ALPHA[b % ALPHA.length]).join("");
+  const SUFFIX = { com: "RS", meta: "MT", "com,meta": "RM" };
+  const newCode = async m => { let code; for (let i = 0; i < 30; i++){ code = "GAC-" + rnd(4) + "-" + (SUFFIX[m] || "RS"); if (!await db.one("SELECT id FROM clients WHERE code = ?", [code])) return code; } throw new Error("Code impossible à générer, réessaie."); };
+  const modsOf = arr => ["com", "meta"].filter(x => (arr || []).includes(x)).join(",") || "com";
+  app.get("/api/g-codes", auth, ownerOnly, wrap(async (req, res) => {
+    const cl = await db.all("SELECT id, code, name, formula, modules, contacts_goal, qualified_definition, active, created_at FROM clients ORDER BY name");
+    const us = await db.all("SELECT id, client_id, prenom, nom, email, created_at FROM users WHERE token NOT LIKE 'retire-%' ORDER BY id");
+    res.json({ clients: cl.map(c => ({ ...c, people: us.filter(u => u.client_id === c.id) })) });
+  }));
+  app.post("/api/g-codes", auth, ownerOnly, wrap(async (req, res) => {
+    const b = req.body || {}, name = String(b.name || "").trim().slice(0, 120);
+    if (!name) return res.status(400).json({ error: "Nom du client obligatoire." });
+    const m = modsOf(b.modules), code = await newCode(m);
+    await db.run("INSERT INTO clients (code, name, formula, modules, metricool_blog_id, contacts_goal, qualified_definition, drive_url, active, created_at) VALUES (?,?,?,?,?,?,?,?,1,?)",
+      [code, name, String(b.formula || "").slice(0, 120), m, "", Number(b.goal) || 0, String(b.qualifiedDef || "").slice(0, 2000), "", new Date().toISOString()]);
+    res.json({ ok: true, code });
+  }));
+  app.patch("/api/g-codes/:id", auth, ownerOnly, wrap(async (req, res) => {
+    const id = Number(req.params.id), b = req.body || {};
+    const c = await db.one("SELECT * FROM clients WHERE id = ?", [id]); if (!c) return res.status(404).json({ error: "Client introuvable." });
+    if (b.renew){ const code = await newCode(c.modules); await db.run("UPDATE clients SET code = ? WHERE id = ?", [code, id]); return res.json({ ok: true, code }); }
+    const m = b.modules ? modsOf(b.modules) : c.modules;
+    await db.run("UPDATE clients SET name = ?, formula = ?, modules = ?, contacts_goal = ?, qualified_definition = ?, active = ? WHERE id = ?",
+      [b.name != null ? String(b.name).trim().slice(0, 120) || c.name : c.name, b.formula != null ? String(b.formula).slice(0, 120) : c.formula, m,
+       b.goal != null ? Number(b.goal) || 0 : c.contacts_goal, b.qualifiedDef != null ? String(b.qualifiedDef).slice(0, 2000) : c.qualified_definition, b.active != null ? (b.active ? 1 : 0) : c.active, id]);
+    if (m !== c.modules){ const code = c.code.replace(/-\w{2}$/, "-" + (SUFFIX[m] || "RS")); if (!await db.one("SELECT id FROM clients WHERE code = ? AND id <> ?", [code, id])) await db.run("UPDATE clients SET code = ? WHERE id = ?", [code, id]); }
+    res.json({ ok: true });
+  }));
+  app.delete("/api/g-codes/user/:id", auth, ownerOnly, wrap(async (req, res) => {
+    // On coupe l’accès sans effacer l’historique (validations, demandes) : le jeton est remplacé.
+    await db.run("UPDATE users SET token = ? WHERE id = ?", ["retire-" + crypto.randomBytes(20).toString("hex"), Number(req.params.id)]);
+    res.json({ ok: true });
+  }));
+
   // ---------- GIF (GIPHY) ----------
   app.get("/api/g-gifs", auth, wrap(async (req, res) => {
     const key = process.env.GIPHY_KEY;
