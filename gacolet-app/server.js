@@ -41,6 +41,7 @@ const auth = (req, res, next) => (async () => {
   if (!u) return res.status(401).json({ error: "Session expirée. Saisissez à nouveau votre code." });
   const c = await db.one("SELECT * FROM clients WHERE id = ? AND active = 1", [u.client_id]);
   if (!c) return res.status(401).json({ error: "Compte désactivé. Contactez l'agence." });
+  if (u.email === "apercu@agence.interne" && req.method !== "GET") return res.status(403).json({ error: "Aperçu de l’agence : lecture seule, rien n’est envoyé." });
   req.user = u; req.client = c; next();
 })().catch(e => { console.error(e); res.status(500).json({ error: "Erreur du serveur." }); });
 const mw = fn => fn;
