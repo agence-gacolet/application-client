@@ -1615,7 +1615,7 @@ const ICONS = {
   plus:'<path d="M5 7h14M5 12h14M5 17h14"/>'
 };
 const SHORT = {fiches:"Tableau clients", parametres:"Paramètres", accueil:"Accueil", agenda:"Agenda", taches:"Tâches", commercial:"Commercial", campagnes:"Campagnes", montage:"Montage", publications:"Publications", clients:"Calendrier clients", messagerie:"Messagerie", vocal:"Vocal", formation:"Formation"};
-const MOBILE_MAIN = ["accueil","agenda","taches","commercial"];
+const MOBILE_MAIN = ["accueil","agenda","taches","messagerie"];
 const ico = k => { const s = document.createElementNS("http://www.w3.org/2000/svg","svg"); s.setAttribute("viewBox","0 0 24 24"); s.setAttribute("aria-hidden","true"); s.classList.add("ico"); s.innerHTML = ICONS[k] || ""; return s; };
 function renderTabs(){
   const me = S.me || "Gabriel";
@@ -1645,6 +1645,13 @@ function openMore(){
 }
 let rq = 0;
 function renderSoon(){ if (rq) return; rq = requestAnimationFrame(() => { rq = 0; render(); }); }
+/* Sur téléphone, chaque ligne de tableau devient une carte : on recopie l’intitulé de colonne sur chaque case. */
+function cardLabels(root){
+  root.querySelectorAll("table.t").forEach(t => { if (t.classList.contains("ms-t")) return;
+    const hs = [...t.querySelectorAll("thead th")].map(th => th.textContent.trim());
+    t.querySelectorAll("tbody tr").forEach(tr => { [...tr.children].forEach((td, i) => { if (td.tagName === "TD" && hs[i] && !td.hasAttribute("colspan")) td.dataset.label = hs[i]; }); });
+  });
+}
 function render(){
   renderTabs();
   const root = $("#app");
@@ -1653,7 +1660,7 @@ function render(){
   document.body.classList.toggle("chat-full", S.view === "messagerie" && !S.failed && !!S.ready);
   if (S.failed){ root.appendChild(head("Gestionnaire", "")); root.appendChild(el("p","empty",S.failed)); return; }
   if (!S.ready){ root.appendChild(head(VIEWS.find(v => v[0] === S.view)[1], "Chargement des données de l’agence…")); root.appendChild(el("p","empty","Les tâches, le commercial, les campagnes, les calendriers et l’agenda s’affichent dans un instant.")); return; }
-  try { RENDER[S.view](root); } catch(x){ root.appendChild(el("p","err","Affichage impossible : "+(x && x.message))); console.error(x); }
+  try { RENDER[S.view](root); cardLabels(root); } catch(x){ root.appendChild(el("p","err","Affichage impossible : "+(x && x.message))); console.error(x); }
   if (S.preview){ const b = el("div","pv-bar"); b.append(el("span",null,"Aperçu : tu vois l’application comme "+S.me+" ("+(ROLE_LABEL[S.role]||S.role)+"). Lecture seule.")); b.appendChild(btn("Quitter l’aperçu","sm", () => { GC.setAs(""); location.hash = "#parametres"; location.reload(); })); root.insertBefore(b, root.firstChild); }
   else if (S.canWrite === false) root.insertBefore(el("p","status","Consultation seule."), root.firstChild);
   if (focusId){ const f = document.getElementById(focusId); if (f){ f.focus(); try { if (caret != null) f.setSelectionRange(caret, caret); } catch(e){} } }
