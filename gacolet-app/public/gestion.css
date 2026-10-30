@@ -499,3 +499,14 @@ details.box[open] summary::after{content:"\2212"}
 .msg-audio{display:flex;align-items:center;gap:10px;margin-top:4px}
 .msg-audio audio{height:38px;width:300px;max-width:100%;color-scheme:dark}
 .msg-dur{font-size:12px;color:var(--faint);font-variant-numeric:tabular-nums}
+/* Messagerie : waveform des vocaux */
+.vw{display:flex;align-items:center;gap:12px;margin-top:6px;padding:7px 16px 7px 7px;background:var(--surface);border:1px solid var(--line-2);border-radius:26px;width:max-content;max-width:100%}
+.vw-play{width:36px;height:36px;flex:none;border:0;border-radius:50%;background:var(--lemon);color:#0E0E0D;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.vw-play svg{width:16px;height:16px;fill:currentColor}
+.vw-bars{display:flex;align-items:center;gap:2px;height:32px;cursor:pointer}
+.vw-bars span{width:3px;min-height:4px;border-radius:2px;background:var(--faint);transition:background .12s}
+.vw-bars span.on{background:var(--lemon)}
+.vw-time{min-width:30px;font-size:12px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.vw audio{display:none}
+@media (hover:none){.msg-a{display:flex}}
+.msg-a button.armed{color:#FF5A4E;text-decoration:none;font-weight:700}
