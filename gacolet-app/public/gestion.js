@@ -26,6 +26,9 @@ const NAV_GROUPS = [["",["accueil"]],["Au quotidien",["agenda","taches","message
 const MERGED = { clients: ["agenda","agHub"], montage: ["taches","tHub"] };
 /* Rôles : ce que chaque siège voit. Le serveur applique les mêmes limites aux données. */
 const ROLE_LABEL = {owner:"Propriétaire", member:"Membre", commercial:"Commercial"};
+/* Poste : le métier de la personne (affiché), distinct du rôle (les droits). */
+const POSTES = ["Direction","Commercial","Vidéaste","Monteur","Community manager","Graphiste","Chargé de communication","Photographe","Alternant","Stagiaire"];
+function posteInput(id, value){ const i = el("input"); i.id = id; i.value = value || ""; i.placeholder = "Ex. Vidéaste"; i.maxLength = 60; const dl = el("datalist"); dl.id = id + "-l"; POSTES.forEach(x => { const o = el("option"); o.value = x; dl.appendChild(o); }); i.setAttribute("list", dl.id); return [i, dl]; }
 const ROLE_VIEWS = {
   member: ["accueil","agenda","taches","messagerie","vocal","formation","parametres"],
   commercial: ["accueil","agenda","taches","messagerie","vocal","commercial","clients","montage","publications","campagnes","formation","parametres"]
@@ -1193,7 +1196,7 @@ function profileCard(name){
     const big = avatarEl(name, 132); big.classList.add("pf-av");
     if (t.avatar){ big.classList.add("av-click"); big.title = "Voir en grand"; big.onclick = () => window.open(t.avatar, "_blank", "noopener"); }
     const h = el("h3",null,name); h.id = "mtitle";
-    m.append(big, h, el("p","pf-role", ROLE_LABEL[t.role] || ""));
+    m.append(big, h, el("p","pf-role", [t.poste, ROLE_LABEL[t.role]].filter(Boolean).join(", ")));
     const dl = el("dl","pf-dl");
     if (t.email){ const a = el("a",null,t.email); a.href = "mailto:" + t.email; dl.append(el("dt",null,"Courriel"), (() => { const d = el("dd"); d.appendChild(a); return d; })()); }
     if (t.tel){ const a = el("a",null,t.tel); a.href = "tel:" + t.tel.replace(/\s/g, ""); dl.append(el("dt",null,"Téléphone"), (() => { const d = el("dd"); d.appendChild(a); return d; })()); }
@@ -1683,7 +1686,7 @@ function applyMe(r){
   const lab = document.querySelector(".me"); if (lab) lab.hidden = !S.secours;
   if (S.secours){ meSel.textContent = ""; PEOPLE.forEach(p => { const o = el("option",null,p); o.value = p; meSel.appendChild(o); }); if (S.me) meSel.value = S.me; }
   const ac = $("#acct");
-  if (ac && !S.secours){ ac.hidden = false; const ov = ac.querySelector(".av"); if (ov) ov.remove(); ac.prepend(avatarEl(u.name, 34, { src: (u.info || {}).avatar || "" })); $("#acct-name").textContent = u.name; $("#acct-role").textContent = (ROLE_LABEL[u.role] || "") + (S.preview ? ", aperçu" : ""); }
+  if (ac && !S.secours){ ac.hidden = false; const ov = ac.querySelector(".av"); if (ov) ov.remove(); ac.prepend(avatarEl(u.name, 34, { src: (u.info || {}).avatar || "" })); $("#acct-name").textContent = u.name; $("#acct-role").textContent = ((u.info || {}).poste || ROLE_LABEL[u.role] || "") + (S.preview ? ", aperçu" : ""); }
   const toAcct = () => { S.ui.pmTab = "compte"; remember(); go("parametres"); };
   if (ac){ ac.onclick = toAcct; ac.title = "Mon compte"; ac.setAttribute("role","button"); ac.tabIndex = 0; ac.onkeydown = e => { if (e.key === "Enter") toAcct(); }; }
   const mn = $("#me-name"); if (mn && !S.secours) mn.onclick = toAcct;
@@ -1743,14 +1746,15 @@ function pmCompte(w){
   if (info.avatar) pa.appendChild(btn("Retirer la photo","", async () => { try { await setAv(""); toast("Photo retirée."); } catch(x){ toast(x.message); } }));
   pr.appendChild(pa); cp.appendChild(pr); w.appendChild(cp);
   const c1 = pmCard("Mon profil"); const dl = el("dl","pm-dl");
-  [["Prénom", u.name], ["Identifiant", u.username], ["Rôle", ROLE_LABEL[u.role] || u.role]].forEach(([k, v]) => dl.append(el("dt",null,k), el("dd",null,v || ""))); c1.appendChild(dl); w.appendChild(c1);
+  [["Prénom", u.name], ["Poste", info.poste || "À renseigner"], ["Identifiant", u.username], ["Rôle", ROLE_LABEL[u.role] || u.role]].forEach(([k, v]) => dl.append(el("dt",null,k), el("dd",null,v || ""))); c1.appendChild(dl); w.appendChild(c1);
 
-  const c2 = pmCard("Coordonnées", "Pour que l’équipe puisse te joindre.");
+  const c2 = pmCard("Poste et coordonnées", "Ton métier à l’agence, et comment l’équipe peut te joindre.");
   const f2 = el("form"); const g2 = el("div","pm-grid");
   const [l1, iMail] = pmField("Courriel","email",info.email,"email"), [l2, iTel] = pmField("Téléphone","tel",info.tel,"tel");
-  g2.append(l1, l2); f2.appendChild(g2);
+  const l0 = el("label","pm-f"); l0.appendChild(el("span",null,"Poste")); const [iPoste, dlP] = posteInput("pm-poste", info.poste); l0.append(iPoste, dlP);
+  g2.append(l0, l1, l2); f2.appendChild(g2);
   const s2 = el("button","btn lemon","Enregistrer"); s2.type = "submit"; f2.appendChild(s2);
-  f2.onsubmit = async e => { e.preventDefault(); s2.disabled = true; try { const r = await GC.api("PATCH","/api/g-me",{ email: iMail.value.trim(), tel: iTel.value.trim() }); S.user.info = r.info; toast("Coordonnées enregistrées."); } catch(x){ toast(x.message); } s2.disabled = false; };
+  f2.onsubmit = async e => { e.preventDefault(); s2.disabled = true; try { const r = await GC.api("PATCH","/api/g-me",{ poste: iPoste.value.trim(), email: iMail.value.trim(), tel: iTel.value.trim() }); S.user.info = r.info; const t = (S.team || []).find(x => x.name === S.user.name); if (t) t.poste = r.info.poste || ""; applyMe({ user: S.user, team: S.team }); toast("Profil enregistré."); } catch(x){ toast(x.message); } s2.disabled = false; };
   c2.appendChild(f2); w.appendChild(c2);
 
   const c3 = pmCard("Mot de passe", "8 caractères au moins. Le changer déconnecte tes autres appareils.");
@@ -1849,10 +1853,14 @@ function pmEquipe(w){
   const us = S.users, act = us.filter(u => !u.disabled);
   const c = pmCard("Sièges", act.length + " siège" + (act.length > 1 ? "s" : "") + " actif" + (act.length > 1 ? "s" : "") + " : " + ["owner","member","commercial"].map(r => act.filter(u => u.role === r).length + " " + (ROLE_LABEL[r] || r).toLowerCase() + (act.filter(u => u.role === r).length > 1 ? "s" : "")).join(", ") + ".");
   const top = el("div","pm-actions"); top.appendChild(addBtn("Ajouter un siège", () => seatForm())); c.appendChild(top);
-  const { w: tw, tb } = table(["Nom","Identifiant","Rôle","Mot de passe","Statut",""]);
+  const { w: tw, tb } = table(["Nom","Poste","Identifiant","Rôle","Mot de passe","Statut",""]);
   us.forEach(u => {
     const tr = el("tr","row" + (u.disabled ? " done" : ""));
-    td(tr, u.name + (S.user && u.id === S.user.id ? " (toi)" : ""), "nw"); td(tr, u.username, "nw");
+    td(tr, u.name + (S.user && u.id === S.user.id ? " (toi)" : ""), "nw");
+    { const [pi, pdl] = posteInput("po-" + u.id, u.poste); pi.className = "inl po-in"; pi.disabled = !writable(); let last = u.poste || "";
+      const saveP = async () => { const v = pi.value.trim(); if (v === last) return; last = v; try { await GC.api("PATCH","/api/g-users/"+u.id,{ poste: v }); u.poste = v; const t = (S.team || []).find(x => x.name === u.name); if (t) t.poste = v; toast("Poste de " + u.name + " enregistré."); } catch(x){ toast(x.message); } };
+      pi.onchange = saveP; pi.onkeydown = e => { if (e.key === "Enter"){ e.preventDefault(); pi.blur(); } }; const c = el("div"); c.append(pi, pdl); td(tr, c); }
+    td(tr, u.username, "nw");
     const sel = el("select","inl"); Object.entries(ROLE_LABEL).forEach(([k, l]) => { const o = el("option",null,l); o.value = k; sel.appendChild(o); }); sel.value = u.role; sel.disabled = !writable();
     sel.onchange = async () => { try { await GC.api("PATCH","/api/g-users/"+u.id,{ role: sel.value }); toast(u.name + " passe " + (ROLE_LABEL[sel.value] || "").toLowerCase() + "."); } catch(x){ toast(x.message); } reloadUsers(); };
     td(tr, sel);
@@ -1895,7 +1903,7 @@ function pmEquipe(w){
 function seatForm(){
   openForm({ key:"seat", title:"Nouveau siège", intro:"Choisis le rôle et un mot de passe provisoire à transmettre à la personne. Elle pourra le changer dans Paramètres.", okLabel:"Créer le siège", done:"Siège créé.",
     fields:[{k:"name",label:"Prénom",req:"Indique le prénom.",half:true},{k:"username",label:"Identifiant",req:"Choisis un identifiant.",half:true,ph:"ex. lea"},
-      {k:"role",label:"Rôle",type:"select",options:[["member","Membre"],["commercial","Commercial"],["owner","Propriétaire"]]},
+      {k:"poste",label:"Poste",list:POSTES,ph:"Ex. Vidéaste",half:true},{k:"role",label:"Rôle (droits d’accès)",type:"select",half:true,options:[["member","Membre"],["commercial","Commercial"],["owner","Propriétaire"]]},
       {k:"password",label:"Mot de passe provisoire",type:"password",ph:"8 caractères au moins",req:"Indique un mot de passe provisoire."}],
     onSave: async out => { try { await GC.api("POST","/api/g-users",out); } catch(x){ toast(x.message); throw x; } reloadUsers(); } });
 }
