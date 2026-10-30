@@ -480,3 +480,4 @@ details.box[open] summary::after{content:"\2212"}
 .w2-tile.zero b{color:var(--faint)}
 .w2-tile i{display:block;margin-top:4px;font-style:normal;font-size:12px;color:var(--lemon)}
 @media (prefers-reduced-motion:reduce){.welcome2::before,.w2-mug .st{animation:none}}
+@media (max-width:640px){.w2-mug{width:52px;height:52px}.w2-lab{margin-top:40px}.w2-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:100%}.w2-tile{min-width:0;padding:16px 8px 14px;border-radius:14px}.w2-tile b{font-size:44px}.w2-tile span{font-size:12px}}
