@@ -1006,8 +1006,8 @@ function forwardMsg(m){
     const ls = el("div","fw-list"); md.appendChild(ls);
     const draw = () => { ls.textContent = ""; const t = q.value.trim().toLowerCase();
       keys.filter(k => !t || label(k).toLowerCase().includes(t)).forEach(k => {
-        const b = el("button","fw-row"); b.type = "button"; b.append(chAvatar(k, 36), el("span",null,label(k)));
-        b.onclick = async () => { closeModal(); try { await save("messages", null, Object.assign({ ch: k, who: me, text: m.text || "", at: new Date().toISOString(), fwd: m.who || "1" }, m.files ? { files: m.files } : {}, m.audio ? { audio: m.audio, dur: m.dur } : {}, m.wave ? { wave: m.wave } : {})); toast && toast("Message transféré à " + label(k)); } catch(e){} };
+        const b = el("button","fw-row"); b.type = "button"; const nm = el("span",null,label(k)); b.append(chAvatar(k, 36), nm);
+        b.onclick = async () => { if (!b.classList.contains("armed")){ ls.querySelectorAll(".fw-row.armed").forEach(x => { x.classList.remove("armed"); x.lastChild.textContent = x.dataset.l; }); b.dataset.l = label(k); b.classList.add("armed"); nm.textContent = "Confirmer le transfert à " + label(k); return; } closeModal(); try { await save("messages", null, Object.assign({ ch: k, who: me, text: m.text || "", at: new Date().toISOString(), fwd: m.who || "1" }, m.files ? { files: m.files } : {}, m.audio ? { audio: m.audio, dur: m.dur } : {}, m.wave ? { wave: m.wave } : {})); toast && toast("Message transféré à " + label(k)); } catch(e){} };
         ls.appendChild(b); }); };
     q.oninput = draw; draw();
     const act = el("div","actions"); act.appendChild(btn("Annuler","", () => closeModal())); md.appendChild(act);
