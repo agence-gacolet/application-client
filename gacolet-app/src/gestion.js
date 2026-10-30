@@ -131,7 +131,7 @@ module.exports = function (app, { db, wrap, root }) {
   }));
   const infoOf = u => { try { return JSON.parse(u.info || "{}"); } catch (e) { return {}; } };
   app.get("/api/g-me", auth, wrap(async (req, res) => {
-    const team = (await db.all("SELECT name, role FROM gusers WHERE disabled = 0 ORDER BY created_at")).map(r => ({ name: r.name, role: r.role }));
+    const team = (await db.all("SELECT name, role, info FROM gusers WHERE disabled = 0 ORDER BY created_at")).map(r => ({ name: r.name, role: r.role, avatar: infoOf(r).avatar || "" }));
     const row = req.user.secours ? null : await db.one("SELECT * FROM gusers WHERE id = ?", [req.user.id]);
     res.json({ user: Object.assign({}, req.user, row ? { info: infoOf(row) } : {}), team });
   }));
@@ -141,6 +141,7 @@ module.exports = function (app, { db, wrap, root }) {
     const b = req.body || {}, info = infoOf(u);
     if (b.email != null) { const e = String(b.email).trim().slice(0, 160); if (e && !/^\S+@\S+\.\S+$/.test(e)) return res.status(400).json({ error: "Adresse de courriel invalide." }); info.email = e; }
     if (b.tel != null) info.tel = String(b.tel).trim().slice(0, 40);
+    if (b.avatar != null) { const a = String(b.avatar); if (a && !/^\/f\/[a-f0-9]{32}\.(jpe?g|png|webp|gif)$/.test(a)) return res.status(400).json({ error: "Photo invalide." }); info.avatar = a; }
     await db.run("UPDATE gusers SET info = ? WHERE id = ?", [JSON.stringify(info), u.id]);
     res.json({ ok: true, info });
   }));
