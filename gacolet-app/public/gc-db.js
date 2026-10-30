@@ -9,6 +9,8 @@
 
   async function call(method, url, body, isForm) {
     const h = { Authorization: "Bearer " + getKey() };
+    try { const me = JSON.parse(localStorage.getItem("gacolet-moi") || "null"); if (me) h["X-GC-Me"] = encodeURIComponent(me); } catch (e) {}
+    try { const as = sessionStorage.getItem("gacolet-as"); if (as) h["X-GC-As"] = as; } catch (e) {}
     if (body && !isForm) h["Content-Type"] = "application/json";
     const r = await fetch(url, { method, headers: h, body: body ? (isForm ? body : JSON.stringify(body)) : undefined });
     if (r.status === 401) { setKey(""); window.dispatchEvent(new Event("gc-logout")); throw new Error("Connexion requise."); }
@@ -90,13 +92,16 @@
 
   window.GC = {
     loggedIn: () => !!getKey(),
-    async login(password) {
-      const r = await fetch("/api/admin/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password }) });
+    async login(username, password) {
+      const r = await fetch("/api/g-login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password }) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.error || "Connexion impossible.");
       setKey(j.key);
     },
-    logout() { setKey(""); location.reload(); },
+    logout() { setKey(""); try { sessionStorage.removeItem("gacolet-as"); } catch (e) {} location.reload(); },
+    api: call,
+    setKey,
+    setAs(id) { try { id ? sessionStorage.setItem("gacolet-as", id) : sessionStorage.removeItem("gacolet-as"); } catch (e) {} },
     sync,
   };
   window.claude = { use: async what => ({ db: { collection }, user, assets })[what] || null };
