@@ -25,7 +25,7 @@ const upload = multer({
 
 const now = () => new Date().toISOString();
 const clean = (v, max = 500) => String(v == null ? "" : v).trim().slice(0, max);
-const wrap = fn => (req, res) => fn(req, res).catch(e => { console.error(e); res.status(500).json({ error: "Erreur du serveur. Réessayez dans un instant." }); });
+const wrap = fn => (req, res) => fn(req, res).catch(e => { console.error(e); res.status(500).json({ error: "Erreur du serveur. Réessayez dans un instant.", detail: String((e && e.message) || e).slice(0, 300) }); });
 const mods = c => String(c.modules || "com").split(",").filter(Boolean);
 
 // ---------- Codes clients ----------
