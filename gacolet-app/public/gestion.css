@@ -386,3 +386,54 @@ details.box[open] summary::after{content:"\2212"}
 .hmore:hover{color:var(--ink)}
 .hblock{display:flex;flex-direction:column}
 @media (max-width:900px){.home{grid-template-columns:1fr;gap:36px;margin-top:24px}}
+
+/* Accueil : phrase et point de départ */
+.hsum.say{color:var(--ink-2);font-size:18px;font-weight:500;max-width:60ch;line-height:1.55}
+.hstart{margin-top:40px;max-width:760px}
+.hrow.go .ht{color:var(--lemon);font-weight:600;font-size:13px}
+.hrow.go:hover .ht{text-decoration:underline;text-underline-offset:3px}
+
+/* Messagerie */
+.chat{display:grid;grid-template-columns:220px minmax(0,1fr);gap:28px;margin-top:22px;height:calc(100vh - 230px);min-height:420px}
+.chat-side{display:flex;flex-direction:column;gap:1px;overflow:auto;padding-right:6px;scrollbar-width:thin}
+.chat-lab{font:400 18px/1 var(--display);font-style:italic;text-transform:uppercase;color:var(--muted);margin:14px 0 6px 8px}
+.chat-lab:first-child{margin-top:0}
+.chat-side button{text-align:left;background:none;border:0;padding:7px 10px;border-radius:7px;font-size:13.5px;font-weight:500;color:var(--ink-2);position:relative}
+.chat-side button:hover{background:var(--surface)}
+.chat-side button[aria-pressed="true"]{background:var(--surface);color:var(--ink);font-weight:700}
+.chat-side button.unread{font-weight:700;color:var(--ink)}
+.chat-side button.unread::after{content:"";position:absolute;right:10px;top:50%;width:7px;height:7px;margin-top:-3.5px;border-radius:50%;background:var(--lemon)}
+.chat-main{display:flex;flex-direction:column;min-height:0;border:1px solid var(--line);border-radius:12px;background:var(--card)}
+.chat-title{margin:0;padding:16px 20px 12px;border-bottom:1px solid var(--line);font:400 26px/1 var(--display);font-style:italic;text-transform:uppercase}
+.chat-list{flex:1;overflow:auto;padding:10px 20px 16px;display:flex;flex-direction:column}
+.chat-empty{color:var(--faint);margin:auto;text-align:center}
+.chat-day{align-self:center;font-size:11.5px;font-weight:600;color:var(--muted);margin:16px 0 6px;padding:3px 10px;border:1px solid var(--line);border-radius:12px}
+.msg{position:relative;padding:8px 0 2px;max-width:640px}
+.msg.cont{padding-top:2px}
+.msg-h{display:flex;align-items:baseline;gap:8px;font-size:13px}
+.msg-h b{font-weight:700}
+.msg.mine .msg-h b{color:var(--lemon)}
+.msg-h span{font-size:11.5px;color:var(--faint)}
+.msg-t{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14.5px;line-height:1.5;color:var(--ink-2);margin-top:2px}
+.msg-a{display:none;gap:10px;margin-top:2px}
+.msg:hover .msg-a{display:flex}
+.msg-a button{background:none;border:0;padding:0;font-size:11.5px;color:var(--muted);text-decoration:underline;text-underline-offset:2px}
+.msg-a button:hover{color:var(--ink)}
+.chat-form{display:flex;gap:10px;align-items:flex-end;padding:12px;border-top:1px solid var(--line)}
+.chat-form textarea{flex:1;resize:none;border:1px solid var(--line-2);border-radius:9px;background:var(--paper);color:var(--ink);padding:10px 12px;font-size:14.5px;line-height:1.4;max-height:160px}
+.chat-form textarea:focus{outline:none;border-color:var(--ink)}
+@media (max-width:900px){.chat{grid-template-columns:1fr;height:auto}.chat-side{flex-direction:row;overflow-x:auto;padding:0 0 6px}.chat-lab{display:none}.chat-side button{white-space:nowrap}.chat-main{height:calc(100vh - 260px)}}
+
+/* Formation */
+.fo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px}
+.fo-card{display:flex;flex-direction:column;gap:6px;text-align:left;background:none;border:0;padding:0;color:inherit}
+.fo-th{position:relative;aspect-ratio:16/9;border-radius:10px;background:var(--surface);border:1px solid var(--line);display:grid;place-items:center;transition:border-color .15s}
+.fo-card:hover .fo-th{border-color:var(--lemon)}
+.fo-play{width:0;height:0;border-left:18px solid var(--lemon);border-top:11px solid transparent;border-bottom:11px solid transparent;margin-left:4px}
+.fo-card b{font-weight:700;font-size:14.5px}
+.fo-card span{font-size:12.5px;color:var(--muted)}
+.fo-card.seen .fo-th{opacity:.55}
+.fo-player{position:relative;aspect-ratio:16/9;margin:14px 0;border-radius:10px;overflow:hidden;background:#000}
+.fo-player iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.fo-desc{white-space:pre-wrap;color:var(--ink-2)}
+.modal:has(.fo-player){width:min(900px,100%)}
