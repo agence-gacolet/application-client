@@ -5,7 +5,7 @@
 /* ---------- Constantes ---------- */
 const PEOPLE = ["Gabriel","Matis","Clara"];
 const OWNERS = ["Gabriel","Matis","Clara","À attribuer"];
-const POLES = [["00","00 · DIRECTION & DIVERS"],["10","10 · STRATÉGIE & CONSEIL"],["20","20 · PRODUCTION"],["30","30 · GRAPHISME & IMPRESSION"],["40","40 · RÉSEAUX SOCIAUX"],["50","50 · PUBLICITÉ"],["60","60 · WEB & RÉFÉRENCEMENT"]];
+const POLES = [["00","00 DIRECTION & DIVERS"],["10","10 STRATÉGIE & CONSEIL"],["20","20 PRODUCTION"],["30","30 GRAPHISME & IMPRESSION"],["40","40 RÉSEAUX SOCIAUX"],["50","50 PUBLICITÉ"],["60","60 WEB & RÉFÉRENCEMENT"]];
 const POLE = Object.fromEntries(POLES);
 const EV_TYPES = ["Tournage","Éditorial","Maroudeur","Rendez-vous"];
 const EV_STATUS = ["Prévu","Fait","Annulé"];
@@ -246,13 +246,13 @@ const AGENCE = "Agence Gacolet";
 function agendaItems(){
   const L = new Set(S.ui.agLayers), out = [];
   if (L.has("events")) S.d.events.forEach(e => { if (!S.ui.agTypes.includes(e.type)) return; out.push({k:"events", date:e.date, time:e.time||"", client:e.client, label:e.title||e.type, who:e.who||[], ref:e, cls:"ev t-"+e.type+" s-"+(e.status||"Prévu"), meta:[e.type, e.place, (e.files||[]).length ? plural(e.files.length,"fichier") : ""].filter(Boolean).join(", "), tag:e.status||"Prévu"}); });
-  if (L.has("tasks")) openTasks().forEach(t => { if (!isISO(t.date)) return; const late = lateDays(t.date) > 0; out.push({k:"tasks", date: t.date, client:t.client, label:t.title, who:[t.who], ref:t, cls:"ev k-task"+(late?" late":""), meta:"Tâche · "+t.who, tag:late ? lateDays(t.date)+" j de retard" : "Tâche"}); });
-  if (L.has("relances")) S.d.commercial.forEach(c => { if (!isISO(c.nextDate)) return; out.push({k:"relances", date:c.nextDate, client:c.company, label:c.nextAction||"Relance", who:["Gabriel"], ref:c, cls:"ev k-relance", meta:"Commercial · "+(c.stage||""), tag:c.kind}); });
-  if (L.has("cevents")) S.d.cevents.forEach(e => { if (!isISO(e.date)) return; out.push({k:"cevents", date:e.date, client:e.client, label:e.subject, who:["Clara"], ref:e, cls:"ev k-cevent", meta:"Temps fort · préparer avant le "+fmtD(prepBy(e)), tag:e.piste ? "Piste" : (e.done ? "Fait" : "Temps fort")}); });
+  if (L.has("tasks")) openTasks().forEach(t => { if (!isISO(t.date)) return; const late = lateDays(t.date) > 0; out.push({k:"tasks", date: t.date, client:t.client, label:t.title, who:[t.who], ref:t, cls:"ev k-task"+(late?" late":""), meta:"Tâche, "+t.who, tag:late ? lateDays(t.date)+" j de retard" : "Tâche"}); });
+  if (L.has("relances")) S.d.commercial.forEach(c => { if (!isISO(c.nextDate)) return; out.push({k:"relances", date:c.nextDate, client:c.company, label:c.nextAction||"Relance", who:["Gabriel"], ref:c, cls:"ev k-relance", meta:"Commercial, "+(c.stage||""), tag:c.kind}); });
+  if (L.has("cevents")) S.d.cevents.forEach(e => { if (!isISO(e.date)) return; out.push({k:"cevents", date:e.date, client:e.client, label:e.subject, who:["Clara"], ref:e, cls:"ev k-cevent", meta:"Temps fort, préparer avant le "+fmtD(prepBy(e)), tag:e.piste ? "Piste" : (e.done ? "Fait" : "Temps fort")}); });
   if (L.has("keydates")) S.d.keydates.forEach(k => { if (!isISO(k.date)) return; out.push({k:"keydates", date:k.date, client:"", label:k.label, who:[], ref:k, cls:"ev k-keydate", meta:k.forWhom||"", tag:"Date clé"}); });
   if (L.has("posts")){
-    S.d.posts.forEach(p => { if (!isISO(p.date)) return; out.push({k:"posts", date:p.date, client:AGENCE, label:(p.type||"")+(p.client ? " · "+shortName(p.client) : ""), who:[postWho(p)], ref:p, cls:"ev k-post"+(postLate(p) ? " late" : ""), meta:["Com de l’agence", p.format, p.client, p.status].filter(Boolean).join(" · "), tag:postLate(p) ? "Montage en retard" : p.status}); });
-    S.d.edtodo.forEach(x => { if (x.done || !isISO(x.date)) return; const late = lateDays(x.date) > 0; out.push({k:"edtodo", date:x.date, client:AGENCE, label:x.title, who:x.who ? [x.who] : [], ref:x, cls:"ev k-task"+(late?" late":""), meta:"Com de l’agence · à faire"+(x.who ? " · "+x.who : ""), tag:late ? lateDays(x.date)+" j de retard" : "À faire"}); });
+    S.d.posts.forEach(p => { if (!isISO(p.date)) return; out.push({k:"posts", date:p.date, client:AGENCE, label:(p.type||"")+(p.client ? ", "+shortName(p.client) : ""), who:[postWho(p)], ref:p, cls:"ev k-post"+(postLate(p) ? " late" : ""), meta:["Com de l’agence", p.format, p.client, p.status].filter(Boolean).join(", "), tag:postLate(p) ? "Montage en retard" : p.status}); });
+    S.d.edtodo.forEach(x => { if (x.done || !isISO(x.date)) return; const late = lateDays(x.date) > 0; out.push({k:"edtodo", date:x.date, client:AGENCE, label:x.title, who:x.who ? [x.who] : [], ref:x, cls:"ev k-task"+(late?" late":""), meta:"Com de l’agence, à faire"+(x.who ? ", "+x.who : ""), tag:late ? lateDays(x.date)+" j de retard" : "À faire"}); });
   }
   return out.filter(i =>
     (!S.ui.agClient || i.client === S.ui.agClient || (i.k === "keydates" && (i.ref.clients||[]).some(c => c === S.ui.agClient || c === "Tous"))) &&
@@ -320,7 +320,7 @@ function editTask(t){
 function openCommercial(c){
   const late = lateDays(c.nextDate);
   openFacts({ title: c.company,
-    facts: [["Type", c.kind],["Étape", c.stage],["Prochaine action", c.nextAction],["Date", c.nextDate ? fmtDL(c.nextDate)+(late ? " · "+late+" j de retard" : "") : ""],["Dernier contact", c.lastContact],["J0", fmtFR(c.j0)],["Relance", c.relance],["Contact", c.contact],["Compte rendu", c.report],["Notes", c.notes]],
+    facts: [["Type", c.kind],["Étape", c.stage],["Prochaine action", c.nextAction],["Date", c.nextDate ? fmtDL(c.nextDate)+(late ? ", "+late+" j de retard" : "") : ""],["Dernier contact", c.lastContact],["J0", fmtFR(c.j0)],["Relance", c.relance],["Contact", c.contact],["Compte rendu", c.report],["Notes", c.notes]],
     quick: [["Pas de réponse", () => applyCo(c, coNoAnswer(c), "Relance programmée.")],["Devis envoyé", () => applyCo(c, coQuote(c), "Relance 1 dans 3 jours.")],
             ["Date donnée", () => editCoDate(c)],["Pas intéressé", () => applyCo(c, coNotInterested(c), "Reprise de contact dans 6 mois.")],["Signé", () => applyCo(c, coSigned(c), "Signé : démarrage le prochain jour ouvré.")],
             ["Compte rendu", () => editCoReport(c)]],
@@ -334,13 +334,13 @@ function editCoDate(c){
     onSave: o => patch("commercial", c.id, {nextDate:o.nextDate, nextAction:o.nextAction, lastContact: stamp(o.txt || "date donnée par le prospect")}) });
 }
 function editCoReport(c){
-  openForm({ key:"cor", title:"Compte rendu · "+c.company, intro:"Note l’échange. Utilise ensuite les boutons pour programmer la suite.", values:{txt:""},
+  openForm({ key:"cor", title:"Compte rendu, "+c.company, intro:"Note l’échange. Utilise ensuite les boutons pour programmer la suite.", values:{txt:""},
     fields:[{k:"txt",label:"Échange",type:"textarea",rows:4,req:"Écris le compte rendu."}],
     onCancel: () => openCommercial(c),
     onSave: o => patch("commercial", c.id, {report: stamp(o.txt) + (c.report ? "\n" + c.report : ""), lastContact: stamp(o.txt)}) });
 }
 function editCommercial(c){
-  openForm({ key:"co", title: c.id ? "Modifier · "+c.company : "Nouveau prospect", values: Object.assign({kind:"Prospect", relance:""}, c),
+  openForm({ key:"co", title: c.id ? "Modifier, "+c.company : "Nouveau prospect", values: Object.assign({kind:"Prospect", relance:""}, c),
     fields:[{k:"company",label:"Entreprise",req:"Indique l’entreprise."},{k:"kind",label:"Type",type:"select",options:["Prospect","Client"],half:true},{k:"stage",label:"Étape",half:true,list:["à contacter","à rappeler","rendez-vous pris","proposition envoyée","à clore","client actif","signé"]},
       {k:"nextAction",label:"Prochaine action"},{k:"nextDate",label:"Date",type:"date",half:true},{k:"j0",label:"J0 (contact de départ)",type:"date",half:true},
       {k:"relance",label:"Relance",half:true,list:["0 sur 4","1 sur 4","2 sur 4","3 sur 4","4 sur 4"]},{k:"contact",label:"Contact",half:true},
@@ -352,7 +352,7 @@ function editCommercial(c){
 
 /* Campagnes */
 function editCampaign(k){
-  openForm({ key:"ca", title: k.id ? "Campagne · "+k.client : "Nouvelle campagne", values: Object.assign({status:"À lancer"}, k),
+  openForm({ key:"ca", title: k.id ? "Campagne, "+k.client : "Nouvelle campagne", values: Object.assign({status:"À lancer"}, k),
     fields:[{k:"client",label:"Client",list:clientNames(),req:"Indique le client."},{k:"status",label:"Statut",type:"select",options:CAMP_STATUS,half:true},{k:"budget",label:"Budget",half:true,ph:"Ex. 500 € / mois"},
       {k:"launchedAt",label:"Lancée le",type:"date",half:true},{k:"link",label:"Suivi des contacts (lien)",half:true,ph:"https://"},{k:"note",label:"À savoir",type:"textarea"}],
     onDelete: k.id ? () => remove("campaigns", k.id) : null,
@@ -361,7 +361,7 @@ function editCampaign(k){
 
 /* Prêt à monter */
 function editRush(r){
-  openForm({ key:"ru", title: r.id ? "Montage · "+r.client : "Retour de tournage", intro: r.id ? "" : "Une ligne par tournage dont les rushs attendent le montage.", values: Object.assign({status:"À monter", shotAt:today()}, r),
+  openForm({ key:"ru", title: r.id ? "Montage, "+r.client : "Retour de tournage", intro: r.id ? "" : "Une ligne par tournage dont les rushs attendent le montage.", values: Object.assign({status:"À monter", shotAt:today()}, r),
     fields:[{k:"client",label:"Client",list:clientNames(),half:true,req:"Indique le client."},{k:"shotAt",label:"Tourné le",type:"date",half:true},
       {k:"content",label:"Ce qui a été tourné",type:"textarea",rows:2},{k:"editor",label:"Qui monte",type:"select",options:[["","À préciser"],["Matis","Matis"],["Clara","Clara"]],half:true,req:"Dis qui monte."},
       {k:"status",label:"Statut",type:"select",options:RUSH_STATUS,half:true},{k:"link",label:"Lien des rushs",ph:"https://"},{k:"note",label:"À savoir",type:"textarea"}],
@@ -371,7 +371,7 @@ function editRush(r){
 
 /* Publications */
 function editPub(p){
-  openForm({ key:"pu", title:"Publications · "+p.client, values:p,
+  openForm({ key:"pu", title:"Publications, "+p.client, values:p,
     fields:[{k:"planned",label:"Prévues ce mois",type:"number",half:true},{k:"metricoolId",label:"Marque Metricool",half:true},
       {k:"published",label:"Publiées depuis le 1er",half:true},{k:"scheduled7",label:"Programmées 7 jours",half:true},
       {k:"waiting",label:"En attente client",half:true},{k:"refused",label:"Refusées",half:true},{k:"next",label:"Prochaine publication"},{k:"alert",label:"Alerte"}],
@@ -383,7 +383,7 @@ function editPub(p){
 function openCevent(e){
   const pb = prepBy(e);
   openFacts({ title: e.subject, client: e.client,
-    facts:[["Date", fmtDL(e.date)+" "+(e.date||"").slice(0,4)],["À faire", e.todo],["Préparer avant le", pb ? fmtDL(pb)+(pb < today() && !e.done ? " · en retard" : "") : ""],["Piste", e.piste ? "Idée à valider avec le client" : ""],["Fait", e.done ? "Oui" : "Non"],["Note", e.note]],
+    facts:[["Date", fmtDL(e.date)+" "+(e.date||"").slice(0,4)],["À faire", e.todo],["Préparer avant le", pb ? fmtDL(pb)+(pb < today() && !e.done ? ", en retard" : "") : ""],["Piste", e.piste ? "Idée à valider avec le client" : ""],["Fait", e.done ? "Oui" : "Non"],["Note", e.note]],
     quick:[[e.done ? "Rouvrir" : "C’est fait", () => patch("cevents", e.id, {done:!e.done}).then(closeModal)]],
     onEdit: () => editCevent(e) });
 }
@@ -408,7 +408,7 @@ function editKeydate(k){
     onSave: out => { const cl = out.clientsTxt.split(",").map(s => s.trim()).filter(Boolean); delete out.clientsTxt; return save("keydates", k.id || null, Object.assign(k.id ? strip(k) : {}, out, {clients:cl, forWhom:cl.join(", ")})); } });
 }
 function editClient(c){
-  openForm({ key:"cf", title:"Fiche · "+c.name, values:c,
+  openForm({ key:"cf", title:"Fiche, "+c.name, values:c,
     fields:[{k:"formula",label:"Formule"},{k:"perMonth",label:"Publications / mois"},{k:"shoot",label:"Tournage",half:true},{k:"networks",label:"Réseaux",half:true},
       {k:"remember",label:"À retenir",type:"textarea"},{k:"ask",label:"À demander au client",type:"textarea"},{k:"leadWeeks",label:"Préparer combien de semaines avant",type:"number",half:true},{k:"color",label:"Couleur dans l’agenda",type:"color",half:true}],
     onSave: out => save("clients", c.id, Object.assign(strip(c), out)) });
@@ -416,8 +416,8 @@ function editClient(c){
 
 /* Éditorial agence */
 function openPost(p){
-  openFacts({ title: fmtDL(p.date)+" · "+p.type, client:p.client,
-    facts:[["Format", p.format],["Secteur", p.sector],["Carton", p.carton],["Story du jour", postStory(p)],["Republication", postRepost(p)],["Qui", postWho(p)],["À remettre le", postDue(p) ? fmtDL(postDue(p))+(postLate(p) ? " · en retard" : "") : ""],["Statut", p.status],["Film en ligne", p.filmOnline ? "Oui" : "Non"],["Notes", p.notes]],
+  openFacts({ title: fmtDL(p.date)+", "+p.type, client:p.client,
+    facts:[["Format", p.format],["Secteur", p.sector],["Carton", p.carton],["Story du jour", postStory(p)],["Republication", postRepost(p)],["Qui", postWho(p)],["À remettre le", postDue(p) ? fmtDL(postDue(p))+(postLate(p) ? ", en retard" : "") : ""],["Statut", p.status],["Film en ligne", p.filmOnline ? "Oui" : "Non"],["Notes", p.notes]],
     onEdit: () => editPost(p) });
 }
 function editPost(p){
@@ -466,48 +466,44 @@ function item(a, b, sub, c, onClick, color){
 /* ---------- Accueil ---------- */
 function vAccueil(root){
   const me = S.me || "Gabriel", t0 = today(), t7 = addDays(t0, 7);
-  root.appendChild(head(["Bonjour", me], fmtDL(t0)+" "+t0.slice(0,4)+" · ce qui compte pour toi cette semaine", [addBtn("Ajouter une tâche", () => editTask({who:me}))]));
+  const nb = btn("Nouvelle tâche", "", () => editTask({who:me})); if (!writable()) nb.disabled = true;
+  const dl = fmtDL(t0); root.appendChild(head(["Bonjour", me], dl.charAt(0).toUpperCase()+dl.slice(1)+" "+t0.slice(0,4), [nb]));
   const mine = openTasks().filter(t => t.who === me);
   const late = mine.filter(t => lateDays(t.date) > 0).sort((a,b) => a.date.localeCompare(b.date));
   const soon = mine.filter(t => isISO(t.date) && t.date >= t0 && t.date <= t7).sort((a,b) => a.date.localeCompare(b.date));
-  const nodate = mine.filter(t => !isISO(t.date));
-  const st = el("div","stats");
-  [[late.length,"en retard",late.length>0],[soon.length,"dans les 7 jours"],[nodate.length,"sans date"],[mine.length,"tâches ouvertes"]].forEach(([n,l,a]) => { const s = el("div","stat"+(a?" alert":"")); s.append(el("b",null,String(n)), el("span",null,l)); st.appendChild(s); });
-  root.appendChild(st);
-  const g = el("div","grid2");
-  const sec = (title, small, nodes, empty) => { const s = el("section"); const h = el("h2","sec",title); if (small) h.appendChild(el("small",null,small)); s.appendChild(h); const box = el("div","items"); if (!nodes.length) box.appendChild(el("p","empty",empty)); nodes.forEach(n => box.appendChild(n)); s.appendChild(box); return s; };
-  const taskItem = t => item(t.date ? fmtD(t.date) : "—", t.title, [t.client, POLE[t.pole]].filter(Boolean).join(" · "), lateDays(t.date) ? latePill(lateDays(t.date)) : "", () => openTask(t), colorOf(t.client));
-  g.appendChild(sec("Mes tâches", late.length ? plural(late.length,"en retard","en retard") : "", late.concat(soon).slice(0,14).map(taskItem), "Rien en retard ni prévu cette semaine."));
-  const ev = S.d.events.filter(e => e.date >= t0 && e.date <= t7 && e.status !== "Annulé").sort((a,b) => (a.date+(a.time||"99")).localeCompare(b.date+(b.time||"99")));
-  g.appendChild(sec("Agenda des 7 jours", "toute l’agence", ev.map(e => item(fmtD(e.date)+(e.time ? " · "+fmtTime(e.time) : ""), e.client+(e.title ? " : "+e.title : ""), [e.type, (e.who||[]).join(", "), e.place].filter(Boolean).join(" · "), (e.who||[]).includes(me) ? el("span","pill dark","Toi") : "", () => openEvent(e), colorOf(e.client))), "Aucun événement dans les 7 jours."));
-  const shoots = S.d.events.filter(e => e.type === "Tournage" && e.status === "Prévu" && e.date >= t0 && e.date <= addDays(t0,4));
+  const sum = el("p","hsum");
+  if (late.length){ const b = el("b","late", plural(late.length,"tâche en retard","tâches en retard")); sum.appendChild(b); sum.appendChild(document.createTextNode(soon.length ? ", "+plural(soon.length,"autre","autres")+" cette semaine." : ".")); }
+  else sum.textContent = soon.length ? plural(soon.length,"tâche prévue","tâches prévues")+" cette semaine, rien en retard." : "Rien en retard, rien de prévu cette semaine.";
+  root.appendChild(sum);
+  const row = (date, title, sub, tag, onClick, color, isLate) => { const r = el("button","hrow"+(isLate ? " late" : "")); if (color) r.style.setProperty("--c", color);
+    r.appendChild(el("span","hd", date)); const m = el("span","hm2"); m.appendChild(el("b",null,title)); if (sub) m.appendChild(el("span",null,sub)); r.appendChild(m);
+    r.appendChild(tag instanceof Node ? tag : el("span","ht", tag || "")); r.onclick = onClick; return r; };
+  const block = (title, count, nodes, empty, more) => { const s = el("section","hblock"); const h = el("h2","hh",title); if (count) h.appendChild(el("span",null,count)); s.appendChild(h);
+    if (!nodes.length) s.appendChild(el("p","hempty",empty)); nodes.forEach(n => s.appendChild(n));
+    if (more){ const a = el("button","hmore",more[0]); a.onclick = more[1]; s.appendChild(a); } return s; };
+  const g = el("div","home"); const L = el("div","hcol"), R = el("div","hcol");
+  const tasks = late.concat(soon);
+  L.appendChild(block("À faire", tasks.length ? String(tasks.length) : "", tasks.slice(0,8).map(t => row(t.date ? fmtD(t.date) : "", t.title, t.client || "", lateDays(t.date) ? lateDays(t.date)+" j de retard" : "", () => openTask(t), colorOf(t.client), lateDays(t.date) > 0)), "Rien à faire cette semaine.", tasks.length > 8 ? ["Voir toutes mes tâches", () => { S.ui.tWho = me; go("taches"); }] : null));
   if (me === "Gabriel"){
     const rel = S.d.commercial.filter(c => isISO(c.nextDate) && c.nextDate <= addDays(t0,2)).sort((a,b) => a.nextDate.localeCompare(b.nextDate));
-    g.appendChild(sec("Relances commerciales", plural(rel.length,"à faire"), rel.slice(0,12).map(c => item(fmtD(c.nextDate), c.company, c.nextAction, lateDays(c.nextDate) ? latePill(lateDays(c.nextDate)) : "", () => openCommercial(c))), "Aucune relance due."));
-    const val = S.d.edtodo.filter(x => !x.done && x.who === "Gabriel" && x.date <= t7).sort((a,b) => a.date.localeCompare(b.date));
-    g.appendChild(sec("À valider", "éditorial agence", val.map(x => item(fmtD(x.date), x.title, x.note || "", lateDays(x.date) ? latePill(lateDays(x.date)) : "", () => editEdTodo(x))), "Rien à valider cette semaine."));
+    L.appendChild(block("Relances", rel.length ? String(rel.length) : "", rel.slice(0,5).map(c => row(fmtD(c.nextDate), c.company, c.nextAction || "", lateDays(c.nextDate) ? lateDays(c.nextDate)+" j de retard" : "", () => openCommercial(c), "", lateDays(c.nextDate) > 0)), "Aucune relance due.", rel.length > 5 ? ["Voir le commercial", () => go("commercial")] : null));
   }
   if (me === "Matis"){
     const ru = S.d.rushes.filter(r => r.status !== "Monté" && (r.editor === "Matis" || !r.editor));
-    g.appendChild(sec("Prêt à monter", plural(ru.length,"tournage"), ru.map(r => item(fmtD(r.shotAt), r.client, r.content, el("span","pill",r.status), () => editRush(r), colorOf(r.client))), "Aucun rush en attente."));
-    const po = S.d.posts.filter(p => postWho(p) === "Matis" && !POST_DONE.includes(p.status) && postDue(p) <= t7).sort((a,b) => a.date.localeCompare(b.date));
-    g.appendChild(sec("Montages pour le compte de l’agence", "remise 7 jours avant", po.slice(0,12).map(p => item(fmtD(postDue(p)), p.type+" · "+(p.client||""), p.format+" · publication le "+fmtD(p.date), postLate(p) ? el("span","pill l3","En retard") : el("span","pill",p.status), () => openPost(p), colorOf(p.client))), "Rien à remettre cette semaine."));
+    L.appendChild(block("À monter", ru.length ? String(ru.length) : "", ru.slice(0,5).map(r => row(fmtD(r.shotAt), r.client, r.content || "", r.status, () => editRush(r), colorOf(r.client))), "Aucun rush en attente.", ru.length > 5 ? ["Voir tout", () => go("montage")] : null));
   }
   if (me === "Clara"){
-    g.appendChild(sec("Feuilles de tournage", "72 h avant chaque tournage", shoots.map(e => item(fmtD(addDays(e.date,-3)), e.client, "Tournage le "+fmtDL(e.date)+(e.time ? " à "+fmtTime(e.time) : ""), addDays(e.date,-3) < t0 ? el("span","pill l3","À faire") : el("span","pill","À préparer"), () => openEvent(e), colorOf(e.client))), "Aucun tournage dans les 4 jours."));
     const ce = S.d.cevents.filter(e => !e.done && prepBy(e) && prepBy(e) <= addDays(t0,14) && e.date >= t0).sort((a,b) => prepBy(a).localeCompare(prepBy(b)));
-    g.appendChild(sec("Temps forts à préparer", "dans les 14 jours", ce.slice(0,14).map(e => item(fmtD(prepBy(e)), e.client+" : "+e.subject, e.todo, prepBy(e) < t0 ? el("span","pill l3","En retard") : (e.piste ? el("span","pill","Piste") : ""), () => openCevent(e), colorOf(e.client))), "Rien à préparer dans les 14 jours."));
-    const ca = S.d.posts.filter(p => p.type === "Carrousel" && p.date >= t0 && p.date <= addDays(t0,10) && p.status !== "Publié");
-    g.appendChild(sec("Carrousels de l’agence", "10 prochains jours", ca.map(p => item(fmtD(p.date), "Carrousel · "+(p.client||""), p.format, el("span","pill",p.status), () => openPost(p), colorOf(p.client))), "Aucun carrousel dans les 10 jours."));
+    L.appendChild(block("À préparer", ce.length ? String(ce.length) : "", ce.slice(0,5).map(e => row(fmtD(prepBy(e)), e.client, e.subject || "", prepBy(e) < t0 ? "En retard" : "", () => openCevent(e), colorOf(e.client), prepBy(e) < t0)), "Rien à préparer dans les 14 jours.", ce.length > 5 ? ["Voir le calendrier clients", () => go("clients")] : null));
   }
-  if (me !== "Clara" && shoots.length) g.appendChild(sec("Feuilles de tournage", "faites par Clara 72 h avant", shoots.map(e => item(fmtD(addDays(e.date,-3)), e.client, "Tournage le "+fmtDL(e.date), "", () => openEvent(e), colorOf(e.client))), ""));
-  root.appendChild(g);
-  /* Récap de l'équipe */
-  const h = el("h2","sec","L’équipe"); h.appendChild(el("small",null,"tâches ouvertes")); root.appendChild(h);
-  const {w, tb} = table(["Personne","À faire","En retard","7 prochains jours","Sans date"]); w.querySelector("table").classList.add("team");
-  OWNERS.forEach(p => { const l = openTasks().filter(t => t.who === p); const tr = el("tr","row"); tr.onclick = () => { S.ui.tWho = p; go("taches"); };
-    td(tr, p, "ttl"); [l.length, l.filter(t => lateDays(t.date) > 0).length, l.filter(t => isISO(t.date) && t.date >= t0 && t.date <= t7).length, l.filter(t => !isISO(t.date)).length].forEach((n,i) => { const c = td(tr, el("b",null,String(n))); if (i === 1 && n) c.style.color = "var(--crit)"; }); tb.appendChild(tr); });
-  root.appendChild(w);
+  const ev = S.d.events.filter(e => e.date >= t0 && e.date <= t7 && e.status !== "Annulé").sort((a,b) => (a.date+(a.time||"99")).localeCompare(b.date+(b.time||"99")));
+  const wk = el("section","hblock"); const wh = el("h2","hh","Cette semaine"); wk.appendChild(wh);
+  if (!ev.length) wk.appendChild(el("p","hempty","Aucun rendez-vous ni tournage."));
+  let cur = "";
+  ev.forEach(e => { if (e.date !== cur){ cur = e.date; const d = fmtDL(e.date); wk.appendChild(el("div","hday", e.date === t0 ? "Aujourd’hui" : d.charAt(0).toUpperCase()+d.slice(1))); }
+    wk.appendChild(row(e.time ? fmtTime(e.time) : "", e.client, e.title || e.type, (e.who||[]).includes(me) ? "Toi" : "", () => openEvent(e), colorOf(e.client))); });
+  R.appendChild(wk);
+  g.append(L, R); root.appendChild(g);
 }
 
 /* ---------- Tâches ---------- */
@@ -534,7 +530,7 @@ function vTaches(root){
       const n = t.done ? 0 : lateDays(t.date);
       const tr = el("tr","row"+(t.done ? " done" : "")+(lateClass(n) ? " r"+lateClass(n) : "")); tr.onclick = () => openTask(t);
       td(tr, checkbox(t.done, v => patch("tasks", t.id, {done:v, doneAt: v ? today() : ""}).then(() => v && toast("Tâche faite."))));
-      td(tr, clientTag(t.client),"nw hm"); mo(td(tr, t.title,"ttl w"), [t.client, n ? n+" j de retard" : ""].filter(Boolean).join(" · ")); td(tr, t.date ? fmtD(t.date) : "—","nw"); td(tr, n ? n+" j" : "","nw hm"); td(tr, el("div","note",t.note),"hm");
+      td(tr, clientTag(t.client),"nw hm"); mo(td(tr, t.title,"ttl w"), [t.client, n ? n+" j de retard" : ""].filter(Boolean).join(", ")); td(tr, t.date ? fmtD(t.date) : "—","nw"); td(tr, n ? n+" j" : "","nw hm"); td(tr, el("div","note",t.note),"hm");
       if (who === "Tous") td(tr, t.who,"nw");
       tb.appendChild(tr);
     });
@@ -549,7 +545,7 @@ function vCommercial(root){
   const q = norm(S.ui.coQ);
   const all = S.d.commercial.filter(c => (S.ui.coKind === "Tous" || c.kind === (S.ui.coKind === "Clients" ? "Client" : "Prospect")) && (!q || norm([c.company,c.stage,c.notes,c.contact,c.nextAction].join(" ")).includes(q)));
   const due = S.d.commercial.filter(c => isISO(c.nextDate) && c.nextDate <= today()).length;
-  root.appendChild(head("Commercial", plural(due,"action due","actions dues")+" aujourd’hui ou en retard · rythme de relance J+3, J+7, J+14, J+30", [addBtn("Nouveau prospect", () => editCommercial({}))]));
+  root.appendChild(head("Commercial", plural(due,"action due","actions dues")+" aujourd’hui ou en retard, rythme de relance J+3, J+7, J+14, J+30", [addBtn("Nouveau prospect", () => editCommercial({}))]));
   const f = el("div","filters");
   f.appendChild(segm([["Tous","Tous"],["Clients","Clients"],["Prospects","Prospects"]], S.ui.coKind, v => { S.ui.coKind = v; remember(); render(); }));
   const s = el("input","search"); s.id = "co-q"; s.type = "search"; s.placeholder = "Chercher une entreprise"; s.value = S.ui.coQ; s.oninput = () => { S.ui.coQ = s.value; renderSoon(); };
@@ -604,7 +600,7 @@ function vMontage(root){
 function vPublications(root){
   const rows = S.d.publications.slice().sort((a,b) => a.client.localeCompare(b.client,"fr"));
   const total = rows.reduce((s,p) => s + (Number(p.planned)||0), 0);
-  root.appendChild(head("Publications", "Chaque client réseaux face à son volume prévu du mois · "+total+" prévues · rempli chaque matin depuis Metricool, stories exclues"));
+  root.appendChild(head("Publications", "Chaque client réseaux face à son volume prévu du mois, "+total+" prévues, rempli chaque matin depuis Metricool, stories exclues"));
   const {w, tb} = table(["Client","Prévues","Publiées","Écart","Programmées 7 j","En attente client","Refusées","Prochaine","Alerte"]);
   rows.forEach(p => { const tr = el("tr","row"); tr.onclick = () => editPub(p);
     td(tr, clientTag(p.client),"nw"); [p.planned,p.published,p.gap,p.scheduled7,p.waiting,p.refused].forEach(v => td(tr, v === "" || v == null ? "—" : String(v),"nw")); td(tr, p.next,"nw");
@@ -634,7 +630,7 @@ function vClients(root){
     const sum = [0,0,0,0];
     cal.forEach(c => { const r = c.recap || {}; const tr = el("tr","row"); tr.onclick = () => { S.ui.ccClient = c.name; S.ui.ccTab = "client"; remember(); render(); };
       td(tr, clientTag(c.name),"nw"); [r.pubs, r.reels, r.linkedin, r.shoots].forEach((v,i) => { sum[i] += Number(v)||0; td(tr, v || "—","nw"); }); td(tr, r.networks); td(tr, el("div","note",r.confirm)); tb.appendChild(tr); });
-    const tr = el("tr","band"); const c = el("td"); c.colSpan = 7; c.textContent = "TOTAL PAR MOIS : "+sum[0]+" PUBLICATIONS, DONT "+sum[1]+" RÉELS · "+sum[2]+" LINKEDIN · "+sum[3]+" TOURNAGES"; tr.appendChild(c); tb.appendChild(tr);
+    const tr = el("tr","band"); const c = el("td"); c.colSpan = 7; c.textContent = "TOTAL PAR MOIS : "+sum[0]+" PUBLICATIONS, DONT "+sum[1]+" RÉELS, "+sum[2]+" LINKEDIN, "+sum[3]+" TOURNAGES"; tr.appendChild(c); tb.appendChild(tr);
     root.appendChild(w); return;
   }
   if (tab === "soon"){
@@ -679,7 +675,7 @@ function vEditorial(root){
   if (!S.ui.edMonth || !months.includes(S.ui.edMonth)) S.ui.edMonth = months.find(m => m >= today().slice(0,7)) || months[0] || today().slice(0,7);
   const m = S.ui.edMonth, d0 = parseISO(m+"-01");
   const rows = S.d.posts.filter(p => p.date.slice(0,7) === m).sort((a,b) => a.date.localeCompare(b.date));
-  root.appendChild(head([MONTHS[d0.getMonth()], String(d0.getFullYear())], "Compte Instagram de l’agence · 7 publications par semaine et des stories tous les jours",
+  root.appendChild(head([MONTHS[d0.getMonth()], String(d0.getFullYear())], "Compte Instagram de l’agence, 7 publications par semaine et des stories tous les jours",
     [segm(months.map(x => { const d = parseISO(x+"-01"); return [x, MONTHS[d.getMonth()].replace(/^./, c => c.toUpperCase())]; }), m, v => { S.ui.edMonth = v; remember(); render(); }), addBtn("Ajouter", () => editPost({date:m+"-01"}))]));
   const st = el("div","stats"); const late = rows.filter(postLate).length;
   [[rows.filter(p => p.type === "Réel").length,"réels"],[rows.filter(p => p.type === "Carrousel").length,"carrousels"],[rows.filter(p => p.type === "Vidéo publicitaire").length,"vidéos publicitaires"],[rows.filter(p => p.status === "Publié").length+" / "+rows.length,"publiés"]].forEach(([n,l]) => { const s = el("div","stat"); s.append(el("b",null,String(n)), el("span",null,l)); st.appendChild(s); });
@@ -687,7 +683,7 @@ function vEditorial(root){
   if (late) root.appendChild(el("p","status", plural(late,"montage")+" en retard : date de remise passée, ni Monté, ni Relu, ni Programmé, ni Publié."));
   const {w, tb} = table(["Date","Type","~Format","~Client","~Story du jour","~Qui","À remettre le","Statut","~Film en ligne","~Notes"]);
   rows.forEach(p => { const tr = el("tr","row"+(p.status === "Publié" ? " pub" : postLate(p) ? " r3" : "")); tr.onclick = () => openPost(p);
-    td(tr, dow(p.date).slice(0,3)+". "+fmtD(p.date),"nw"); mo(td(tr, p.type,"nw ttl"), [p.client, postWho(p)].filter(Boolean).join(" · ")); td(tr, p.format,"nw hm"); td(tr, clientTag(p.client),"nw hm"); td(tr, el("div","note",postStory(p)),"hm w");
+    td(tr, dow(p.date).slice(0,3)+". "+fmtD(p.date),"nw"); mo(td(tr, p.type,"nw ttl"), [p.client, postWho(p)].filter(Boolean).join(", ")); td(tr, p.format,"nw hm"); td(tr, clientTag(p.client),"nw hm"); td(tr, el("div","note",postStory(p)),"hm w");
     td(tr, postWho(p),"nw hm"); td(tr, postDue(p) ? fmtD(postDue(p)) : "—","nw");
     const sel = el("select","inl"); POST_STATUS.forEach(x => { const o = el("option",null,x); o.value = x; sel.appendChild(o); }); sel.value = p.status; sel.disabled = !writable(); sel.onclick = e => e.stopPropagation();
     sel.onchange = () => { if (sel.value === "Publié" && p.type === "Réel" && !p.filmOnline){ sel.value = p.status; toast("Un réel n’est publié que si le film complet est en ligne chez le client. Propose le prochain réel prêt du même secteur."); return; } patch("posts", p.id, {status:sel.value}); };
@@ -731,7 +727,7 @@ function lrow(i){
   const r = el("button","lrow"+(i.k === "events" ? " s-"+(i.ref.status||"Prévu") : "")); r.style.setProperty("--c", i.client ? colorOf(i.client) : "var(--muted)");
   r.appendChild(el("span","lm", i.time ? fmtTime(i.time) : i.k === "events" ? "Journée" : ({tasks:"Tâche",relances:"Relance",cevents:"Client",keydates:"Date clé",posts:"Agence",edtodo:"Agence"}[i.k])));
   r.appendChild(el("span","sw"+(i.k === "events" && i.ref.type === "Tournage" ? " fill" : "")));
-  const mid = el("span"); mid.append(el("div","lt", (i.client ? i.client+" : " : "")+i.label), el("div","lm", [i.meta, i.who.join(", ")].filter(Boolean).join(" · ")));
+  const mid = el("span"); mid.append(el("div","lt", (i.client ? i.client+" : " : "")+i.label), el("div","lm", [i.meta, i.who.join(", ")].filter(Boolean).join(", ")));
   r.appendChild(mid); r.appendChild(el("span","pill tag", i.tag || ""));
   r.onclick = () => openItem(i); return r;
 }
@@ -811,7 +807,7 @@ function vAgenda(root){
 }
 /* Com de l'agence : ce qui était l'onglet Éditorial agence, affiché quand le filtre Client est sur Agence Gacolet */
 function agAgence(root, m){
-  const h0 = el("h2","sec","Com de l’agence"); h0.appendChild(el("small",null,"compte Instagram · 7 publications par semaine et des stories tous les jours")); root.appendChild(h0);
+  const h0 = el("h2","sec","Com de l’agence"); h0.appendChild(el("small",null,"compte Instagram, 7 publications par semaine et des stories tous les jours")); root.appendChild(h0);
   const rows = S.d.posts.filter(p => (p.date||"").slice(0,7) === m);
   const st = el("div","stats"); const late = S.d.posts.filter(postLate).length;
   [[rows.filter(p => p.type === "Réel").length,"réels"],[rows.filter(p => p.type === "Carrousel").length,"carrousels"],[rows.filter(p => p.type === "Vidéo publicitaire").length,"vidéos publicitaires"],[rows.filter(p => p.status === "Publié").length+" / "+rows.length,"publiés"]].forEach(([n,l]) => { const s = el("div","stat"); s.append(el("b",null,String(n)), el("span",null,l)); st.appendChild(s); });
