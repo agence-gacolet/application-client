@@ -941,3 +941,5 @@ a,button,select,label,.row{touch-action:manipulation}
   input,select,textarea,.wa-bar textarea{font-size:16px}
 }
 html{touch-action:pan-x pan-y}
+.po-in{min-width:150px;max-width:200px}
+.po-in{background:#232321;border:1px solid var(--line-2);color:var(--ink);border-radius:8px;padding:6px 10px;font:inherit;font-size:13.5px}
