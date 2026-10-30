@@ -19,9 +19,9 @@ const DAYS = ["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"]
 const DEFAULT_COLORS = {"Agence Gacolet":"#1D1D1B","AR Climatisation":"#E8833A","Bonobo":"#2E9E5B","Delta Sud Formation":"#D6334A","Domaine Pagezi":"#7A1F3D","Flora Design":"#C25CC9","France Étanchéité":"#2F6FE4","Gaufrement Bon":"#E3B505","Hugo Maître Nageur":"#1BA6C9","Insolent":"#5C5C57","KR Thermolaquage":"#8C6239","La Vie La Construction":"#F06A1D","Le Petit Mas":"#6E8B3D","Locamex":"#E2559C","Meyer-Pic":"#3D4FB5","Only Clean":"#17A398","Paillotte Bassamoise":"#F2A93B","SOS Pare-Brise Codognan":"#9B2226","SOS Pare-Brise Vendargues":"#4A6C8C","Sport Défense":"#8E44AD","The New Me Montpellier":"#D98BA5","Total Habitat 360":"#6C7A2E"};
 const VIEWS = [
   ["accueil","Accueil"],["agenda","Agenda"],["taches","Tâches"],["messagerie","Messagerie"],["commercial","Commercial"],["clients","Calendrier clients"],
-  ["montage","Prêt à monter"],["publications","Publications"],["campagnes","Campagnes"],["formation","Formation"],["parametres","Paramètres"]
+  ["montage","Prêt à monter"],["publications","Publications"],["campagnes","Campagnes"],["formation","Formation"],["parametres","Paramètres"],["fiches","Tableau clients"]
 ];
-const NAV_GROUPS = [["",["accueil"]],["Au quotidien",["agenda","taches","messagerie"]],["Clients",["commercial","clients"]],["Production",["montage","publications","campagnes"]],["Ressources",["formation"]],["Compte",["parametres"]]];
+const NAV_GROUPS = [["",["accueil"]],["Au quotidien",["agenda","taches","messagerie"]],["Clients",["fiches","commercial","clients"]],["Production",["montage","publications","campagnes"]],["Ressources",["formation"]],["Compte",["parametres"]]];
 /* Rôles : ce que chaque siège voit. Le serveur applique les mêmes limites aux données. */
 const ROLE_LABEL = {owner:"Propriétaire", member:"Membre", commercial:"Commercial"};
 const ROLE_VIEWS = {
@@ -415,11 +415,34 @@ function editKeydate(k){
     onDelete: k.id ? () => remove("keydates", k.id) : null,
     onSave: out => { const cl = out.clientsTxt.split(",").map(s => s.trim()).filter(Boolean); delete out.clientsTxt; return save("keydates", k.id || null, Object.assign(k.id ? strip(k) : {}, out, {clients:cl, forWhom:cl.join(", ")})); } });
 }
+const SERVICES = [["10","Stratégie & conseil"],["20","Production"],["30","Graphisme & impression"],["40","Réseaux sociaux"],["50","Publicité"],["60","Web & référencement"]];
 function editClient(c){
-  openForm({ key:"cf", title:"Fiche, "+c.name, values:c,
-    fields:[{k:"formula",label:"Formule"},{k:"perMonth",label:"Publications / mois"},{k:"shoot",label:"Tournage",half:true},{k:"networks",label:"Réseaux",half:true},
-      {k:"remember",label:"À retenir",type:"textarea"},{k:"ask",label:"À demander au client",type:"textarea"},{k:"leadWeeks",label:"Préparer combien de semaines avant",type:"number",half:true},{k:"color",label:"Couleur dans l’agenda",type:"color",half:true}],
-    onSave: out => save("clients", c.id, Object.assign(strip(c), out)) });
+  const sv = c.services || {}; const vals = Object.assign({}, c); SERVICES.forEach(([k]) => { vals["sv"+k] = k in sv; vals["sd"+k] = sv[k] || ""; });
+  const svFields = []; SERVICES.forEach(([k, l]) => { svFields.push({k:"sv"+k, label:k+" "+l, type:"check", half:true}); svFields.push({k:"sd"+k, label:"Depuis le", type:"date", half:true}); });
+  openForm({ key:"cf", title: c.id ? "Fiche, "+c.name : "Nouveau client", values:vals,
+    fields:(c.id ? [] : [{k:"name",label:"Nom du client",req:"Indique le nom du client."}]).concat([{k:"since",label:"Client depuis le",type:"date"}]).concat(svFields).concat([{k:"formula",label:"Formule"},{k:"perMonth",label:"Publications / mois"},{k:"shoot",label:"Tournage",half:true},{k:"networks",label:"Réseaux",half:true},
+      {k:"remember",label:"À retenir",type:"textarea"},{k:"ask",label:"À demander au client",type:"textarea"},{k:"leadWeeks",label:"Préparer combien de semaines avant",type:"number",half:true},{k:"color",label:"Couleur dans l’agenda",type:"color",half:true}]),
+    onSave: out => { const services = {}; SERVICES.forEach(([k]) => { if (out["sv"+k]) services[k] = out["sd"+k] || ""; delete out["sv"+k]; delete out["sd"+k]; }); out.services = services;
+      if (!c.id){ const n = String(out.name || "").trim(); if (S.d.clients.some(x => x.name.toLowerCase() === n.toLowerCase())){ toast("Ce client existe déjà."); return Promise.reject(new Error("doublon")); } out.name = n; out.calendar = true; }
+      return save("clients", c.id || null, Object.assign(c.id ? strip(c) : {}, out)); } });
+}
+function vFiches(root){
+  root.appendChild(head("Tableau clients", "Réservé aux propriétaires : depuis quand, quels services, la formule et ce qu’il faut penser.", [addBtn("Nouveau client", () => editClient({}))]));
+  const f = el("div","filters ag-f"); const g = el("div","fgroup"); const lb = el("label","flabel","Service"); lb.htmlFor = "fi-sv"; const sel = el("select","pick"); sel.id = "fi-sv";
+  [["","Tous les services"]].concat(SERVICES.map(([k,l]) => [k, k+" "+l])).forEach(([v,l]) => { const o = el("option",null,l); o.value = v; sel.appendChild(o); }); sel.value = S.ui.fiSv || ""; sel.onchange = () => { S.ui.fiSv = sel.value; remember(); render(); };
+  g.append(lb, sel); f.appendChild(g); root.appendChild(f);
+  const list = S.d.clients.filter(c => c.name !== AGENCE && (!S.ui.fiSv || (c.services || {})[S.ui.fiSv] != null)).sort((a,b) => (a.since || "9999").localeCompare(b.since || "9999") || a.name.localeCompare(b.name,"fr"));
+  const {w, tb} = table(["Client","Client depuis","Services","Formule","Publications / mois","Tournage","Réseaux","À penser"]);
+  list.forEach(c => { const tr = el("tr","row"); tr.onclick = () => editClient(c);
+    td(tr, clientTag(c.name),"nw"); td(tr, c.since ? fmtFR(c.since) : "—","nw");
+    const sv = el("div","fi-sv"); Object.keys(c.services || {}).sort().forEach(k => { const s = SERVICES.find(x => x[0] === k); const p = el("span","fi-chip"); p.append(el("b",null,k), document.createTextNode(" "+(s ? s[1] : "")+(c.services[k] ? ", depuis "+fmtFR(c.services[k]) : ""))); sv.appendChild(p); });
+    if (!sv.children.length) sv.appendChild(el("span","muted","À renseigner"));
+    td(tr, sv); td(tr, el("div","note",c.formula)); td(tr, c.perMonth || "","nw"); td(tr, el("div","note",c.shoot)); td(tr, el("div","note",c.networks));
+    td(tr, el("div","note",[c.remember, c.ask ? "À demander : "+c.ask : ""].filter(Boolean).join("\n")));
+    tb.appendChild(tr); });
+  w.classList.add("fi-tw");
+  root.appendChild(list.length ? w : el("p","empty","Aucun client pour ce service."));
+  root.appendChild(el("p","status", plural(list.length,"client")+". Clique sur une ligne pour modifier la fiche."));
 }
 
 /* Éditorial agence */
@@ -673,8 +696,7 @@ function vClients(root){
   const R = el("div"); const c = cal.find(x => x.name === S.ui.ccClient);
   if (c){
     const t = el("h2","ctitle"); const d = el("span","dot"); d.style.cssText = "width:16px;height:16px"; d.style.setProperty("--c", c.color || colorOf(c.name)); t.append(d, document.createTextNode(c.title || c.name));
-    const eb = btn("Modifier la fiche","sm", () => editClient(c)); eb.disabled = !writable(); t.appendChild(eb); R.appendChild(t);
-    const dl = el("dl","fiche"); [["Formule",c.formula],["Publications / mois",c.perMonth],["Tournage",c.shoot],["Réseaux",c.networks],["À retenir",c.remember],["À demander",c.ask]].forEach(([k,v]) => { if (!v) return; dl.append(el("dt",null,k), el("dd",null,v)); }); R.appendChild(dl);
+    R.appendChild(t);
     const tools = el("div","filters"); tools.appendChild(addBtn("Ajouter un temps fort", () => editCevent({client:c.name}))); tools.appendChild(el("span","muted","Préparer "+(c.leadWeeks||3)+" semaines avant la date. Les pistes sont des idées à valider avec le client.")); R.appendChild(tools);
     const rows = S.d.cevents.filter(e => e.client === c.name).sort((a,b) => a.date.localeCompare(b.date));
     const {w, tb} = table(["Date","Quoi","À faire","Préparer avant le","Fait"]);
@@ -1147,11 +1169,12 @@ function vFormation(root){
 }
 
 /* ---------- Navigation ---------- */
-const RENDER = {parametres:vParametres, accueil:vAccueil, agenda:vAgenda, taches:vTaches, commercial:vCommercial, campagnes:vCampagnes, montage:vMontage, publications:vPublications, clients:vClients, messagerie:vMessagerie, formation:vFormation};
+const RENDER = {fiches:vFiches, parametres:vParametres, accueil:vAccueil, agenda:vAgenda, taches:vTaches, commercial:vCommercial, campagnes:vCampagnes, montage:vMontage, publications:vPublications, clients:vClients, messagerie:vMessagerie, formation:vFormation};
 function go(v){ if (location.hash !== "#"+v) location.hash = v; else { S.view = v; render(); } }
 function fromHash(){ let h = (location.hash||"").replace("#",""); if (h === "editorial"){ S.ui.agClient = AGENCE; if (!S.ui.agLayers.includes("posts")) S.ui.agLayers = S.ui.agLayers.concat("posts"); h = "agenda"; } S.view = RENDER[h] && canSee(h) ? h : "accueil"; }
 window.addEventListener("hashchange", () => { fromHash(); render(); window.scrollTo(0,0); });
 const ICONS = {
+  fiches:'<rect x="4" y="4.5" width="16" height="15" rx="1.5"/><path d="M4 9.5h16M9.5 9.5v10"/>',
   parametres:'<circle cx="12" cy="12" r="3.2"/><path d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6 6l1.6 1.6M16.4 16.4 18 18M6 18l1.6-1.6M16.4 7.6 18 6"/>',
   accueil:'<path d="M4 11.2 12 4.8l8 6.4V20h-5.6v-5.2H9.6V20H4z"/>',
   agenda:'<rect x="4" y="5.5" width="16" height="14.5" rx="1.5"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/>',
@@ -1165,7 +1188,7 @@ const ICONS = {
   formation:'<rect x="3.5" y="5.5" width="17" height="12" rx="2"/><path d="M10.5 9v5l4-2.5z"/><path d="M8 20.5h8"/>',
   plus:'<path d="M5 7h14M5 12h14M5 17h14"/>'
 };
-const SHORT = {parametres:"Paramètres", accueil:"Accueil", agenda:"Agenda", taches:"Tâches", commercial:"Commercial", campagnes:"Campagnes", montage:"Montage", publications:"Publications", clients:"Calendrier clients", messagerie:"Messagerie", formation:"Formation"};
+const SHORT = {fiches:"Tableau clients", parametres:"Paramètres", accueil:"Accueil", agenda:"Agenda", taches:"Tâches", commercial:"Commercial", campagnes:"Campagnes", montage:"Montage", publications:"Publications", clients:"Calendrier clients", messagerie:"Messagerie", formation:"Formation"};
 const MOBILE_MAIN = ["accueil","agenda","taches","commercial"];
 const ico = k => { const s = document.createElementNS("http://www.w3.org/2000/svg","svg"); s.setAttribute("viewBox","0 0 24 24"); s.setAttribute("aria-hidden","true"); s.classList.add("ico"); s.innerHTML = ICONS[k] || ""; return s; };
 function renderTabs(){
