@@ -479,6 +479,9 @@ function vAccueil(root){
   else say = "La journée touche à sa fin. Beau travail aujourd’hui.";
   if (evs.length){ const e = evs[0]; const what = e.type === "Tournage" ? "tournage chez " + e.client : e.type === "Rendez-vous" ? "rendez-vous avec " + e.client : e.client; say += " " + (evening || weekend ? "Demain" : "Aujourd’hui") + ", " + what + (e.time ? " à " + fmtTime(e.time) : "") + "."; }
   const W = el("section","welcome2");
+  const mug = document.createElement("div"); mug.className = "w2-mug"; mug.setAttribute("aria-hidden","true");
+  mug.innerHTML = '<svg viewBox="0 0 64 64"><path class="st" d="M24 6c-3 4 3 6 0 10M32 4c-3 4 3 6 0 10M40 6c-3 4 3 6 0 10"/><path d="M12 24h36v14a14 14 0 0 1-14 14h-8a14 14 0 0 1-14-14z"/><path d="M48 28h3a7 7 0 0 1 0 14h-4"/><path d="M8 58h44"/></svg>';
+  W.appendChild(mug);
   const dl = fmtDL(t0); W.appendChild(el("p","w2-date", dl.charAt(0).toUpperCase()+dl.slice(1)));
   const h1 = el("h1","w2-h"); h1.append(document.createTextNode(hello + " "), el("span", null, me)); W.appendChild(h1);
   W.appendChild(el("p","w2-say", say));
@@ -496,8 +499,9 @@ function vAccueil(root){
     tiles.push([S.d.campaigns.filter(c => c.status === "À lancer").length, "campagnes à lancer", () => go("campagnes")]);
   }
   tiles.push([myTasks, "tâches cette semaine", () => { S.ui.tWho = me; go("taches"); }]);
+  W.appendChild(el("h2","w2-lab", hr >= 18 || weekend ? "Pour la suite" : "Ta journée en bref"));
   const s = el("div","w2-tiles");
-  tiles.forEach(([n, l, f]) => { const t = el("button","w2-tile"); t.append(el("b",null,String(n)), el("span",null,l)); t.onclick = f; s.appendChild(t); });
+  tiles.forEach(([n, l, f], i) => { const t = el("button","w2-tile" + (n ? "" : " zero")); t.style.animationDelay = (0.45 + i*0.08) + "s"; t.append(el("b",null,String(n)), el("span",null,l)); if (!n) t.appendChild(el("i",null,"C’est calé")); t.onclick = f; s.appendChild(t); });
   W.appendChild(s); root.appendChild(W);
 }
 
