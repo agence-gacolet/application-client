@@ -19,21 +19,23 @@
 </head>
 <body>
 <style>
-.splash{position:fixed;inset:0;z-index:200;background:#090908;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;animation:sp-out .5s cubic-bezier(.7,0,.3,1) 1.75s forwards}
-.splash svg{width:min(230px,50vw);height:auto;overflow:visible;fill:#C6FF33;animation:sp-pop .5s cubic-bezier(.3,1.6,.5,1) 1.05s}
-.splash .sp-a,.splash .sp-b{transform-box:fill-box;transform-origin:50% 100%;opacity:0}
-.splash .sp-a{animation:sp-slash .55s cubic-bezier(.2,.9,.25,1) .15s forwards}
-.splash .sp-b{animation:sp-rise .6s cubic-bezier(.2,.9,.25,1) .45s forwards}
-.splash b{font:400 30px/1 "Bebas Neue","Arial Narrow",Impact,sans-serif;font-style:italic;color:#F4F3EE;letter-spacing:.9em;margin-right:-.9em;opacity:0;animation:sp-word .7s cubic-bezier(.2,.9,.25,1) .8s forwards}
-@keyframes sp-slash{from{opacity:0;transform:translate(-40%,40%)}to{opacity:1;transform:none}}
-@keyframes sp-rise{from{opacity:0;transform:translateY(60%) scaleY(.4)}to{opacity:1;transform:none}}
-@keyframes sp-pop{50%{transform:scale(1.06)}}
-@keyframes sp-word{from{opacity:0;letter-spacing:.9em}to{opacity:1;letter-spacing:.12em;margin-right:-.12em}}
-@keyframes sp-out{to{opacity:0;transform:translateY(-3%);visibility:hidden}}
-@media (prefers-reduced-motion:reduce){.splash{animation:sp-out .3s ease .6s forwards}.splash *{animation:none!important;opacity:1!important}}
+.splash{position:fixed;inset:0;z-index:200;background:#090908;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;overflow:hidden;animation:sp-out .6s cubic-bezier(.76,0,.24,1) 2.0s forwards}
+.splash::before{content:"";position:absolute;left:50%;top:50%;width:140vmax;height:1px;background:#C6FF33;transform:translate(-50%,-50%) rotate(-36deg) scaleX(0);opacity:.9;animation:sp-beam .7s cubic-bezier(.6,0,.2,1) 0s forwards}
+.splash svg{position:relative;width:min(260px,56vw);height:auto;overflow:visible;animation:sp-pop .55s cubic-bezier(.3,1.7,.5,1) 1.45s}
+.splash path{fill:#C6FF33;fill-opacity:0;stroke:#C6FF33;stroke-width:2.2;stroke-linejoin:round;stroke-dasharray:1;stroke-dashoffset:1}
+.splash .sp-a{animation:sp-draw .6s cubic-bezier(.6,0,.2,1) .35s forwards,sp-fill .35s ease 1.0s forwards}
+.splash .sp-b{animation:sp-draw .6s cubic-bezier(.6,0,.2,1) .55s forwards,sp-fill .35s ease 1.15s forwards}
+.splash .sp-shine{transform:translateX(-120%);animation:sp-shine .7s cubic-bezier(.4,0,.2,1) 1.35s forwards}
+@keyframes sp-beam{0%{transform:translate(-50%,-50%) rotate(-36deg) scaleX(0)}60%{transform:translate(-50%,-50%) rotate(-36deg) scaleX(1);opacity:.9}100%{transform:translate(-50%,-50%) rotate(-36deg) scaleX(1);opacity:0}}
+@keyframes sp-draw{to{stroke-dashoffset:0}}
+@keyframes sp-fill{to{fill-opacity:1;stroke-opacity:0}}
+@keyframes sp-shine{to{transform:translateX(120%)}}
+@keyframes sp-pop{45%{transform:scale(1.07)}}
+@keyframes sp-out{0%{clip-path:inset(0 0 0 0)}100%{clip-path:inset(0 0 100% 0);visibility:hidden}}
+@media (prefers-reduced-motion:reduce){.splash{animation:sp-out .3s ease .5s forwards}.splash *,.splash::before{animation:none!important}.splash path{fill-opacity:1;stroke-opacity:0}}
 </style>
-<div class="splash" id="splash" aria-hidden="true"><svg viewBox="140 158 561 281"><g class="sp-a"><path transform="matrix(1,0,0,-1,232.1747,348.0155)" d="M0 0V0L-91.997-90.068 179.263 118.781 271.552 107.27 190.836 189.479 31.32 30.024"/></g><g class="sp-b"><path transform="matrix(1,0,0,-1,700.5803,436.46803)" d="M0 0-147.532-1.615-193.477 45.57-273.888 22.275-261.335 93.466-366.182 35.258-183.556 179.076Z"/></g></svg><b>GACOLET</b></div>
-<script>setTimeout(function(){var s=document.getElementById("splash");if(s)s.remove()},2400)</script>
+<div class="splash" id="splash" aria-hidden="true"><svg viewBox="140 158 561 281"><defs><linearGradient id="spg" x1="0" x2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".85"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient><clipPath id="spc"><path transform="matrix(1,0,0,-1,232.1747,348.0155)" d="M0 0V0L-91.997-90.068 179.263 118.781 271.552 107.27 190.836 189.479 31.32 30.024"/><path transform="matrix(1,0,0,-1,700.5803,436.46803)" d="M0 0-147.532-1.615-193.477 45.57-273.888 22.275-261.335 93.466-366.182 35.258-183.556 179.076Z"/></clipPath></defs><path class="sp-a" pathLength="1" transform="matrix(1,0,0,-1,232.1747,348.0155)" d="M0 0V0L-91.997-90.068 179.263 118.781 271.552 107.27 190.836 189.479 31.32 30.024"/><path class="sp-b" pathLength="1" transform="matrix(1,0,0,-1,700.5803,436.46803)" d="M0 0-147.532-1.615-193.477 45.57-273.888 22.275-261.335 93.466-366.182 35.258-183.556 179.076Z"/><g clip-path="url(#spc)"><rect class="sp-shine" x="140" y="158" width="200" height="281" fill="url(#spg)" transform-origin="0 0" style="transform-box:view-box"/></g></svg></div>
+<script>setTimeout(function(){var s=document.getElementById("splash");if(s)s.remove()},2700)</script>
 <div class="shell" id="shell" hidden>
   <aside class="side">
     <a class="logo" href="#accueil" aria-label="Accueil"><span>AGENCE</span><span>GACOLET</span></a>
