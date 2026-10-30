@@ -507,7 +507,7 @@ function vAccueil(root){
     tiles.push([S.d.commercial.filter(c => isISO(c.nextDate) && c.nextDate <= t0).length, "relances", () => go("commercial")]);
     tiles.push([S.d.campaigns.filter(c => c.status === "À lancer").length, "campagnes à lancer", () => go("campagnes")]);
   }
-  (MSG_ROLE[me] || ["main"]).forEach(md => { const pre = md === "shoot" ? "tg:" : "", chs = msgChannels(md);
+  ["main","shoot"].forEach(md => { const pre = md === "shoot" ? "tg:" : "", chs = msgChannels(md);
     const team = chs.filter(k => !k.startsWith(pre + "c:")), cli = chs.filter(k => k.startsWith(pre + "c:"));
     const nt = team.reduce((n, k) => n + unreadIn(k), 0), nc = cli.reduce((n, k) => n + unreadIn(k), 0), fc = cli.find(k => unreadIn(k));
     const open = k => () => { S.ui.msgMode = md; if (md === "shoot") S.ui.msgShoot = k; else S.ui.msgCh = k; remember(); go("messagerie"); };
@@ -845,7 +845,7 @@ function msgChannels(mode){ const pre = mode === "shoot" ? "tg:" : ""; return CH
 function seenKey(k){ return "seen_" + (S.me || "Gabriel") + "_" + k; }
 function unreadIn(k){ const me = S.me || "Gabriel", s = S.ui[seenKey(k)] || ""; return S.d.messages.filter(m => m.ch === k && m.who !== me && (m.at || "") > s).length; }
 function unreadMode(mode){ return msgChannels(mode).reduce((n, k) => n + unreadIn(k), 0); }
-function unreadRole(){ return (MSG_ROLE[S.me || "Gabriel"] || ["main"]).reduce((n, m) => n + unreadMode(m), 0); }
+function unreadRole(){ return ["main","shoot"].reduce((n, m) => n + unreadMode(m), 0); }
 function shootLabel(e){ return fmtD(e.date) + ", " + e.client; }
 function chName(k){ k = k.replace(/^tg:/, ""); const c = CHANNELS.find(x => x[0] === k); return c ? c[1] : k.replace(/^c:/, ""); }
 /* ---------- Messages vocaux ---------- */
@@ -901,62 +901,156 @@ function audioFor(m){
   bars.onclick = e => { const r = bars.getBoundingClientRect(); try { a.currentTime = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * total(); } catch(_){} draw(); };
   w.append(play, bars, tm, a); AUDIO_EL.set(m.id, w); return w;
 }
+/* ---------- Avatars ---------- */
+const AV_COLORS = ["#C6FF33","#5AC8FA","#FF9F5A","#C49BFF","#4CD9A0","#FF6B8B","#F5D04C","#7AA7FF"];
+function avColor(s){ let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return AV_COLORS[h % AV_COLORS.length]; }
+function initials(s){ const w = String(s || "?").replace(/[^\p{L}\p{N} ]/gu, " ").trim().split(/\s+/); return ((w[0] || "?")[0] + (w.length > 1 ? w[w.length - 1][0] : "")).toUpperCase(); }
+function personAvatar(name){ const t = (S.team || []).find(x => x.name === name); return t && t.avatar ? t.avatar : ""; }
+function avatarEl(name, size, opts){
+  opts = opts || {};
+  const a = el("span","av"); a.style.width = a.style.height = size + "px"; a.style.fontSize = Math.round(size * .38) + "px";
+  const src = opts.src != null ? opts.src : personAvatar(name);
+  if (opts.logo){ a.classList.add("av-logo"); a.innerHTML = '<svg viewBox="140 158 561 281" aria-hidden="true"><path transform="matrix(1,0,0,-1,700.5803,436.46803)" d="M0 0-147.532-1.615-193.477 45.57-273.888 22.275-261.335 93.466-366.182 35.258-183.556 179.076Z"/><path transform="matrix(1,0,0,-1,232.1747,348.0155)" d="M0 0V0L-91.997-90.068 179.263 118.781 271.552 107.27 190.836 189.479 31.32 30.024"/></svg>'; return a; }
+  if (src){ const i = document.createElement("img"); i.src = src; i.alt = ""; i.loading = "lazy"; a.appendChild(i); return a; }
+  a.textContent = initials(name); a.style.background = opts.color || avColor(name); return a;
+}
+function chAvatar(k, size){ const base = String(k).replace(/^tg:/, ""); if (base.startsWith("c:")){ const n = base.slice(2); return avatarEl(n, size, { src: "", color: colorOf(n) }); } return avatarEl("Équipe", size, { logo: true }); }
+
+/* ---------- Pièces jointes ---------- */
+
+const isImg = f => /^image\//.test(f.type || "") || /\.(jpe?g|png|gif|webp|heic)$/i.test(f.name || "");
+const isVid = f => /^video\//.test(f.type || "") || /\.(mp4|mov|webm|m4v)$/i.test(f.name || "");
+function msgPreview(m){
+  if (m.audio) return "Message vocal";
+  const f = m.files || [];
+  if (f.length && !m.text) return f.length > 1 ? f.length + " fichiers" : isImg(f[0]) ? "Photo" : isVid(f[0]) ? "Vidéo" : f[0].name;
+  return String(m.text || "");
+}
+function attachEl(f){
+  if (isImg(f)){ const a = el("a","wa-img"); a.href = f.url; a.target = "_blank"; a.rel = "noopener"; const i = document.createElement("img"); i.src = f.url; i.alt = f.name || "Photo"; i.loading = "lazy"; a.appendChild(i); return a; }
+  if (isVid(f)){ const v = document.createElement("video"); v.className = "wa-vid"; v.src = f.url; v.controls = true; v.preload = "metadata"; v.playsInline = true; return v; }
+  const a = el("a","wa-file"); a.href = f.url; a.target = "_blank"; a.rel = "noopener"; a.setAttribute("download", f.name || "");
+  const ic = el("span","wa-fic", (String(f.name || "").split(".").pop() || "").slice(0, 4).toUpperCase() || "FICHIER");
+  const tx = el("span","wa-ftx"); tx.append(el("b",null,f.name || "Fichier"), el("small",null,(f.size ? fmtSize(f.size) : "") + (f.size ? ", " : "") + "Télécharger"));
+  a.append(ic, tx); return a;
+}
+let PENDING = { ch: "", files: [], busy: 0 };
+async function addFiles(ch, list){
+  if (!S.assets){ toast("Envoi de fichiers indisponible."); return; }
+  if (PENDING.ch !== ch) PENDING = { ch, files: [], busy: 0 };
+  for (const file of list){
+    if (file.size > 300 * 1048576){ toast(file.name + " dépasse 300 Mo."); continue; }
+    const item = { name: file.name, type: file.type, size: file.size, url: "", local: (isImg(file) ? URL.createObjectURL(file) : "") };
+    PENDING.files.push(item); PENDING.busy++; render();
+    try { const r = await S.assets.upload(file); item.url = r.url; item.type = r.contentType || file.type; item.size = r.sizeBytes || file.size; }
+    catch(e){ PENDING.files = PENDING.files.filter(x => x !== item); toast("« " + file.name + " » n’a pas pu être envoyé."); }
+    PENDING.busy--; render();
+  }
+}
+
+/* ---------- Messagerie (façon messagerie de téléphone) ---------- */
+function waTime(at){ const d = new Date(at || 0), k = iso(d); if (k === today()) return d.getHours() + " h " + String(d.getMinutes()).padStart(2,"0"); if (k === addDays(today(), -1)) return "Hier"; return fmtD(k); }
 function vMessagerie(root){
   const me = S.me || "Gabriel";
   const mode = S.ui.msgMode || "main";
   const pre = mode === "shoot" ? "tg:" : "";
   let ch = mode === "shoot" ? (S.ui.msgShoot || "") : (S.ui.msgCh || "general");
   if (!msgChannels(mode).includes(ch)) ch = mode === "shoot" ? "tg:general" : "general";
-  if (unreadIn(ch)){ S.ui[seenKey(ch)] = new Date().toISOString(); remember(); setTimeout(renderTabs, 0); }
-  root.appendChild(head("Messagerie", mode === "shoot" ? "Les fils tournage, mêmes sujets et mêmes clients" : "L’équipe et les clients", [(() => { const sg = segm([["main","Principal"],["shoot","Tournage"]], mode, v => { S.ui.msgMode = v; remember(); render(); }); [...sg.querySelectorAll("button")].forEach((b, i) => { const n = unreadMode(i ? "shoot" : "main"); if (n) b.appendChild(el("span","cnt",String(n))); }); return sg; })()]));
-  const wrap = el("div","chat");
-  const side = el("nav","chat-side");
-  const last = {}; S.d.messages.forEach(m => { if (!last[m.ch] || m.at > last[m.ch]) last[m.ch] = m.at; });
-  const chBtn = (k, label) => { const b = el("button", null, label); b.setAttribute("aria-pressed", String(k === ch)); const un = k === ch ? 0 : unreadIn(k); if (un){ b.classList.add("unread"); b.appendChild(el("span","cnt",String(un))); } b.onclick = () => { if (mode === "shoot") S.ui.msgShoot = k; else S.ui.msgCh = k; S.ui[seenKey(k)] = new Date().toISOString(); remember(); render(); }; side.appendChild(b); };
-  side.appendChild(el("span","chat-lab","Équipe")); CHANNELS.forEach(([k,l]) => chBtn(pre+k, l));
-  side.appendChild(el("span","chat-lab","Clients")); clientNames().filter(n => n !== AGENCE).forEach(n => chBtn(pre+"c:"+n, n));
-  const main = el("section","chat-main");
-  main.appendChild(el("h2","chat-title", (mode === "shoot" ? "Tournage, " : "") + chName(ch)));
-  const list = el("div","chat-list"); list.id = "chat-list";
+  if (unreadIn(ch) && (S.ui.waConv || !window.matchMedia("(max-width:900px)").matches)){ S.ui[seenKey(ch)] = new Date().toISOString(); remember(); setTimeout(renderTabs, 0); }
+  root.appendChild(head("Messagerie", mode === "shoot" ? "Les fils tournage, mêmes sujets et mêmes clients" : "L’équipe et les clients", [(() => { const sg = segm([["main","Principal"],["shoot","Tournage"]], mode, v => { S.ui.msgMode = v; S.ui.waConv = false; remember(); render(); }); [...sg.querySelectorAll("button")].forEach((b, i) => { const n = unreadMode(i ? "shoot" : "main"); if (n) b.appendChild(el("span","cnt",String(n))); }); return sg; })()]));
+  const wrap = el("div","wa " + (S.ui.waConv ? "show-conv" : "show-list"));
+
+  /* Liste des conversations */
+  const side = el("nav","wa-list");
+  const lastOf = {}; S.d.messages.forEach(m => { if (!lastOf[m.ch] || (m.at || "") > (lastOf[m.ch].at || "")) lastOf[m.ch] = m; });
+  const row = (k, label) => {
+    const b = el("button","wa-row"); b.type = "button"; b.setAttribute("aria-pressed", String(k === ch));
+    const lm = lastOf[k], un = k === ch && S.ui.waConv !== false ? 0 : unreadIn(k);
+    const tx = el("span","wa-rtx"); const top = el("span","wa-rtop"); top.append(el("b",null,label), el("small",null, lm ? waTime(lm.at) : ""));
+    const bot = el("span","wa-rbot"); bot.append(el("span",null, lm ? (lm.who === me ? "Toi : " : lm.who + " : ") + msgPreview(lm) : "Aucun message")); if (un) bot.appendChild(el("span","cnt",String(un)));
+    tx.append(top, bot); b.append(chAvatar(k, 44), tx); if (un) b.classList.add("unread");
+    b.onclick = () => { if (mode === "shoot") S.ui.msgShoot = k; else S.ui.msgCh = k; S.ui[seenKey(k)] = new Date().toISOString(); S.ui.waConv = true; remember(); render(); };
+    side.appendChild(b);
+  };
+  side.appendChild(el("span","wa-lab","Équipe")); CHANNELS.forEach(([k,l]) => row(pre+k, l));
+  side.appendChild(el("span","wa-lab","Clients"));
+  clientNames().filter(n => n !== AGENCE).map(n => [pre+"c:"+n, n]).sort((a, b) => ((lastOf[b[0]] || {}).at || "").localeCompare((lastOf[a[0]] || {}).at || "") || a[1].localeCompare(b[1])).forEach(([k, n]) => row(k, n));
+
+  /* Conversation */
+  const main = el("section","wa-conv");
+  const hd = el("header","wa-head");
+  const back = el("button","wa-back"); back.type = "button"; back.setAttribute("aria-label","Retour aux conversations"); back.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>'; back.onclick = () => { S.ui.waConv = false; remember(); render(); };
+  const ht = el("div","wa-htx"); const isCli = ch.replace(/^tg:/,"").startsWith("c:");
+  ht.append(el("b",null,(mode === "shoot" ? "Tournage, " : "") + chName(ch)), el("small",null, isCli ? "Échanges de l’équipe sur ce client" : (S.team || []).map(t => t.name).join(", ")));
+  hd.append(back, chAvatar(ch, 40), ht); main.appendChild(hd);
+  const list = el("div","wa-msgs"); list.id = "chat-list";
   const msgs = S.d.messages.filter(m => m.ch === ch).sort((a,b) => (a.at||"").localeCompare(b.at||""));
-  if (!msgs.length) list.appendChild(el("p","chat-empty","Aucun message ici pour l’instant. Écris le premier."));
+  if (!msgs.length) list.appendChild(el("p","wa-empty","Aucun message ici pour l’instant. Écris le premier."));
   let prev = null;
   msgs.forEach(m => {
     const md = new Date(m.at||0), d = iso(md);
-    if (!prev || iso(new Date(prev.at||0)) !== d){ const dl = fmtDL(d); list.appendChild(el("div","chat-day", d === today() ? "Aujourd’hui" : dl.charAt(0).toUpperCase()+dl.slice(1))); prev = null; }
-    const grouped = prev && prev.who === m.who && (Date.parse(m.at) - Date.parse(prev.at)) < 5*60000;
-    const row = el("div","msg"+(m.who === me ? " mine" : "")+(grouped ? " cont" : ""));
-    if (!grouped){ const hd = el("div","msg-h"); hd.append(el("b",null,m.who||""), el("span",null,md.getHours()+" h "+String(md.getMinutes()).padStart(2,"0"))); row.appendChild(hd); }
-    if (m.audio) row.appendChild(audioFor(m));
-    else row.appendChild(el("div","msg-t", m.text||""));
+    if (!prev || iso(new Date(prev.at||0)) !== d){ const dl = fmtDL(d); list.appendChild(el("div","wa-day", d === today() ? "Aujourd’hui" : d === addDays(today(), -1) ? "Hier" : dl.charAt(0).toUpperCase()+dl.slice(1))); prev = null; }
+    const mine = m.who === me, grouped = prev && prev.who === m.who && (Date.parse(m.at) - Date.parse(prev.at)) < 5*60000;
+    const line = el("div","wa-line" + (mine ? " mine" : "") + (grouped ? " cont" : ""));
+    if (!mine) line.appendChild(grouped ? el("span","av-sp") : avatarEl(m.who, 30));
+    const bub = el("div","wa-bub");
+    if (!mine && !grouped){ const nm = el("b","wa-name",m.who || ""); nm.style.color = avColor(m.who); bub.appendChild(nm); }
+    (m.files || []).forEach(f => bub.appendChild(attachEl(f)));
+    if (m.audio) bub.appendChild(audioFor(m));
+    if (m.text) bub.appendChild(el("div","wa-txt", m.text));
+    bub.appendChild(el("span","wa-time", md.getHours()+" h "+String(md.getMinutes()).padStart(2,"0")));
+    const col = el("div","wa-col"); col.appendChild(bub);
     const act = el("div","msg-a");
-    const tk = el("button",null,"En faire une tâche"); tk.onclick = () => editTask({who: me, title: (m.text||"Écouter le message vocal").slice(0,120), client: ch.replace(/^tg:/, "").startsWith("c:") ? ch.replace(/^tg:/, "").slice(2) : ""}); act.appendChild(tk);
-    if (m.who === me || S.role === "owner"){ const del = el("button","rm","Retirer"); let armed = false; del.onclick = () => { if (!armed){ armed = true; del.textContent = "Confirmer"; del.classList.add("armed"); setTimeout(() => { armed = false; del.textContent = "Retirer"; del.classList.remove("armed"); }, 3000); return; } AUDIO_EL.delete(m.id); remove("messages", m.id); }; act.appendChild(del); }
-    row.appendChild(act);
-    list.appendChild(row); prev = m;
+    const tk = el("button",null,"En faire une tâche"); tk.onclick = () => editTask({who: me, title: (m.text || (m.audio ? "Écouter le message vocal" : "Voir le fichier de " + m.who)).slice(0,120), client: ch.replace(/^tg:/, "").startsWith("c:") ? ch.replace(/^tg:/, "").slice(2) : ""}); act.appendChild(tk);
+    if (mine || S.role === "owner"){ const del = el("button","rm","Retirer"); let armed = false; del.onclick = () => { if (!armed){ armed = true; del.textContent = "Confirmer"; del.classList.add("armed"); setTimeout(() => { armed = false; del.textContent = "Retirer"; del.classList.remove("armed"); }, 3000); return; } AUDIO_EL.delete(m.id); remove("messages", m.id); }; act.appendChild(del); }
+    col.appendChild(act); line.appendChild(col);
+    list.appendChild(line); prev = m;
   });
   main.appendChild(list);
-  const form = el("form","chat-form");
-  const ta = el("textarea"); ta.id = "chat-input"; ta.rows = 2; ta.placeholder = "Écrire dans " + chName(ch) + "…"; ta.value = S.ui.msgDraft || "";
-  ta.oninput = () => { S.ui.msgDraft = ta.value; };
-  const send = async () => { const t = ta.value.trim(); if (!t) return; S.ui.msgDraft = ""; ta.value = ""; try { await save("messages", null, {ch, text: t, who: me, at: new Date().toISOString()}); } catch(e){ S.ui.msgDraft = t; } };
-  ta.onkeydown = e => { if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); send(); } };
-  form.onsubmit = e => { e.preventDefault(); send(); };
-  const sb = el("button","btn lemon","Envoyer"); sb.type = "submit";
+
+  /* Saisie */
+  const form = el("form","wa-form");
+  if (PENDING.ch === ch && PENDING.files.length){
+    const pv = el("div","wa-pend");
+    PENDING.files.forEach(f => { const c = el("span","wa-chip" + (f.url ? "" : " busy")); if (f.local){ const i = document.createElement("img"); i.src = f.local; c.appendChild(i); } c.appendChild(el("span",null, f.url ? f.name : "Envoi de " + f.name + "…"));
+      const x = el("button",null,"Retirer"); x.type = "button"; x.onclick = () => { PENDING.files = PENDING.files.filter(y => y !== f); render(); }; c.appendChild(x); pv.appendChild(c); });
+    form.appendChild(pv);
+  }
+  const bar = el("div","wa-bar");
+  const fi = el("input"); fi.type = "file"; fi.multiple = true; fi.hidden = true; fi.onchange = () => { addFiles(ch, [...fi.files]); fi.value = ""; };
+  const clip = el("button","wa-ic"); clip.type = "button"; clip.title = "Joindre une photo, une vidéo ou un fichier"; clip.setAttribute("aria-label", clip.title);
+  clip.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5 12.4 19a5 5 0 0 1-7.1-7.1l8-8a3.4 3.4 0 0 1 4.8 4.8l-8 8a1.7 1.7 0 0 1-2.4-2.4l7.3-7.3"/></svg>';
+  clip.onclick = () => fi.click();
+  const ta = el("textarea"); ta.id = "chat-input"; ta.rows = 1; ta.placeholder = "Message"; ta.value = S.ui.msgDraft || "";
+  const SEND = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12 20 4l-4 16-4-6.5z"/><path d="M12 13.5 20 4"/></svg>';
   const MIC = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
+  const go2 = el("button","wa-send"); go2.type = "submit";
+  const ready = () => !!ta.value.trim() || (PENDING.ch === ch && PENDING.files.some(f => f.url));
+  const setBtn = () => { const r = ready(); go2.innerHTML = r ? SEND : MIC; go2.setAttribute("aria-label", r ? "Envoyer" : "Enregistrer un message vocal"); go2.dataset.mode = r ? "send" : "mic"; };
+  ta.oninput = () => { S.ui.msgDraft = ta.value; ta.style.height = "auto"; ta.style.height = Math.min(140, ta.scrollHeight) + "px"; setBtn(); };
+  const send = async () => {
+    if (PENDING.ch === ch && PENDING.busy){ toast("Attends la fin de l’envoi des fichiers."); return; }
+    const t = ta.value.trim(), files = PENDING.ch === ch ? PENDING.files.filter(f => f.url).map(f => ({ url: f.url, name: f.name, type: f.type, size: f.size })) : [];
+    if (!t && !files.length){ if (REC) recStop(true); recStart(ch); return; }
+    S.ui.msgDraft = ""; ta.value = ""; PENDING = { ch: "", files: [], busy: 0 };
+    try { await save("messages", null, Object.assign({ch, text: t, who: me, at: new Date().toISOString()}, files.length ? { files } : {})); } catch(e){ S.ui.msgDraft = t; }
+  };
+  ta.onkeydown = e => { if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); if (ready()) send(); } };
+  form.onsubmit = e => { e.preventDefault(); send(); };
   if (REC && REC.ch === ch){
     const rb = el("div","rec"); const tm = el("b",null,recLabel()); tm.id = "rec-time"; rb.append(el("span","rec-dot"), el("span",null,"Enregistrement"), tm);
     const cb = btn("Annuler","", () => recStop(true)); const ok = btn("Envoyer le vocal","lemon", () => recStop(false));
     form.onsubmit = e => { e.preventDefault(); recStop(false); };
-    form.append(rb, cb, ok);
-  } else {
-    const mic = el("button","btn mic"); mic.type = "button"; mic.innerHTML = MIC; mic.setAttribute("aria-label","Enregistrer un message vocal"); mic.title = "Message vocal";
-    mic.onclick = () => { if (REC) recStop(true); recStart(ch); };
-    form.append(ta, mic, sb);
-  }
+    bar.append(rb, cb, ok);
+  } else { setBtn(); bar.append(fi, clip, ta, go2); }
+  form.appendChild(bar);
+  main.ondragover = e => { e.preventDefault(); main.classList.add("drop"); };
+  main.ondragleave = () => main.classList.remove("drop");
+  main.ondrop = e => { e.preventDefault(); main.classList.remove("drop"); if (e.dataTransfer.files.length) addFiles(ch, [...e.dataTransfer.files]); };
   main.appendChild(form);
   wrap.append(side, main); root.appendChild(wrap);
-  requestAnimationFrame(() => { const l = document.getElementById("chat-list"); if (l) l.scrollTop = l.scrollHeight; });
+  list.querySelectorAll("img,video").forEach(x => x.addEventListener(x.tagName === "IMG" ? "load" : "loadedmetadata", () => { list.scrollTop = list.scrollHeight; }, { once: true }));
+  requestAnimationFrame(() => { const l = document.getElementById("chat-list"); if (l) l.scrollTop = l.scrollHeight; if (ta.value){ ta.style.height = "auto"; ta.style.height = Math.min(140, ta.scrollHeight) + "px"; } });
 }
 
 /* ---------- Formation ---------- */
@@ -1037,6 +1131,7 @@ const ico = k => { const s = document.createElementNS("http://www.w3.org/2000/sv
 function renderTabs(){
   const me = S.me || "Gabriel";
   const badge = { messagerie: unreadRole(), taches: openTasks().filter(t => t.who === me && lateDays(t.date) > 0).length, commercial: me === "Gabriel" ? S.d.commercial.filter(c => isISO(c.nextDate) && c.nextDate <= today()).length : 0 };
+  try { const n = badge.messagerie || 0; if (navigator.setAppBadge) { n ? navigator.setAppBadge(n) : navigator.clearAppBadge(); } } catch(e){}
   const link = k => { const a = el("a"); a.href = "#"+k; a.appendChild(ico(k)); a.appendChild(el("span","lb", SHORT[k])); if (k === S.view) a.setAttribute("aria-current","page"); if (badge[k]) a.appendChild(el("span","n",String(badge[k]))); return a; };
   const n = $("#tabs"); n.textContent = "";
   NAV_GROUPS.forEach(([lab, ks]) => { ks = ks.filter(canSee); if (!ks.length) return; if (lab) n.appendChild(el("span","navlab",lab)); ks.forEach(k => n.appendChild(link(k))); });
@@ -1073,7 +1168,7 @@ function render(){
   if (S.preview){ const b = el("div","pv-bar"); b.append(el("span",null,"Aperçu : tu vois l’application comme "+S.me+" ("+(ROLE_LABEL[S.role]||S.role)+"). Lecture seule.")); b.appendChild(btn("Quitter l’aperçu","sm", () => { GC.setAs(""); location.hash = "#parametres"; location.reload(); })); root.insertBefore(b, root.firstChild); }
   else if (S.canWrite === false) root.insertBefore(el("p","status","Consultation seule."), root.firstChild);
   if (focusId){ const f = document.getElementById(focusId); if (f){ f.focus(); try { if (caret != null) f.setSelectionRange(caret, caret); } catch(e){} } }
-  document.title = "Gacolet";
+  { const n = S.ready ? unreadRole() : 0; document.title = (n ? "(" + n + ") " : "") + "Gacolet"; }
 }
 
 /* ---------- Compte connecté ---------- */
@@ -1090,7 +1185,7 @@ function applyMe(r){
   const lab = document.querySelector(".me"); if (lab) lab.hidden = !S.secours;
   if (S.secours){ meSel.textContent = ""; PEOPLE.forEach(p => { const o = el("option",null,p); o.value = p; meSel.appendChild(o); }); if (S.me) meSel.value = S.me; }
   const ac = $("#acct");
-  if (ac && !S.secours){ ac.hidden = false; $("#acct-name").textContent = u.name; $("#acct-role").textContent = (ROLE_LABEL[u.role] || "") + (S.preview ? ", aperçu" : ""); }
+  if (ac && !S.secours){ ac.hidden = false; const ov = ac.querySelector(".av"); if (ov) ov.remove(); ac.prepend(avatarEl(u.name, 34, { src: (u.info || {}).avatar || "" })); $("#acct-name").textContent = u.name; $("#acct-role").textContent = (ROLE_LABEL[u.role] || "") + (S.preview ? ", aperçu" : ""); }
   const fa = $("#foot-agence"); if (fa) fa.hidden = S.role !== "owner";
   fromHash(); render();
 }
@@ -1107,13 +1202,18 @@ function notifyNew(){
   if (!document.hidden && S.view === "messagerie") return;
   fresh.filter(m => m.who !== S.me && Date.now() - Date.parse(m.at || 0) < 120000).slice(-3).forEach(m => {
     try {
-      const n = new Notification(m.who + ", " + chName(m.ch), { body: m.audio ? "Message vocal" : String(m.text || "").slice(0, 140), icon: "/icon-v4-512.png", tag: m.id });
+      const n = new Notification(m.who + ", " + chName(m.ch), { body: msgPreview(m).slice(0, 140), icon: "/icon-v4-512.png", tag: m.id });
       n.onclick = () => { window.focus(); const shoot = String(m.ch).startsWith("tg:"); S.ui.msgMode = shoot ? "shoot" : "main"; if (shoot) S.ui.msgShoot = m.ch; else S.ui.msgCh = m.ch; remember(); go("messagerie"); n.close(); };
     } catch(e){}
   });
 }
 
 /* ---------- Paramètres ---------- */
+async function squareJpeg(file, size){ size = size || 320;
+  try { const img = await createImageBitmap(file); const c = document.createElement("canvas"); c.width = c.height = size; const m = Math.min(img.width, img.height);
+    c.getContext("2d").drawImage(img, (img.width - m) / 2, (img.height - m) / 2, m, m, 0, 0, size, size);
+    const b = await new Promise(r => c.toBlob(r, "image/jpeg", .86)); return b ? new File([b], "photo.jpg", { type: "image/jpeg" }) : file; }
+  catch(e){ return file; } }
 function pmCard(title, sub){ const c = el("section","pm-card"); c.appendChild(el("h2",null,title)); if (sub) c.appendChild(el("p","muted",sub)); return c; }
 function pmField(label, type, value, ac){ const l = el("label","pm-f"); l.appendChild(el("span",null,label)); const i = el("input"); i.type = type || "text"; i.value = value || ""; if (ac) i.autocomplete = ac; l.appendChild(i); return [l, i]; }
 async function reloadUsers(){ try { const r = await GC.api("GET","/api/g-users"); S.users = r.users; } catch(e){ toast(e.message); if (!S.users) S.users = []; } render(); }
@@ -1133,6 +1233,15 @@ function pmCompte(w){
   }
   if (S.preview){ w.appendChild(pmCard("Aperçu", "Les réglages du compte ne sont pas disponibles pendant un aperçu.")); return; }
   const u = S.user || {}, info = u.info || {};
+  const cp = pmCard("Photo de profil", "Elle apparaît dans la messagerie et dans le menu.");
+  const pr = el("div","pm-av"); pr.appendChild(avatarEl(u.name, 76, { src: info.avatar || "" }));
+  const pfi = el("input"); pfi.type = "file"; pfi.accept = "image/*"; pfi.hidden = true;
+  const setAv = async url => { const r = await GC.api("PATCH","/api/g-me",{ avatar: url }); S.user.info = r.info; const t = (S.team || []).find(x => x.name === u.name); if (t) t.avatar = url; applyMe({ user: S.user, team: S.team }); };
+  pfi.onchange = async () => { const f = pfi.files[0]; pfi.value = ""; if (!f) return; if (!S.assets){ toast("Envoi indisponible."); return; }
+    toast("Envoi de la photo…"); try { const up = await S.assets.upload(await squareJpeg(f)); await setAv(up.url); toast("Photo enregistrée."); } catch(x){ toast(x.message || "La photo n’a pas pu être envoyée."); } };
+  const pa = el("div","pm-actions"); pa.append(pfi, btn(info.avatar ? "Changer la photo" : "Ajouter une photo","lemon", () => pfi.click()));
+  if (info.avatar) pa.appendChild(btn("Retirer la photo","", async () => { try { await setAv(""); toast("Photo retirée."); } catch(x){ toast(x.message); } }));
+  pr.appendChild(pa); cp.appendChild(pr); w.appendChild(cp);
   const c1 = pmCard("Mon profil"); const dl = el("dl","pm-dl");
   [["Prénom", u.name], ["Identifiant", u.username], ["Rôle", ROLE_LABEL[u.role] || u.role]].forEach(([k, v]) => dl.append(el("dt",null,k), el("dd",null,v || ""))); c1.appendChild(dl); w.appendChild(c1);
 
