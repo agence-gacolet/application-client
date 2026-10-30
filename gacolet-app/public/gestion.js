@@ -904,7 +904,7 @@ render();
       S.d[c] = snap.docs.filter(d => d.exists).map(d => Object.assign({id: d.id}, d.data()));
       S.got[c] = true; if (!S.ready && COLLS.every(x => S.got[x])) S.ready = true;
       renderSoon();
-    }, err => { S.failed = "Connexion perdue : les modifications reprendront dès le retour du réseau."; renderSoon(); });
+    }, err => { /* coupure passagère : le bandeau « Hors connexion » s'affiche et la synchro reprend seule */ });
   });
   setTimeout(() => { if (!S.ready){ S.ready = true; renderSoon(); } }, 8000);
 })();
