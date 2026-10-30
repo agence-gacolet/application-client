@@ -1,7 +1,7 @@
 {
   "id": "/gestion",
-  "name": "Gacolet Gestion",
-  "short_name": "Gestion",
+  "name": "Gacolet",
+  "short_name": "Gacolet",
   "description": "Gestion interne de l'Agence Gacolet.",
   "lang": "fr",
   "start_url": "/gestion#accueil",
@@ -11,13 +11,13 @@
   "theme_color": "#090908",
   "icons": [
     {
-      "src": "/icon-mac-v2-512.png",
+      "src": "/icon-maskable-v2-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icon-maskable-512.png",
+      "src": "/icon-maskable-v2-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
