@@ -6,7 +6,7 @@ const fs = require("fs");
 const crypto = require("crypto");
 const multer = require("multer");
 
-const COLLS = ["events", "tasks", "commercial", "campaigns", "rushes", "publications", "clients", "cevents", "keydates", "posts", "edtodo", "meta", "messages", "formations"];
+const COLLS = ["events", "tasks", "commercial", "campaigns", "rushes", "publications", "clients", "cevents", "keydates", "posts", "edtodo", "meta", "messages", "formations", "msheets"];
 const ROLES = ["owner", "member", "commercial"];
 const ACCESS = {
   member: {
@@ -14,7 +14,7 @@ const ACCESS = {
     write: ["tasks", "messages", "formations"],
   },
   commercial: {
-    read: ["tasks", "events", "messages", "formations", "clients", "meta", "commercial", "campaigns", "rushes", "publications", "cevents", "keydates", "posts", "edtodo"],
+    read: ["tasks", "events", "messages", "formations", "clients", "meta", "commercial", "campaigns", "msheets", "rushes", "publications", "cevents", "keydates", "posts", "edtodo"],
     write: ["tasks", "messages", "formations", "commercial", "campaigns", "rushes", "publications", "cevents", "keydates", "posts", "edtodo"],
   },
 };
@@ -295,6 +295,40 @@ module.exports = function (app, { db, wrap, root }) {
     // On coupe l’accès sans effacer l’historique (validations, demandes) : le jeton est remplacé.
     await db.run("UPDATE users SET token = ? WHERE id = ?", ["retire-" + crypto.randomBytes(20).toString("hex"), Number(req.params.id)]);
     res.json({ ok: true });
+  }));
+
+  // ---------- Copie des tableaux de suivi Meta (Google Sheets), envoyée par Make ----------
+  // Make lit chaque fichier (onglets choisis) et poste les valeurs ici. Les tableaux Sheets et les courriels restent en place :
+  // l’application en garde une copie à jour, consultable et triable. Clé dans la variable MAKE_KEY du serveur.
+  app.post("/api/hook/sheets", wrap(async (req, res) => {
+    const key = process.env.MAKE_KEY || "";
+    const got = String(req.query.key || req.get("x-make-key") || "");
+    if (!key) return res.status(503).json({ error: "MAKE_KEY n’est pas défini sur le serveur." });
+    if (got.length !== key.length || !crypto.timingSafeEqual(Buffer.from(got), Buffer.from(key))) return res.status(401).json({ error: "Clé refusée." });
+    await ensure();
+    const b = req.body || {}, file = String(b.file || "").trim().slice(0, 80), client = String(b.client || "").trim().slice(0, 120);
+    if (!file || !client) return res.status(400).json({ error: "file et client sont obligatoires." });
+    let ranges = b.valueRanges || (b.data && b.data.valueRanges) || (b.body && b.body.valueRanges) || [];
+    if (typeof ranges === "string") { try { ranges = JSON.parse(ranges); } catch (e) { ranges = []; } }
+    if (!Array.isArray(ranges) && Array.isArray(b.values)) ranges = [{ range: b.tab || "Contacts", values: b.values }];
+    const out = [];
+    for (const r of ranges) {
+      const tab = String(r.range || "").split("!")[0].replace(/^'|'$/g, "").replace(/''/g, "'").trim().slice(0, 60);
+      let rows = (Array.isArray(r.values) ? r.values : []).map(row => (Array.isArray(row) ? row : []).map(v => v == null ? "" : String(v).slice(0, 4000)));
+      while (rows.length && rows[rows.length - 1].every(v => v === "")) rows.pop();
+      const width = rows.reduce((m, row) => { let w = row.length; while (w && row[w - 1] === "") w--; return Math.max(m, w); }, 0);
+      rows = rows.map(row => { const x = row.slice(0, width); while (x.length < width) x.push(""); return x; });
+      if (!tab) continue;
+      const id = (file + "__" + tab).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\w.-]+/g, "_").slice(0, 110);
+      const url = /^https:\/\/docs\.google\.com\//.test(String(b.url || "")) ? String(b.url).slice(0, 300) : "";
+      const data = JSON.stringify({ file, client, tab, url, rows, syncedAt: new Date().toISOString() });
+      if (data.length > 1500000) { out.push({ tab, error: "trop gros" }); continue; }
+      const t = stamp();
+      const u = await db.run("UPDATE docs SET data = ?, deleted = 0, updated_at = ? WHERE col = ? AND id = ?", [data, t, "msheets", id]);
+      if (!u.changes) await db.run("INSERT INTO docs (col, id, data, deleted, updated_at) VALUES (?,?,?,0,?)", ["msheets", id, data, t]);
+      out.push({ tab, rows: rows.length });
+    }
+    res.json({ ok: true, file, tabs: out });
   }));
 
   // ---------- GIF (GIPHY) ----------
