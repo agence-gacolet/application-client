@@ -41,10 +41,11 @@
     <a class="brand" href="#accueil" aria-label="Agence Gacolet, accueil"><svg viewBox="140 158 561 281" aria-hidden="true"><path transform="matrix(1,0,0,-1,700.5803,436.46803)" d="M0 0-147.532-1.615-193.477 45.57-273.888 22.275-261.335 93.466-366.182 35.258-183.556 179.076Z"/><path transform="matrix(1,0,0,-1,232.1747,348.0155)" d="M0 0V0L-91.997-90.068 179.263 118.781 271.552 107.27 190.836 189.479 31.32 30.024"/></svg></a>
     <nav class="nav" id="tabs" aria-label="Modules"></nav>
     <div class="side-foot">
-      <label class="me" for="me"><span>Je suis</span>
+      <div class="acct" id="acct" hidden><b id="acct-name"></b><span id="acct-role"></span></div>
+      <label class="me" for="me" hidden><span>Je suis</span>
         <select id="me"><option value="Gabriel">Gabriel</option><option value="Matis">Matis</option><option value="Clara">Clara</option></select>
       </label>
-      <a class="foot-link" href="/agence">Espace clients</a>
+      <a class="foot-link" href="/agence" id="foot-agence">Espace clients</a>
       <button class="foot-link" type="button" id="logout">Se déconnecter</button>
     </div>
   </aside>
@@ -62,9 +63,11 @@
 <section class="login" id="login" hidden>
   <form class="login-card" id="login-form">
     <span class="logo lg"><span>AGENCE</span><span>GACOLET</span></span>
-    <h1>Gestion</h1>
-    <p>Espace interne de l’agence.</p>
-    <label for="pw">Mot de passe de l’agence</label>
+    <h1>Connexion</h1>
+    <p>Espace interne de l’agence. Ton compte est créé par un propriétaire dans Paramètres.</p>
+    <label for="user">Identifiant</label>
+    <input id="user" type="text" autocomplete="username" autocapitalize="none" spellcheck="false">
+    <label for="pw">Mot de passe</label>
     <input id="pw" type="password" autocomplete="current-password" required>
     <p class="err" id="login-err" role="alert"></p>
     <button class="btn solid" type="submit">Entrer</button>
@@ -79,7 +82,7 @@
   const shell = document.getElementById("shell"), login = document.getElementById("login");
   function boot() {
     login.hidden = true; shell.hidden = false;
-    const s = document.createElement("script"); s.src = "/gestion.js?v=3"; document.body.appendChild(s);
+    const s = document.createElement("script"); s.src = "/gestion.js?v=4"; document.body.appendChild(s);
   }
   window.addEventListener("gc-logout", () => location.reload());
   document.getElementById("logout").onclick = () => GC.logout();
@@ -87,11 +90,11 @@
   if (GC.loggedIn()) return boot();
   login.hidden = false;
   const f = document.getElementById("login-form"), err = document.getElementById("login-err");
-  document.getElementById("pw").focus();
+  document.getElementById("user").focus();
   f.onsubmit = async e => {
     e.preventDefault(); err.textContent = "";
     const b = f.querySelector("button"); b.disabled = true;
-    try { await GC.login(document.getElementById("pw").value); boot(); }
+    try { await GC.login(document.getElementById("user").value, document.getElementById("pw").value); boot(); }
     catch (x) { err.textContent = x.message; b.disabled = false; }
   };
 })();
