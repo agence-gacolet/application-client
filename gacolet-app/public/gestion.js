@@ -827,6 +827,33 @@ function unreadMode(mode){ return msgChannels(mode).reduce((n, k) => n + unreadI
 function unreadRole(){ return (MSG_ROLE[S.me || "Gabriel"] || []).reduce((n, m) => n + unreadMode(m), 0); }
 function shootLabel(e){ return fmtD(e.date) + ", " + e.client; }
 function chName(k){ k = k.replace(/^tg:/, ""); const c = CHANNELS.find(x => x[0] === k); return c ? c[1] : k.replace(/^c:/, ""); }
+/* ---------- Messages vocaux ---------- */
+let REC = null;
+const AUDIO_EL = new Map();
+function recLabel(){ const t = REC ? Math.floor((Date.now() - REC.start) / 1000) : 0; return Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0"); }
+async function recStart(ch){
+  if (!navigator.mediaDevices || !window.MediaRecorder){ toast("Le micro n’est pas disponible sur cet appareil."); return; }
+  let stream; try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch(e){ toast("Accès au micro refusé. Autorise-le dans les réglages du navigateur."); return; }
+  const type = ["audio/webm;codecs=opus","audio/mp4","audio/webm"].find(t => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || "";
+  const mr = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+  const r = { mr, chunks: [], start: Date.now(), ch, stream, cancel: false };
+  mr.ondataavailable = e => { if (e.data && e.data.size) r.chunks.push(e.data); };
+  mr.onstop = async () => {
+    clearInterval(r.timer); r.stream.getTracks().forEach(t => t.stop()); REC = null; render();
+    const dur = Math.round((Date.now() - r.start) / 1000);
+    if (r.cancel || !r.chunks.length || dur < 1) return;
+    const mime = (r.mr.mimeType || "audio/webm").split(";")[0];
+    const file = new File(r.chunks, "vocal" + (mime.includes("mp4") ? ".m4a" : ".webm"), { type: mime });
+    try { if (!S.assets) throw new Error("x"); toast("Envoi du vocal…"); const up = await S.assets.upload(file);
+      await save("messages", null, { ch: r.ch, text: "", audio: up.url, dur, who: S.me || "Gabriel", at: new Date().toISOString() }); }
+    catch(e){ toast("Le vocal n’a pas pu être envoyé."); }
+  };
+  REC = r; mr.start(1000);
+  r.timer = setInterval(() => { const el2 = document.getElementById("rec-time"); if (el2) el2.textContent = recLabel(); if (Date.now() - r.start > 5 * 60000) recStop(false); }, 250);
+  render();
+}
+function recStop(cancel){ if (!REC) return; REC.cancel = !!cancel; try { REC.mr.stop(); } catch(e){} }
+function audioFor(m){ let a = AUDIO_EL.get(m.id); if (!a){ a = document.createElement("audio"); a.controls = true; a.preload = "metadata"; a.src = m.audio; AUDIO_EL.set(m.id, a); } return a; }
 function vMessagerie(root){
   const me = S.me || "Gabriel";
   const mode = S.ui.msgMode || "main";
@@ -853,9 +880,10 @@ function vMessagerie(root){
     const grouped = prev && prev.who === m.who && (Date.parse(m.at) - Date.parse(prev.at)) < 5*60000;
     const row = el("div","msg"+(m.who === me ? " mine" : "")+(grouped ? " cont" : ""));
     if (!grouped){ const hd = el("div","msg-h"); hd.append(el("b",null,m.who||""), el("span",null,md.getHours()+" h "+String(md.getMinutes()).padStart(2,"0"))); row.appendChild(hd); }
-    row.appendChild(el("div","msg-t", m.text||""));
+    if (m.audio){ const w = el("div","msg-audio"); w.appendChild(audioFor(m)); if (m.dur) w.appendChild(el("span","msg-dur", Math.floor(m.dur/60)+":"+String(m.dur%60).padStart(2,"0"))); row.appendChild(w); }
+    else row.appendChild(el("div","msg-t", m.text||""));
     const act = el("div","msg-a");
-    const tk = el("button",null,"En faire une tâche"); tk.onclick = () => editTask({who: me, title: (m.text||"").slice(0,120), client: ch.replace(/^tg:/, "").startsWith("c:") ? ch.replace(/^tg:/, "").slice(2) : ""}); act.appendChild(tk);
+    const tk = el("button",null,"En faire une tâche"); tk.onclick = () => editTask({who: me, title: (m.text||"Écouter le message vocal").slice(0,120), client: ch.replace(/^tg:/, "").startsWith("c:") ? ch.replace(/^tg:/, "").slice(2) : ""}); act.appendChild(tk);
     if (m.who === me){ const del = el("button",null,"Supprimer"); del.onclick = () => remove("messages", m.id); act.appendChild(del); }
     row.appendChild(act);
     list.appendChild(row); prev = m;
@@ -868,7 +896,18 @@ function vMessagerie(root){
   ta.onkeydown = e => { if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); send(); } };
   form.onsubmit = e => { e.preventDefault(); send(); };
   const sb = el("button","btn lemon","Envoyer"); sb.type = "submit";
-  form.append(ta, sb); main.appendChild(form);
+  const MIC = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
+  if (REC && REC.ch === ch){
+    const rb = el("div","rec"); const tm = el("b",null,recLabel()); tm.id = "rec-time"; rb.append(el("span","rec-dot"), el("span",null,"Enregistrement"), tm);
+    const cb = btn("Annuler","", () => recStop(true)); const ok = btn("Envoyer le vocal","lemon", () => recStop(false));
+    form.onsubmit = e => { e.preventDefault(); recStop(false); };
+    form.append(rb, cb, ok);
+  } else {
+    const mic = el("button","btn mic"); mic.type = "button"; mic.innerHTML = MIC; mic.setAttribute("aria-label","Enregistrer un message vocal"); mic.title = "Message vocal";
+    mic.onclick = () => { if (REC) recStop(true); recStart(ch); };
+    form.append(ta, mic, sb);
+  }
+  main.appendChild(form);
   wrap.append(side, main); root.appendChild(wrap);
   requestAnimationFrame(() => { const l = document.getElementById("chat-list"); if (l) l.scrollTop = l.scrollHeight; });
 }
