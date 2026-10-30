@@ -478,20 +478,16 @@ function vAccueil(root){
   else if (hr < 18) say = wd === 5 ? "Encore quelques heures et c’est le week-end." : "Encore un bel après-midi devant toi.";
   else say = "La journée touche à sa fin. Beau travail aujourd’hui.";
   if (evs.length){ const e = evs[0]; const what = e.type === "Tournage" ? "tournage chez " + e.client : e.type === "Rendez-vous" ? "rendez-vous avec " + e.client : e.client; say += " " + (evening || weekend ? "Demain" : "Aujourd’hui") + ", " + what + (e.time ? " à " + fmtTime(e.time) : "") + "."; }
-  const mine = openTasks().filter(t => t.who === me && isISO(t.date)).sort((a,b) => a.date.localeCompare(b.date));
-  const urgent = mine[0] || openTasks().filter(t => t.who === me)[0];
-  const w = el("section","welcome");
-  const top = el("div","wl-top");
-  const mk = document.createElementNS("http://www.w3.org/2000/svg","svg"); mk.setAttribute("viewBox","140 158 561 281"); mk.setAttribute("aria-hidden","true");
-  mk.innerHTML = '<path transform="matrix(1,0,0,-1,700.5803,436.46803)" d="M0 0-147.532-1.615-193.477 45.57-273.888 22.275-261.335 93.466-366.182 35.258-183.556 179.076Z"/><path transform="matrix(1,0,0,-1,232.1747,348.0155)" d="M0 0V0L-91.997-90.068 179.263 118.781 271.552 107.27 190.836 189.479 31.32 30.024"/>';
-  const h = el("h1","wl"); h.append(document.createTextNode(hello + " "), el("span", null, me)); top.append(mk, h); w.appendChild(top);
-  w.appendChild(el("p","wl-say", say));
-  const go1 = el("button","wl-go");
-  if (urgent){ go1.appendChild(el("small",null,"On commence par")); go1.appendChild(el("b",null,urgent.title)); if (urgent.client && urgent.client !== AGENCE) go1.appendChild(el("span",null,urgent.client)); go1.onclick = () => openTask(urgent); }
-  else { go1.appendChild(el("small",null,"Rien d’urgent")); go1.appendChild(el("b",null,"Jeter un œil à l’agenda")); go1.onclick = () => go("agenda"); }
-  const arrow = el("i","wl-arrow"); go1.appendChild(arrow);
-  w.appendChild(go1);
-  root.appendChild(w);
+  const nb = btn("Nouvelle tâche", "", () => editTask({who:me})); if (!writable()) nb.disabled = true;
+  const dl = fmtDL(t0); root.appendChild(head([hello, me], dl.charAt(0).toUpperCase()+dl.slice(1)+" "+t0.slice(0,4), [nb]));
+  root.appendChild(el("p","hsum say", say));
+  const dated = openTasks().filter(t => t.who === me && isISO(t.date)).sort((a,b) => a.date.localeCompare(b.date));
+  const urgent = dated[0] || openTasks().filter(t => t.who === me)[0];
+  const s = el("section","hblock hstart"); s.appendChild(el("h2","hh", urgent ? "On commence par" : "Rien d’urgent"));
+  const r = el("button","hrow go"); 
+  if (urgent){ r.style.setProperty("--c", colorOf(urgent.client)); r.appendChild(el("span","hd", urgent.date ? fmtD(urgent.date) : "")); const m = el("span","hm2"); m.appendChild(el("b",null,urgent.title)); if (urgent.client && urgent.client !== AGENCE) m.appendChild(el("span",null,urgent.client)); r.appendChild(m); r.onclick = () => openTask(urgent); }
+  else { r.appendChild(el("span","hd","")); const m = el("span","hm2"); m.appendChild(el("b",null,"Jeter un œil à l’agenda")); r.appendChild(m); r.onclick = () => go("agenda"); }
+  r.appendChild(el("span","ht","Y aller")); s.appendChild(r); root.appendChild(s);
 }
 
 /* ---------- Tâches ---------- */
