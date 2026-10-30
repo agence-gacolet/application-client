@@ -355,3 +355,10 @@ details.box[open] summary::after{content:"\2212"}
 .ev{background:var(--surface)} .ev.k-task,.ev.k-relance{background:var(--hover)} .t tr.band td span{color:var(--muted)}
 .danger{border-color:#5A2A27}
 .day.today .num,.wcol.today .whead b{font-weight:400}
+
+/* Logo montagne en haut à gauche */
+.brand{display:block;width:84px;margin:4px 0 30px 10px;line-height:0}
+.brand svg{display:block;width:100%;height:auto;fill:var(--lemon);transition:transform .2s ease}
+.brand:hover svg{transform:translateY(-2px)}
+.brand-sm{display:block;width:40px;height:auto;flex:none;fill:var(--lemon)}
+@media (max-width:900px){.mbar-me{margin-left:auto}}
