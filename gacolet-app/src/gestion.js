@@ -6,7 +6,7 @@ const fs = require("fs");
 const crypto = require("crypto");
 const multer = require("multer");
 
-const COLLS = ["events", "tasks", "commercial", "campaigns", "rushes", "publications", "clients", "cevents", "keydates", "posts", "edtodo", "meta", "messages", "formations", "msheets", "idees", "pilotage", "ca"];
+const COLLS = ["events", "tasks", "commercial", "campaigns", "rushes", "publications", "clients", "cevents", "keydates", "posts", "edtodo", "meta", "messages", "formations", "msheets", "idees", "pilotage", "ca", "finance"];
 const ROLES = ["owner", "member", "commercial"];
 const ACCESS = {
   member: {
@@ -27,7 +27,7 @@ const DEFAULT_VIEWS = { member: ["agenda", "taches", "messagerie", "vocal", "foc
   commercial: ["agenda", "taches", "messagerie", "vocal", "focus", "commercial", "clients", "montage", "publications", "idees", "campagnes", "formation"] };
 const SEED = [["Gabriel", "gabriel"], ["Matis", "matis"], ["Clara", "clara"]];
 // Le chiffre d'affaires et le plan chalet ne sont visibles que par Matis et Gabriel, quel que soit le rôle
-const DUO = ["Matis", "Gabriel"];
+const DUO = ["Matis", "Gabriel"], DUO_COLS = ["ca", "finance"];
 
 module.exports = function (app, { db, wrap, root }) {
   const okCol = c => COLLS.includes(c);
@@ -47,6 +47,34 @@ module.exports = function (app, { db, wrap, root }) {
       for (const company of ["Carla Cota Design", "Mazet des délices", "EVA Nîmes"]) { if (have.includes(company.toLowerCase())) continue;
         await db.run("INSERT INTO docs (col, id, data, deleted, updated_at) VALUES ('commercial',?,?,0,?)", [newId(), JSON.stringify({ company, kind: "Prospect", source: "Réseaux sociaux", stage: "à contacter", nextAction: "Premier contact", nextDate: day, order: 999, createdAt: t, updatedAt: t, createdBy: "Tableau Veleda" }), t]); }
       await db.run("INSERT INTO docs (col, id, data, deleted, updated_at) VALUES ('meta','seed-prospects-reseaux',?,0,?)", [JSON.stringify({ done: t }), t]);
+    }
+    const seedDoc = async (col, id, data) => { if (await db.one("SELECT id FROM docs WHERE col = ? AND id = ?", [col, id])) return; const t = new Date().toISOString(); await db.run("INSERT INTO docs (col, id, data, deleted, updated_at) VALUES (?,?,?,0,?)", [col, id, JSON.stringify(Object.assign({ createdAt: t, updatedAt: t, createdBy: "Plan chalet" }, data)), t]); };
+    if (!(await db.one("SELECT id FROM docs WHERE col = 'meta' AND id = 'seed-finance-chalet'"))) {
+      // Plan chalet : fichier GACOLET_Chalet_PlanJourParJour_gsheet_v01_20261011 (onglets À lire, Objectifs mensuels, Suivi, Portes, Hypothèses)
+      const months = ["2026-10","2026-11","2026-12","2027-01","2027-02","2027-03","2027-04","2027-05","2027-06","2027-07","2027-08","2027-09"];
+      const caObj = [6023, 8794, 10774, 12839, 14389, 15939, 17489, 19039, 20589, 22139, 23689, 25239], caMin = [6000, 8000, 9300, 10300, 11300, 12300, 12900, 13900, 14800, 15400, 16400, 17400];
+      const gSave = [1252, 3600, 3800, 4900, 4900, 5900, 6700, 6800, 7600, 7500, 8400, 9100], gTreso = [2900, 6500, 10300, 15200, 20100, 26000, 32700, 39500, 47100, 54600, 63000, 72100];
+      const pSave = [779, 1300, 1800, 2300, 3100, 3500, 3900, 4300, 5200, 5500, 6000, 5700], pTreso = [800, 2100, 3900, 6200, 9300, 12800, 16700, 21000, 26200, 31700, 37700, 43400];
+      const apport = [0, 0, 0, 5700, 11800, 18800, 26700, 35400, 47700, 58800, 70800, 82100], apportMin = [0, 0, 0, 800, 7100, 12200, 17600, 23600, 32900, 40600, 48700, 57500], signs = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23];
+      await seedDoc("ca", "plan-chalet", { source: "GACOLET_Chalet_PlanJourParJour_gsheet_v01_20261011", deadline: "2027-10-21", compromis: "2027-07-02", price: 150000, cashNeeded: 53116, apportGoal: 82100, apportMin: 57500,
+        months: months.map((m, i) => ({ month: m, caObj: caObj[i], caMin: caMin[i], gSave: gSave[i], gTreso: gTreso[i], pSave: pSave[i], pTreso: pTreso[i], apport: apport[i], apportMin: apportMin[i], signs: signs[i] })),
+        week: { start: "2026-10-12", calls: 100, convs: 30, rdvP: 5, rdvT: 4, props: 3, signs: 1 }, day: { calls: 20, rdvP: 1 },
+        signRule: "1 Meta et 1 Croissance signées par mois, Meta à 450 € d’honoraires. Minimum : 1 Meta et 1 Plus par mois.",
+        gates: [
+          { n: 1, date: "2026-12-31", goal: "CA de décembre d’au moins 10 800 € HT ; trésorerie de Gacolet d’au moins 10 300 € et de Paul Audio d’au moins 3 900 €.", min: "CA de 9 300 €, trésoreries de 9 000 € (Gacolet) et 3 100 € (Paul Audio)", ok: "On continue ; l’avance renforcera l’apport.", mid: "Parades R2 pendant 4 semaines, bilan au 1er dimanche de février.", low: "Parades R2 et préparation du plan C (R1) en janvier." },
+          { n: 2, date: "2027-03-31", goal: "Bilans 2026 de Gacolet et de Paul Audio approuvés ; apport à 50/50 disponible d’au moins 18 800 €.", min: "Apport de 12 200 €, CA de 12 300 €", ok: "Chalet visé 150 000 €, le surplus porte l’apport à 25 ou 30 %.", mid: "Chalet visé 150 000 € à 20 % d’apport ; parades R2.", low: "Plan C activé : aide d’un proche (prêt déclaré ou caution), ou chalet de 100 000 à 115 000 €." },
+          { n: 3, date: "2027-05-31", goal: "Accord de principe bancaire écrit ; SCI immatriculée ; apport à 50/50 disponible d’au moins 35 400 €.", min: "Apport de 23 600 €, ou aucune banque favorable", ok: "Offre d’achat le lendemain, banque informée de l’apport renforcé.", mid: "Offre plafonnée au calcul de l’onglet Hypothèses.", low: "2e tournée bancaire (banques mutualistes de la zone du chalet) ; plan C." },
+          { n: 4, date: "2027-07-02", goal: "Compromis signé ; conditions suspensives correctes ; dépôt de garantie versé.", min: "Aucune offre acceptée au 20/06/2027", ok: "Demande de prêt déposée sous 10 jours.", mid: "Compromis au plus tard le 16/07/2027.", low: "Offre sur le bien de repli sous 48 h." },
+          { n: 5, date: "2027-10-08", goal: "Acte authentique signé, apports égaux des deux sociétés versés.", min: "Acte non daté au 15/09/2027", ok: "Mise en location.", mid: "Prorogation écrite du compromis avec le vendeur.", low: "Limite absolue : 21/10/2027. Appel quotidien au notaire et à la banque." } ] });
+      await seedDoc("ca", "m-2026-10", { month: "2026-10", real: 6453 });
+      // Prélèvements mensuels : portefeuille d'agence.md (prix HT au 30/10/2026). Jour de prélèvement à confirmer.
+      const subs = [["La Vie La Construction", "Tarif historique", 598], ["Locamex", "Standard", 500], ["Meyer-Pic", "Standard", 500], ["France Étanchéité", "Standard", 500], ["KR Thermolaquage", "Standard", 500], ["Paillotte Bassamoise", "Abonnement", 500],
+        ["Bonobo", "Abonnement", 400], ["Delta Sud Formation", "Abonnement", 375], ["Gaufrement Bon", "Abonnement", 250], ["Sport Défense", "Abonnement", 200], ["Domaine Pagezi", "Essai", 200], ["AR Climatisation", "Vidéo 4 (dès le 01/11)", 200], ["Hugo Maître Nageur", "Vidéo 8", 350], ["Flora Design", "Vidéo 4", 200]];
+      for (const [client, label, amount] of subs) await seedDoc("finance", "pr-" + client.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""), { kind: "prelevement", client, label, amount, day: 5, active: true, paid: {} });
+      await seedDoc("finance", "pr-sos-pare-brise-codognan", { kind: "prelevement", client: "SOS Pare-Brise Codognan", label: "Meta, au prorata de 10 contacts qualifiés", amount: 450, day: 5, active: true, variable: true, paid: {} });
+      await seedDoc("finance", "pr-total-habitat-360", { kind: "prelevement", client: "Total Habitat 360", label: "Meta, au prorata des contacts qualifiés", amount: 450, day: 5, active: true, variable: true, start: "2026-11", paid: {} });
+      await seedDoc("finance", "pj-hugo", { kind: "projet", client: "Hugo Maître Nageur", title: "Projet Hugo Maître Nageur", total: 0, payments: [], due: [] });
+      await db.run("INSERT INTO docs (col, id, data, deleted, updated_at) VALUES ('meta','seed-finance-chalet',?,0,?)", [JSON.stringify({ done: new Date().toISOString() }), new Date().toISOString()]);
     }
   })().catch(e => { ready = null; throw e; }));
   app.use(["/api/g", "/api/g-"], (req, res, next) => ensure().then(() => next(), e => res.status(500).json({ error: "Base indisponible.", detail: String(e.message || e).slice(0, 300) })));
@@ -112,8 +140,8 @@ module.exports = function (app, { db, wrap, root }) {
 
   // ---------- Droits par rôle ----------
   const viewColls = u => (u.views || []).flatMap(v => VIEW_COLLS[v] || []);
-  const canRead = (u, col) => col === "ca" ? DUO.includes(u.name) : u.role === "owner" || (ACCESS[u.role] && ACCESS[u.role].read.includes(col)) || viewColls(u).includes(col);
-  const canWriteCol = (u, col) => col === "ca" ? DUO.includes(u.name) : u.role === "owner" || (ACCESS[u.role] && ACCESS[u.role].write.includes(col)) || viewColls(u).includes(col);
+  const canRead = (u, col) => DUO_COLS.includes(col) ? DUO.includes(u.name) : u.role === "owner" || (ACCESS[u.role] && ACCESS[u.role].read.includes(col)) || viewColls(u).includes(col);
+  const canWriteCol = (u, col) => DUO_COLS.includes(col) ? DUO.includes(u.name) : u.role === "owner" || (ACCESS[u.role] && ACCESS[u.role].write.includes(col)) || viewColls(u).includes(col);
   function visible(u, col, d) {
     if (!canRead(u, col)) return false;
     if (col === "messages" && String(d.ch || "").startsWith("dm:")) return String(d.ch).slice(3).split("|").includes(u.name);
@@ -125,7 +153,7 @@ module.exports = function (app, { db, wrap, root }) {
   }
   // before : document actuel (ou null), after : document voulu (ou null pour une suppression), keys : champs modifiés
   function allowed(u, col, before, after, keys) {
-    if (col === "ca") return DUO.includes(u.name) ? "" : "Réservé à Matis et Gabriel.";
+    if (DUO_COLS.includes(col)) return DUO.includes(u.name) ? "" : "Réservé à Matis et Gabriel.";
     if (col === "messages") {
       if (before && before.who !== u.name && !(u.role === "owner" && !after)) return "Tu ne peux retirer que tes propres messages.";
       if (after && after.who !== u.name) return "Message refusé.";
@@ -805,6 +833,23 @@ module.exports = function (app, { db, wrap, root }) {
     return { name: u.name, xp, lvl: gLevel(xp), next: Math.pow(gLevel(xp), 2) * 100, prev: Math.pow(gLevel(xp) - 1, 2) * 100,
       gold: done.length * 10 + onTime * 5 + (Number(p.gold) || 0), bag: p.bag || [], done: done.length };
   }
+  // La com de Gabriel : réels et stories Instagram publiés chaque jour, lus dans Metricool (marque GABRIEL)
+  let comCache = null;
+  app.get("/api/g-com", auth, wrap(async (req, res) => {
+    if (req.user.role !== "owner") return res.status(403).json({ error: "Réservé aux propriétaires." });
+    const token = process.env.METRICOOL_USER_TOKEN; if (!token) return res.json({ ok: false, reason: "no-token" });
+    if (comCache && Date.now() - comCache.at < 10 * 60000) return res.json(comCache.data);
+    const blogId = process.env.METRICOOL_GAB_BLOG_ID || "6875110", userId = process.env.METRICOOL_GAB_USER_ID || process.env.METRICOOL_USER_ID || "4634230";
+    const day = d => d.toLocaleDateString("sv-SE", { timeZone: "Europe/Paris" }), now = new Date(), from = new Date(now.getTime() - 7 * 864e5);
+    const q = new URLSearchParams({ from: day(from) + "T00:00:00", to: day(now) + "T23:59:59", timezone: "Europe/Paris", blogId, userId });
+    const get = async path => { try { const r = await fetch("https://app.metricool.com/api" + path + "?" + q, { headers: { "X-Mc-Auth": token, Accept: "application/json" } }); if (!r.ok) return null; const j = await r.json(); return Array.isArray(j) ? j : Array.isArray(j.data) ? j.data : []; } catch (e) { return null; } };
+    const dateOf = x => { const v = (x.publishedAt && (x.publishedAt.dateTime || x.publishedAt)) || x.publicationDate && x.publicationDate.dateTime || x.published || x.date || x.timestamp || x.created || ""; if (typeof v === "number") return day(new Date(v > 1e12 ? v : v * 1000)); return String(v).slice(0, 10); };
+    const [reels, stories] = await Promise.all([get("/v2/analytics/reels/instagram"), get("/v2/analytics/stories/instagram")]);
+    if (!reels && !stories) return res.json({ ok: false, reason: "api" });
+    const days = {}; const add = (arr, k) => (arr || []).forEach(x => { const d = dateOf(x); if (!d) return; (days[d] = days[d] || { reels: 0, stories: 0 })[k]++; });
+    add(reels, "reels"); add(stories, "stories");
+    const data = { ok: true, at: Date.now(), days }; comCache = { at: Date.now(), data }; res.json(data);
+  }));
   app.get("/api/g-game", auth, wrap(async (req, res) => {
     const u = req.user, me = await gProfile(u);
     const tasks = (await db.all("SELECT id, data FROM docs WHERE col = 'tasks' AND deleted = 0")).map(r => Object.assign({ id: r.id }, JSON.parse(r.data || "{}")))
