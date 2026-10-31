@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hameau Gacolet</title>
+<meta name="theme-color" content="#090908">
+<meta name="robots" content="noindex">
+<link rel="icon" href="/icon-v4-512.png">
+<link rel="preload" href="/fonts/inter.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/bebas-neue.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/jeu.css?v=1">
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="ui">
+  <div id="pframe" class="frame"><div class="pf-av" id="pf-av"></div><div class="pf-tx"><b id="pf-name">Chargement</b><span id="pf-lvl">Niveau 1</span><div class="bar hp"><i style="width:100%"></i></div><div class="bar mp"><i style="width:100%"></i></div></div></div>
+  <div id="tframe" class="frame" hidden><div class="pf-av" id="tf-av"></div><div class="pf-tx"><b id="tf-name"></b><span id="tf-sub"></span><div class="bar hp"><i style="width:100%"></i></div></div></div>
+  <div id="mm-wrap"><div id="mm-zone">Hameau Gacolet</div><canvas id="mm" width="180" height="180"></canvas><div id="mm-clock"></div><button id="mm-mail" hidden title="Vous avez du courrier">Courrier</button></div>
+  <div id="tracker"><h3>Quêtes</h3><div id="tr-list"></div></div>
+  <div id="chat"><div id="chat-log"></div><input id="chat-in" maxlength="200" autocomplete="off" placeholder="Dire quelque chose (Entrée pour envoyer, Échap pour fermer)" hidden></div>
+  <div id="bottom">
+    <div id="xpbar"><i id="xp-fill"></i><span id="xp-tx"></span></div>
+    <div id="abar"></div>
+  </div>
+  <div id="menubar"></div>
+  <div id="fx"></div>
+  <div id="hint"></div>
+  <div id="win-layer"></div>
+</div>
+<div id="gate" hidden><div><h1>Hameau <span>Gacolet</span></h1><p id="gate-tx"></p><a href="/gestion" class="gbtn">Retour à l’application</a></div></div>
+<div id="loading"><div><h1>Hameau <span>Gacolet</span></h1><p>Chargement du monde…</p></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="/jeu.js?v=1"></script>
+</body>
+</html>
