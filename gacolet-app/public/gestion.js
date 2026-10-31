@@ -1147,9 +1147,11 @@ const AV_COLORS = ["#C6FF33","#5AC8FA","#FF9F5A","#C49BFF","#4CD9A0","#FF6B8B","
 function avColor(s){ let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return AV_COLORS[h % AV_COLORS.length]; }
 function initials(s){ const w = String(s || "?").replace(/\(.*?\)/g, " ").replace(/[^\p{L}\p{N} ]/gu, " ").trim().split(/\s+/); return ((w[0] || "?")[0] + (w.length > 1 ? w[w.length - 1][0] : "")).toUpperCase(); }
 function personAvatar(name){ const t = (S.team || []).find(x => x.name === name); return t && t.avatar ? t.avatar : ""; }
+const clientLogo = n => ((S.d && S.d.clients || []).find(c => c.name === n) || {}).logo || "";
 function avatarEl(name, size, opts){
   opts = opts || {};
   const a = el("span","av"); a.style.width = a.style.height = size + "px"; a.style.fontSize = Math.round(size * .38) + "px";
+  if (opts.bw) a.classList.add("av-bw");
   const src = opts.src != null ? opts.src : personAvatar(name);
   if (opts.logo){ a.classList.add("av-logo"); a.innerHTML = '<svg viewBox="140 158 561 281" aria-hidden="true"><path transform="matrix(1,0,0,-1,700.5803,436.46803)" d="M0 0-147.532-1.615-193.477 45.57-273.888 22.275-261.335 93.466-366.182 35.258-183.556 179.076Z"/><path transform="matrix(1,0,0,-1,232.1747,348.0155)" d="M0 0V0L-91.997-90.068 179.263 118.781 271.552 107.27 190.836 189.479 31.32 30.024"/></svg>'; return a; }
   if (src){ const i = document.createElement("img"); i.src = src; i.alt = ""; i.loading = "lazy"; a.appendChild(i); return a; }
@@ -1158,7 +1160,7 @@ function avatarEl(name, size, opts){
   else a.style.background = c;
   return a;
 }
-function chAvatar(k, size){ if (String(k).startsWith("dm:")) return avatarEl(dmOther(k), size); if (String(k).startsWith("cdm:") || String(k).replace(/^tg:/, "").startsWith("cg:")){ const n = chName(k); return avatarEl(n, size, { src: "", color: colorOf(n) }); } const base = String(k).replace(/^tg:/, ""); if (base.startsWith("c:")){ const n = base.slice(2); return avatarEl(n, size, { src: "", color: colorOf(n), soft: true }); } return avatarEl("Équipe", size, { logo: true }); }
+function chAvatar(k, size){ if (String(k).startsWith("dm:")) return avatarEl(dmOther(k), size); if (String(k).startsWith("cdm:") || String(k).replace(/^tg:/, "").startsWith("cg:")){ const n = chName(k), cn = String(k).startsWith("cdm:") ? cdmClient(k) : n, lg = clientLogo(cn) || clientLogo(n); return avatarEl(n, size, lg ? { src: lg, bw: true } : { src: "", color: colorOf(n) }); } const base = String(k).replace(/^tg:/, ""); if (base.startsWith("c:")){ const n = base.slice(2), lg = clientLogo(n); return avatarEl(n, size, lg ? { src: lg, bw: true } : { src: "", color: colorOf(n), soft: true }); } return avatarEl("Équipe", size, { logo: true }); }
 
 /* ---------- Pièces jointes ---------- */
 
@@ -1537,7 +1539,7 @@ function liveFill(){
   if (hs){ if (!hs.dataset.base) hs.dataset.base = hs.textContent; const who = ((L.typing || {})[ch] || []).filter(n => n !== me); hs.textContent = who.length ? (ch.startsWith("dm:") ? "écrit…" : who.join(", ") + (who.length > 1 ? " écrivent…" : " écrit…")) : hs.dataset.base; hs.classList.toggle("typing", !!who.length); }
   const sv = document.getElementById("wa-seen");
   if (sv){ const at = sv.dataset.at || "", r = (L.reads || {})[ch] || {}; const by = Object.keys(r).filter(n => n !== me && r[n] >= at);
-    sv.textContent = by.length ? "Vu par " + by.join(", ") : ""; sv.classList.toggle("on", !!by.length); }
+    sv.textContent = by.length ? (ch.startsWith("dm:") ? "Lu" : "Lu par " + by.join(", ")) : "Distribué"; sv.classList.toggle("on", !!by.length); }
 }
 window.addEventListener("gc-live", () => { if (S.view === "messagerie") liveFill(); });
 function vMessagerie(root){
@@ -1594,7 +1596,8 @@ function vMessagerie(root){
   let prev = null;
   msgs.forEach(m => {
     const md = new Date(m.at||0), d = iso(md);
-    if (!prev || iso(new Date(prev.at||0)) !== d){ const dl = fmtDL(d); list.appendChild(el("div","wa-day", d === today() ? "Aujourd’hui" : d === addDays(today(), -1) ? "Hier" : dl.charAt(0).toUpperCase()+dl.slice(1))); prev = null; }
+    if (!prev || iso(new Date(prev.at||0)) !== d){ const dl = fmtDL(d); list.appendChild(el("div","wa-day", (d === today() ? "Aujourd’hui" : d === addDays(today(), -1) ? "Hier" : dl.charAt(0).toUpperCase()+dl.slice(1)) + " " + hhmm(md))); prev = null; }
+    else if (Date.parse(m.at) - Date.parse(prev.at) > 3600000){ list.appendChild(el("div","wa-day", hhmm(md))); prev = null; }
     const mine = m.who === me, grouped = prev && prev.who === m.who && (Date.parse(m.at) - Date.parse(prev.at)) < 5*60000;
     const fresh = !firstPaint && !MSG_SHOWN.has(m.id); MSG_SHOWN.add(m.id);
     const line = el("div","wa-line" + (mine ? " mine" : "") + (grouped ? " cont" : "") + (fresh ? " new" : "")); line.id = "m-" + m.id;
@@ -1614,7 +1617,8 @@ function vMessagerie(root){
     const col = el("div","wa-col"); col.appendChild(bub);
     const rk = Object.keys(m.re || {}).filter(k => (m.re[k] || []).length);
     if (rk.length){ const rr = el("div","wa-re"); rk.forEach(k => { const b = el("button", (m.re[k].includes(me) ? "on" : null)); b.type = "button"; b.title = m.re[k].join(", "); b.append(document.createTextNode(k), el("span",null,String(m.re[k].length))); b.onclick = e => { e.stopPropagation(); react(m, k); }; rr.appendChild(b); }); col.appendChild(rr); }
-    if (lastMine && m.id === lastMine.id && !ch.startsWith("dm:")){ const sv = el("span","wa-seen",""); sv.id = "wa-seen"; sv.dataset.at = m.at || ""; col.appendChild(sv); }
+    if (lastMine && m.id === lastMine.id){ const sv = el("span","wa-seen","Distribué"); sv.id = "wa-seen"; sv.dataset.at = m.at || ""; col.appendChild(sv); }
+    bub.title = hhmm(md);
     line.appendChild(col);
     bub.ondblclick = e => { e.preventDefault(); react(m, "❤️"); };
     let sx = 0, sy = 0, dx = 0;
@@ -1627,6 +1631,7 @@ function vMessagerie(root){
     line.appendChild(dots);
     list.appendChild(line); prev = m;
   });
+  const ls = [...list.querySelectorAll(".wa-line")]; ls.forEach((l, i) => { const n = ls[i + 1]; if (!n || !n.classList.contains("cont") || n.previousElementSibling !== l) l.classList.add("tail"); });
   const ty = el("div","wa-typing"); ty.id = "wa-typing"; ty.hidden = true; ty.append(el("i"), el("i"), el("i"), el("span")); list.appendChild(ty);
   main.appendChild(list);
   const down = el("button","wa-down"); down.type = "button"; down.setAttribute("aria-label","Aller aux derniers messages"); down.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
@@ -1702,12 +1707,16 @@ function focusDur(ms){ const m = Math.max(0, Math.floor(ms / 60000)); if (m < 1)
 /* Cheminée : une vraie vidéo de feu en boucle (YouTube, sans pub), en fond de tout le salon. Le son se règle depuis le salon. */
 const FIRES = ["cdKop6aixVE","KkGQjCAGVUo","cDZSQkOidlI"];
 const CLAUDE_FM = "https://www.youtube.com/live/AUQKjgKQF7w";
+/* Paysages en vidéo longue (plusieurs heures) et radios de concentration */
+const SCENES = [["Cheminée", FIRES], ["Pluie sur la ville", ["FFjWJzCTf4g","fe5Vo9U0FJE"]], ["Océan", ["WHPEKLQID4U","BigUSVTBQbA"]], ["Neige", ["v_waduKEJmI","yCmUAYTFmQQ"]], ["Forêt", ["EHklxmBvzwc","Q-tFM4K7IjA"]]];
+const RADIOS = [["Claude FM", CLAUDE_FM], ["Piano jazz", "https://www.youtube.com/watch?v=Dx5qFachd3A"], ["Jazz au coin du feu", "https://www.youtube.com/watch?v=O8q9nnyK6Xw"], ["Jazz de bureau", "https://www.youtube.com/watch?v=IaSpAD53mtA"], ["Café jazz", "https://www.youtube.com/watch?v=MYPVQccHhAQ"], ["Lofi", "https://www.youtube.com/watch?v=jfKfPfyJRdk"]];
+const sceneOf = () => SCENES[(S.ui.foScene || 0) % SCENES.length];
 function ytCmd(fr, func, args){ try { fr.contentWindow.postMessage(JSON.stringify({ event: "command", func, args: args || [] }), "*"); } catch(e){} }
 function fireVideo(){
-  const id = FIRES[(S.ui.foFire || 0) % FIRES.length];
+  const sc = sceneOf(), id = sc[1][(S.ui.foFire || 0) % sc[1].length];
   if (FOCUS.vid && FOCUS.vid.dataset.id === id) return FOCUS.vid;
   const w = el("div","fo-vid"); w.dataset.id = id;
-  const fr = document.createElement("iframe"); fr.title = "Cheminée"; fr.allow = "autoplay; encrypted-media"; fr.tabIndex = -1;
+  const fr = document.createElement("iframe"); fr.title = sceneOf()[0]; fr.allow = "autoplay; encrypted-media"; fr.tabIndex = -1;
   fr.src = "https://www.youtube-nocookie.com/embed/" + id + "?autoplay=1&mute=1&loop=1&playlist=" + id + "&controls=0&disablekb=1&modestbranding=1&rel=0&playsinline=1&iv_load_policy=3&enablejsapi=1";
   fr.onload = () => setTimeout(() => { if (FOCUS.sound){ ytCmd(fr, "unMute"); ytCmd(fr, "setVolume", [Math.round(FOCUS.vol * 100)]); } }, 800);
   w.appendChild(fr); FOCUS.vid = w; return w;
@@ -1721,10 +1730,10 @@ function radioFrame(src){
 function focusPeople(){
   const box = document.getElementById("fo-people"); if (!box) return; box.textContent = "";
   const me = S.me || "Gabriel", list = FOCUS.people.slice().sort((a, b) => a.since - b.since);
-  if (!list.length){ box.appendChild(el("p","fo-empty","Personne au coin du feu pour l’instant. Lance ta session, les autres te verront.")); return; }
+  if (!list.length){ box.appendChild(el("p","fo-empty","Personne en focus pour l’instant. Lance ta session, les autres te verront.")); return; }
   list.forEach(p => { const c = el("div","fo-p" + (p.pause ? " pause" : "") + (p.name === me ? " me" : ""));
     const av = avatarEl(p.name, 44); av.classList.add("av-click"); av.onclick = () => profileCard(p.name);
-    const tx = el("div","fo-ptx"); tx.append(el("b",null,p.name + (p.name === me ? " (toi)" : "")), el("span",null, p.pause ? "En pause" : p.tool ? "Sur " + p.tool : "Concentré"), el("small",null, (Date.now() - p.since < 60000 ? "Vient d’arriver" : "En focus depuis " + focusDur(Date.now() - p.since))));
+    const tx = el("div","fo-ptx"); tx.append(el("b",null,p.name + (p.name === me ? " (toi)" : "")), el("span",null, p.pause ? "En pause" : "Concentré"), el("small",null, (Date.now() - p.since < 60000 ? "Vient d’arriver" : "En focus depuis " + focusDur(Date.now() - p.since))));
     c.append(av, tx); box.appendChild(c); });
 }
 function focusTimerLabel(){ if (!FOCUS.end) return ""; const s = Math.max(0, Math.round((FOCUS.end - Date.now()) / 1000)); return Math.floor(s / 60) + " min " + String(s % 60).padStart(2, "0"); }
@@ -1744,7 +1753,7 @@ function vFocus(root){
   wrap.append(fireVideo(), el("div","fo-shade"));
   const ov = el("div","fo-ov"); ov.id = "fo-ov"; wrap.appendChild(ov);
   const side = el("aside","fo-side");
-  side.appendChild(el("h2",null,"Au coin du feu"));
+  side.appendChild(el("h2",null,"En focus"));
   const pp = el("div","fo-people"); pp.id = "fo-people"; side.appendChild(pp);
   side.appendChild(el("h2",null,"Radio"));
   const rs = el("div","fo-rslot"); rs.id = "fo-rslot"; side.appendChild(rs);
@@ -1759,7 +1768,7 @@ function focusFill(){
   if (document.activeElement && sc.contains(document.activeElement)){ focusPeople(); return; }
   ov.textContent = ""; sc.textContent = "";
   const h = el("h1","fo-h"); h.append(document.createTextNode("Salon "), el("span",null,"focus")); ov.appendChild(h);
-  ov.appendChild(el("p","fo-sub", FOCUS.on ? "Tu es au coin du feu. Les autres voient que tu travailles." : "Un coin calme pour travailler ensemble. Chacun voit qui est concentré, sans se déranger."));
+  ov.appendChild(el("p","fo-sub", FOCUS.on ? "Tu es en focus. Les autres voient que tu travailles." : "Un coin calme pour travailler ensemble. Chacun voit qui est concentré, sans se déranger."));
   if (FOCUS.end){ const t = el("p","fo-time", focusTimerLabel()); t.id = "fo-time"; ov.appendChild(t); }
   const ctl = el("div","fo-ctl");
   if (!FOCUS.on) ctl.appendChild(btn("Je me mets en focus","lemon", () => { FOCUS.on = true; const f = document.getElementById("fo"); if (f && f.requestFullscreen && !document.fullscreenElement) f.requestFullscreen().catch(() => {}); focusApi({ task: "", tool: FOCUS.tool }); render(); }));
@@ -1767,32 +1776,26 @@ function focusFill(){
       btn(FOCUS.mode === "pause" ? "Reprendre" : "Pause de 10 min","", () => focusTimer(FOCUS.mode === "pause" ? 0 : 10, "pause")),
       btn("Quitter le salon","", () => { FOCUS.on = false; clearInterval(FOCUS.timer); FOCUS.end = 0; FOCUS.mode = ""; focusApi({ on: false }); render(); }));
   ov.appendChild(ctl);
-  /* Sur quelle application, comme un statut : visible des autres au coin du feu */
-  ov.appendChild(el("p","fo-lab","Tu es sur"));
-  const tl = el("div","fo-chips"); tl.setAttribute("role","group"); tl.setAttribute("aria-label","Application en cours");
-  FOCUS_TOOLS.forEach(n => { const b = el("button","fo-chip",n); b.type = "button"; b.setAttribute("aria-pressed", String(FOCUS.tool === n));
-    b.onclick = () => { FOCUS.tool = FOCUS.tool === n ? "" : n; if (FOCUS.on) focusApi({ task: "", tool: FOCUS.tool }); render(); }; tl.appendChild(b); });
-  ov.appendChild(tl);
+  /* Choix du paysage, puis une barre discrète : son, volume, vocal, plein écran */
+  const scn = el("div","fo-scenes"); scn.setAttribute("role","group"); scn.setAttribute("aria-label","Paysage");
+  SCENES.forEach(([n], k) => { const cur = ((S.ui.foScene || 0) % SCENES.length) === k; const b = el("button","fo-scene",n); b.type = "button"; b.setAttribute("aria-pressed", String(cur));
+    b.onclick = () => { if (cur) S.ui.foFire = (S.ui.foFire || 0) + 1; else { S.ui.foScene = k; S.ui.foFire = 0; } remember(); render(); }; scn.appendChild(b); });
+  ov.appendChild(scn);
   const tools = el("div","fo-tools");
-  const snd = btn(FOCUS.sound ? "Couper le feu" : "Son du feu","sm", () => { fireSound(!FOCUS.sound); render(); });
-  const vol = el("input","fo-vol"); vol.type = "range"; vol.min = 0; vol.max = 1; vol.step = 0.05; vol.value = FOCUS.vol; vol.title = "Volume du feu"; vol.setAttribute("aria-label", vol.title);
+  const snd = btn(FOCUS.sound ? "Couper le son" : "Son de l’ambiance","sm", () => { fireSound(!FOCUS.sound); render(); });
+  const vol = el("input","fo-vol"); vol.type = "range"; vol.min = 0; vol.max = 1; vol.step = 0.05; vol.value = FOCUS.vol; vol.title = "Volume de l’ambiance"; vol.setAttribute("aria-label", vol.title);
   vol.oninput = () => { FOCUS.vol = Number(vol.value); const fr = FOCUS.vid && FOCUS.vid.querySelector("iframe"); if (fr && FOCUS.sound) ytCmd(fr, "setVolume", [Math.round(FOCUS.vol * 100)]); };
-  const nxt = btn("Autre feu","sm", () => { S.ui.foFire = ((S.ui.foFire || 0) + 1) % FIRES.length; remember(); render(); });
-  const voc = VC.room === "focus" ? btn("Quitter le vocal","sm", () => vcLeave()) : btn("Rejoindre en vocal","sm", () => vcJoin("focus","Salon focus"));
-  const full = btn(document.fullscreenElement ? "Quitter le plein écran" : "Plein écran","sm", () => { const f = document.getElementById("fo"); if (document.fullscreenElement) document.exitFullscreen(); else if (f && f.requestFullscreen) f.requestFullscreen().catch(() => {}); });
-  tools.append(snd, vol, nxt, voc, full); ov.appendChild(tools);
+  const voc = VC.room === "focus" ? btn("Quitter le vocal","sm", () => vcLeave()) : btn("Vocal","sm", () => vcJoin("focus","Salon focus"));
+  const full = btn(document.fullscreenElement ? "Réduire" : "Plein écran","sm", () => { const f = document.getElementById("fo"); if (document.fullscreenElement) document.exitFullscreen(); else if (f && f.requestFullscreen) f.requestFullscreen().catch(() => {}); });
+  tools.append(snd, vol, voc, full); ov.appendChild(tools);
   const radio = S.ui.foRadio || CLAUDE_FM, src = embedUrl(radio);
   const want = src && FOCUS.on && S.ui.foRadioOn !== false ? src : "";
   if (!want){ rs.textContent = ""; FOCUS.radio = null; } else if (!FOCUS.radio || FOCUS.radio.dataset.src !== want || FOCUS.radio.parentNode !== rs){ rs.textContent = ""; rs.appendChild(radioFrame(want)); }
-  const rr = el("div","fo-rr");
-  rr.append(btn(S.ui.foRadioOn === false ? "Allumer la radio" : "Couper la radio","sm", () => { S.ui.foRadioOn = S.ui.foRadioOn === false; if (!S.ui.foRadioOn) FOCUS.radio = null; remember(); render(); }));
-  if (S.ui.foRadio) rr.appendChild(btn("Revenir à Claude FM","sm", () => { S.ui.foRadio = ""; FOCUS.radio = null; remember(); render(); }));
+  const rr = el("div","fo-stations");
+  RADIOS.forEach(([n, u]) => { const on = (S.ui.foRadio || CLAUDE_FM) === u && S.ui.foRadioOn !== false; const b = el("button","fo-st" + (on ? " on" : ""), n); b.type = "button"; b.setAttribute("aria-pressed", String(on));
+    b.onclick = () => { b.blur(); if (on){ S.ui.foRadioOn = false; FOCUS.radio = null; } else { S.ui.foRadio = u === CLAUDE_FM ? "" : u; S.ui.foRadioOn = true; FOCUS.radio = null; } remember(); render(); }; rr.appendChild(b); });
   sc.appendChild(rr);
-  const rf = el("form","fo-rf"); const ri = el("input","fo-in"); ri.id = "fo-radio-in"; ri.placeholder = "Autre radio : lien YouTube"; ri.value = S.ui.foRadio || "";
-  const rb = el("button","btn sm","OK"); rb.type = "submit"; rf.append(ri, rb);
-  rf.onsubmit = e => { e.preventDefault(); const v = ri.value.trim(); if (v && !embedUrl(v)){ toast("Colle un lien YouTube ou Vimeo."); return; } S.ui.foRadio = v; FOCUS.radio = null; remember(); render(); };
-  sc.appendChild(rf);
-  sc.appendChild(el("p","muted fo-note", FOCUS.on ? (S.ui.foRadio ? "Ta radio joue pendant la session." : "Claude FM joue pendant la session.") : "La radio démarre quand tu te mets en focus."));
+  sc.appendChild(el("p","muted fo-note", FOCUS.on ? (S.ui.foRadioOn === false ? "Radio coupée. Choisis une station." : "Appuie sur la station en cours pour la couper.") : "La radio démarre quand tu te mets en focus."));
   focusPeople();
 }
 
