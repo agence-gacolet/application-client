@@ -814,7 +814,7 @@ module.exports = function (app, { db, wrap, root }) {
   app.post("/api/g-game/pos", auth, wrap(async (req, res) => {
     await gEnsure();
     const b = req.body || {}, n = req.user.name, now = Date.now(), num = v => Math.max(-500, Math.min(500, Number(v) || 0));
-    const me = { name: n, x: num(b.x), z: num(b.z), y: Math.max(-20, Math.min(250, Number(b.y) || 0)), ry: Number(b.ry) || 0, mv: b.mv ? 1 : 0, emo: String(b.emo || "").slice(0, 12), cls: String(b.cls || "").replace(/[^\w]/g, "").slice(0, 20), lvl: Number(b.lvl) || 1, t: now, ride: ["car", "horse"].includes(b.ride) ? b.ride : "", rp: Number(b.rp) || 0, rr: Number(b.rr) || 0, sp: Number(b.sp) || 0 };
+    const me = { name: n, x: num(b.x), z: num(b.z), y: Math.max(-20, Math.min(250, Number(b.y) || 0)), ry: Number(b.ry) || 0, mv: b.mv ? 1 : 0, emo: String(b.emo || "").slice(0, 12), cls: String(b.cls || "").replace(/[^\w]/g, "").slice(0, 20), lvl: Number(b.lvl) || 1, t: now, ride: ["car", "horse", "pass"].includes(b.ride) ? b.ride : "", rp: Number(b.rp) || 0, rr: Number(b.rr) || 0, sp: Number(b.sp) || 0, drv: String(b.drv || "").slice(0, 80), hp: b.hp == null ? 100 : Math.max(0, Math.min(100, Number(b.hp) || 0)), atk: Number(b.atk) || 0, arm: b.arm ? 1 : 0 };
     // Une seule partie par personne : si le jeu est ouvert dans deux onglets, le plus récent prend la main
     me.ss = Number(b.ss) || 0;
     const prev = await db.one("SELECT data, t FROM game_pos WHERE name = ?", [n]);
@@ -822,7 +822,9 @@ module.exports = function (app, { db, wrap, root }) {
     const js = JSON.stringify(me);
     const u = await db.run("UPDATE game_pos SET data = ?, t = ? WHERE name = ?", [js, now, n]);
     if (!u.changes) await db.run("INSERT INTO game_pos (name, data, t) VALUES (?,?,?)", [n, js, now]).catch(() => db.run("UPDATE game_pos SET data = ?, t = ? WHERE name = ?", [js, now, n]));
-    if (b.say) { const id = now * 100 + Math.floor(Math.random() * 100); await db.run("INSERT INTO game_say (id, who, text, at) VALUES (?,?,?,?)", [id, n, String(b.say).slice(0, 200), now]); if (Math.random() < 0.05) await db.run("DELETE FROM game_say WHERE at < ?", [now - 600000]); }
+    if (b.say) { const id = now * 100 + Math.floor(Math.random() * 100); await db.run("INSERT INTO game_say (id, who, text, at) VALUES (?,?,?,?)", [id, n, String(b.say).replace(/^§+/, "").slice(0, 200), now]); if (Math.random() < 0.05) await db.run("DELETE FROM game_say WHERE at < ?", [now - 600000]); }
+    // Combat : coups portés et défaites, relayés comme des paroles spéciales que les joueurs lisent
+    for (const ev of (Array.isArray(b.ev) ? b.ev.slice(0, 6) : [])) { if (typeof ev === "string" && /^§(hit|ko)§[^§]{1,80}(§\d{1,2})?$/.test(ev)) { const id = now * 100 + Math.floor(Math.random() * 100); await db.run("INSERT INTO game_say (id, who, text, at) VALUES (?,?,?,?)", [id, n, ev, now]).catch(() => {}); } }
     const since = Number(b.since) || 0;
     const players = (await db.all("SELECT data FROM game_pos WHERE t > ? AND name <> ?", [now - 15000, n])).map(r => JSON.parse(r.data));
     const says = (await db.all("SELECT id, who, text, at FROM game_say WHERE id > ? AND at > ? ORDER BY id", [since, now - 60000])).map(r => ({ id: Number(r.id), who: r.who, text: r.text, at: Number(r.at) }));
