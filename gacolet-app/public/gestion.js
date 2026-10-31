@@ -19,9 +19,9 @@ const DAYS = ["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"]
 const DEFAULT_COLORS = {"Agence Gacolet":"#1D1D1B","AR Climatisation":"#E8833A","Bonobo":"#2E9E5B","Delta Sud Formation":"#D6334A","Domaine Pagezi":"#7A1F3D","Flora Design":"#C25CC9","France Étanchéité":"#2F6FE4","Gaufrement Bon":"#E3B505","Hugo Maître Nageur":"#1BA6C9","Insolent":"#5C5C57","KR Thermolaquage":"#8C6239","La Vie La Construction":"#F06A1D","Le Petit Mas":"#6E8B3D","Locamex":"#E2559C","Meyer-Pic":"#3D4FB5","Only Clean":"#17A398","Paillotte Bassamoise":"#F2A93B","SOS Pare-Brise Codognan":"#9B2226","SOS Pare-Brise Vendargues":"#4A6C8C","Sport Défense":"#8E44AD","The New Me Montpellier":"#D98BA5","Total Habitat 360":"#6C7A2E"};
 const VIEWS = [
   ["accueil","Accueil"],["agenda","Agenda"],["taches","Tâches"],["messagerie","Messagerie"],["vocal","Vocal"],["commercial","Commercial"],["clients","Calendrier clients"],
-  ["montage","Prêt à monter"],["publications","Publications"],["campagnes","Campagnes"],["formation","Formation"],["parametres","Paramètres"],["fiches","Tableau clients"],["idees","Idées clients"]
+  ["montage","Prêt à monter"],["publications","Publications"],["campagnes","Campagnes"],["formation","Formation"],["parametres","Paramètres"],["fiches","Tableau clients"],["idees","Idées clients"],["focus","Focus"]
 ];
-const NAV_GROUPS = [["",["accueil"]],["Au quotidien",["agenda","taches","messagerie","vocal"]],["Gestion",["fiches","commercial","publications","idees"]],["Meta",["campagnes"]],["Ressources",["formation"]],["Compte",["parametres"]]];
+const NAV_GROUPS = [["",["accueil"]],["Au quotidien",["agenda","taches","messagerie","vocal","focus"]],["Gestion",["fiches","commercial","publications","idees"]],["Meta",["campagnes"]],["Ressources",["formation"]],["Compte",["parametres"]]];
 /* Onglets fusionnés : le calendrier clients vit dans l’agenda, le montage dans les tâches. */
 const MERGED = { clients: ["agenda","agHub"], montage: ["taches","tHub"] };
 /* Rôles : ce que chaque siège voit. Le serveur applique les mêmes limites aux données. */
@@ -30,8 +30,8 @@ const ROLE_LABEL = {owner:"Propriétaire", member:"Membre", commercial:"Commerci
 const POSTES = ["Direction","Commercial","Vidéaste","Monteur","Community manager","Graphiste","Chargé de communication","Photographe","Alternant","Stagiaire"];
 function posteInput(id, value){ const i = el("input"); i.id = id; i.value = value || ""; i.placeholder = "Ex. Vidéaste"; i.maxLength = 60; const dl = el("datalist"); dl.id = id + "-l"; POSTES.forEach(x => { const o = el("option"); o.value = x; dl.appendChild(o); }); i.setAttribute("list", dl.id); return [i, dl]; }
 const ROLE_VIEWS = {
-  member: ["accueil","agenda","taches","messagerie","vocal","formation","parametres"],
-  commercial: ["accueil","agenda","taches","messagerie","vocal","commercial","clients","montage","publications","idees","campagnes","formation","parametres"]
+  member: ["accueil","agenda","taches","messagerie","vocal","focus","formation","parametres"],
+  commercial: ["accueil","agenda","taches","messagerie","vocal","focus","commercial","clients","montage","publications","idees","campagnes","formation","parametres"]
 };
 const canSee = k => !S.role || S.role === "owner" || (ROLE_VIEWS[S.role] || []).includes(k);
 const COLLS = ["events","tasks","commercial","campaigns","rushes","publications","clients","cevents","keydates","posts","edtodo","meta","messages","formations","msheets","idees"];
@@ -1628,6 +1628,130 @@ function vMessagerie(root){
   requestAnimationFrame(() => { const l = document.getElementById("chat-list"); if (l) l.scrollTop = l.scrollHeight; if (ta.value){ ta.style.height = "auto"; ta.style.height = Math.min(140, ta.scrollHeight) + "px"; } });
 }
 
+/* ---------- Salon focus : travail au calme, ensemble ---------- */
+const FOCUS = { on: false, task: "", people: [], cv: null, raf: 0, audio: null, vol: 0.5, timer: null, mode: "", end: 0, loaded: false };
+function focusApi(body){ return GC.api(body ? "POST" : "GET", "/api/focus", body).then(r => { FOCUS.people = r.people || []; FOCUS.loaded = true; if (S.view === "focus") focusPeople(); renderTabs(); }).catch(() => {}); }
+setInterval(() => { if (!S.ready) return; if (FOCUS.on) focusApi({ task: FOCUS.task }); else if (S.view === "focus" || !FOCUS.loaded) focusApi(); }, 20000);
+window.addEventListener("beforeunload", () => { if (FOCUS.on) fetch("/api/focus", { method: "POST", keepalive: true, headers: { "Content-Type": "application/json", "Authorization": "Bearer " + (localStorage.getItem("gacolet-gestion-cle") || "") }, body: JSON.stringify({ on: false }) }).catch(() => {}); });
+function focusDur(ms){ const m = Math.max(0, Math.floor(ms / 60000)); if (m < 1) return "un instant"; return m < 60 ? m + " min" : Math.floor(m / 60) + " h" + (m % 60 ? " " + String(m % 60).padStart(2, "0") : ""); }
+/* Cheminée : flammes en particules, braises, lueur qui respire. Dessin original, sans image. */
+function fireCanvas(){
+  if (FOCUS.cv) return FOCUS.cv;
+  const cv = document.createElement("canvas"); cv.className = "fo-fire"; FOCUS.cv = cv;
+  const ctx = cv.getContext("2d"); let W = 0, H = 0, parts = [], sparks = [], t = 0;
+  const fit = () => { const r = cv.getBoundingClientRect(), d = Math.min(2, window.devicePixelRatio || 1); W = Math.max(1, r.width); H = Math.max(1, r.height); cv.width = W * d; cv.height = H * d; ctx.setTransform(d, 0, 0, d, 0, 0); };
+  const loop = () => {
+    if (!document.body.contains(cv)){ FOCUS.raf = 0; return; }
+    if (cv.width < 2 || Math.abs(cv.getBoundingClientRect().width - W) > 2) fit();
+    t += 1; const cx = W / 2, small = W < 600, base = H * (small ? 0.6 : 0.74), fw = small ? W * 0.6 : Math.min(W * 0.48, 470), sc = small ? 0.8 : 1.25;
+    ctx.globalCompositeOperation = "source-over"; ctx.fillStyle = "#0B0806"; ctx.fillRect(0, 0, W, H);
+    const pulse = 0.85 + 0.15 * Math.sin(t / 47) + 0.05 * Math.sin(t / 13);
+    const g = ctx.createRadialGradient(cx, base - 40, 10, cx, base - 40, Math.max(W, H) * 0.7);
+    g.addColorStop(0, "rgba(255,140,40," + (0.32 * pulse) + ")"); g.addColorStop(0.35, "rgba(160,60,15," + (0.16 * pulse) + ")"); g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    for (let i = 0; i < 10; i++) parts.push({ x: cx + (Math.random() - .5) * fw * (0.4 + Math.random() * 0.6), y: base - 6, vx: (Math.random() - .5) * 0.5, vy: -(1.2 + Math.random() * 1.9) * sc, life: 0, max: 50 + Math.random() * 50, r: (16 + Math.random() * 24) * sc });
+    if (Math.random() < 0.18) sparks.push({ x: cx + (Math.random() - .5) * fw * .6, y: base - 20, vx: (Math.random() - .5) * 1.2, vy: -(1.5 + Math.random() * 2.5), life: 0, max: 60 + Math.random() * 80 });
+    ctx.globalCompositeOperation = "lighter";
+    parts = parts.filter(p => p.life < p.max);
+    parts.forEach(p => { p.life++; const k = p.life / p.max; p.x += p.vx + Math.sin((p.y + t) / 18) * 0.35 + (cx - p.x) * 0.012; p.y += p.vy; const r = p.r * (1 - k * 0.7);
+      const c = k < 0.25 ? [255, 230, 160] : k < 0.55 ? [255, 150, 50] : [200, 60, 20], a = (1 - k) * 0.26;
+      const rg = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r); rg.addColorStop(0, "rgba(" + c + "," + a + ")"); rg.addColorStop(1, "rgba(" + c + ",0)");
+      ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill(); });
+    sparks = sparks.filter(s => s.life < s.max);
+    sparks.forEach(s => { s.life++; s.x += s.vx + Math.sin((s.life + s.y) / 9) * 0.4; s.y += s.vy; s.vy *= 0.985; const a = 1 - s.life / s.max; ctx.fillStyle = "rgba(255,190,90," + a + ")"; ctx.fillRect(s.x, s.y, 1.6, 1.6); });
+    ctx.globalCompositeOperation = "source-over";
+    const logs = [[-0.55, 0.06, 0.18], [0.5, 0.05, -0.16], [0, 0.0, 0.03]];
+    logs.forEach(([dx, dy, rot]) => { ctx.save(); ctx.translate(cx + dx * fw * 0.5, base + 12 + dy * 60); ctx.rotate(rot); const lw = fw * 0.75, lh = 22;
+      const lg = ctx.createLinearGradient(0, -lh / 2, 0, lh / 2); lg.addColorStop(0, "#3A2416"); lg.addColorStop(1, "#160C06"); ctx.fillStyle = lg;
+      ctx.beginPath(); ctx.roundRect ? ctx.roundRect(-lw / 2, -lh / 2, lw, lh, 11) : ctx.rect(-lw / 2, -lh / 2, lw, lh); ctx.fill();
+      ctx.fillStyle = "rgba(255,120,40," + (0.25 + 0.2 * Math.sin(t / 20 + dx * 5)) + ")"; ctx.fillRect(-lw / 2 + 12, -lh / 2, lw - 24, 2.5); ctx.restore(); });
+    const fl = ctx.createLinearGradient(0, base + 30, 0, H); fl.addColorStop(0, "rgba(255,110,30," + 0.12 * pulse + ")"); fl.addColorStop(1, "rgba(0,0,0,0)"); ctx.fillStyle = fl; ctx.fillRect(0, base + 30, W, H - base);
+    FOCUS.raf = requestAnimationFrame(loop);
+  };
+  cv._start = () => { if (!FOCUS.raf) FOCUS.raf = requestAnimationFrame(loop); };
+  return cv;
+}
+/* Ambiance sonore générée : souffle du feu et crépitements. */
+function fireSound(on){
+  if (!on){ if (FOCUS.audio){ FOCUS.audio.ctx.close(); FOCUS.audio = null; } return; }
+  if (FOCUS.audio) return;
+  const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+  const ctx = new AC(), out = ctx.createGain(); out.gain.value = FOCUS.vol; out.connect(ctx.destination);
+  const len = ctx.sampleRate * 4, buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0); let last = 0;
+  for (let i = 0; i < len; i++){ const w = Math.random() * 2 - 1; last = (last + 0.02 * w) / 1.02; d[i] = last * 3.2; }
+  const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true; const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 420; const rg = ctx.createGain(); rg.gain.value = 0.55;
+  src.connect(lp); lp.connect(rg); rg.connect(out); src.start();
+  const crack = () => { if (!FOCUS.audio) return; const n = ctx.createBufferSource(), b = ctx.createBuffer(1, ctx.sampleRate * 0.03, ctx.sampleRate), x = b.getChannelData(0);
+    for (let i = 0; i < x.length; i++) x[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / x.length, 3);
+    n.buffer = b; const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 1200 + Math.random() * 2500; const gg = ctx.createGain(); gg.gain.value = 0.08 + Math.random() * 0.25;
+    n.connect(hp); hp.connect(gg); gg.connect(out); n.start(); setTimeout(crack, 60 + Math.random() * (Math.random() < 0.2 ? 120 : 900)); };
+  FOCUS.audio = { ctx, out }; crack();
+}
+function focusPeople(){
+  const box = document.getElementById("fo-people"); if (!box) return; box.textContent = "";
+  const me = S.me || "Gabriel", list = FOCUS.people.slice().sort((a, b) => a.since - b.since);
+  if (!list.length){ box.appendChild(el("p","fo-empty","Personne au coin du feu pour l’instant. Lance ta session, les autres te verront.")); return; }
+  list.forEach(p => { const c = el("div","fo-p" + (p.pause ? " pause" : "") + (p.name === me ? " me" : ""));
+    const av = avatarEl(p.name, 44); av.classList.add("av-click"); av.onclick = () => profileCard(p.name);
+    const tx = el("div","fo-ptx"); tx.append(el("b",null,p.name + (p.name === me ? " (toi)" : "")), el("span",null, p.pause ? "En pause" : p.task ? p.task : "Concentré"), el("small",null, (Date.now() - p.since < 60000 ? "Vient d’arriver" : "En focus depuis " + focusDur(Date.now() - p.since))));
+    c.append(av, tx); box.appendChild(c); });
+}
+function focusTimerLabel(){ if (!FOCUS.end) return ""; const s = Math.max(0, Math.round((FOCUS.end - Date.now()) / 1000)); return Math.floor(s / 60) + " min " + String(s % 60).padStart(2, "0"); }
+function focusTimer(min, mode){
+  clearInterval(FOCUS.timer); FOCUS.mode = mode; FOCUS.end = min ? Date.now() + min * 60000 : 0;
+  if (!min){ render(); return; }
+  FOCUS.timer = setInterval(() => { const t = document.getElementById("fo-time"); if (t) t.textContent = focusTimerLabel();
+    if (Date.now() >= FOCUS.end){ clearInterval(FOCUS.timer); const was = FOCUS.mode; FOCUS.end = 0; FOCUS.mode = "";
+      toast(was === "work" ? "Bravo, session terminée. Une pause de 10 minutes ?" : "Fin de la pause, on reprend.");
+      if (FOCUS.on) focusApi({ task: FOCUS.task, pause: false }); render(); } }, 1000);
+  if (FOCUS.on) focusApi({ task: FOCUS.task, pause: mode === "pause" });
+  render();
+}
+function vFocus(root){
+  const me = S.me || "Gabriel";
+  if (!FOCUS.loaded) focusApi();
+  const wrap = el("section","fo"); wrap.id = "fo";
+  const stage = el("div","fo-stage"); const cv = fireCanvas(); stage.appendChild(cv);
+  const ov = el("div","fo-ov");
+  const h = el("h1","fo-h"); h.append(document.createTextNode("Salon "), el("span",null,"focus")); ov.appendChild(h);
+  ov.appendChild(el("p","fo-sub", FOCUS.on ? "Tu es au coin du feu. Les autres voient que tu travailles." : "Un coin calme pour travailler ensemble. Chacun voit qui est concentré, sans se déranger."));
+  if (FOCUS.end) ov.appendChild(el("p","fo-time", focusTimerLabel())).id = "fo-time";
+  const ctl = el("div","fo-ctl");
+  if (!FOCUS.on){
+    const inp = el("input","fo-in"); inp.id = "fo-task"; inp.placeholder = "Sur quoi tu bosses ? (facultatif)"; inp.maxLength = 120; inp.value = FOCUS.task;
+    inp.oninput = () => { FOCUS.task = inp.value; }; inp.onkeydown = e => { if (e.key === "Enter") go2.click(); };
+    const go2 = btn("Je me mets en focus","lemon", () => { FOCUS.on = true; focusApi({ task: FOCUS.task.trim() }); if (!FOCUS.audio && FOCUS.sound !== false) fireSound(true); render(); });
+    ctl.append(inp, go2);
+  } else {
+    ctl.append(btn(FOCUS.mode === "work" ? "Arrêter le minuteur" : "Session de 50 min", FOCUS.mode === "work" ? "" : "lemon", () => focusTimer(FOCUS.mode === "work" ? 0 : 50, "work")),
+      btn(FOCUS.mode === "pause" ? "Reprendre" : "Pause de 10 min","", () => focusTimer(FOCUS.mode === "pause" ? 0 : 10, "pause")),
+      btn("Quitter le salon","", () => { FOCUS.on = false; clearInterval(FOCUS.timer); FOCUS.end = 0; FOCUS.mode = ""; focusApi({ on: false }); fireSound(false); render(); }));
+  }
+  ov.appendChild(ctl);
+  const tools = el("div","fo-tools");
+  const snd = btn(FOCUS.audio ? "Couper le feu" : "Son du feu","sm", () => { fireSound(!FOCUS.audio); FOCUS.sound = !!FOCUS.audio; render(); });
+  const vol = el("input","fo-vol"); vol.type = "range"; vol.min = 0; vol.max = 1; vol.step = 0.05; vol.value = FOCUS.vol; vol.title = "Volume du feu"; vol.setAttribute("aria-label", vol.title);
+  vol.oninput = () => { FOCUS.vol = Number(vol.value); if (FOCUS.audio) FOCUS.audio.out.gain.value = FOCUS.vol; };
+  const voc = VC.room === "focus" ? btn("Quitter le vocal","sm", () => vcLeave()) : btn("Rejoindre en vocal","sm", () => vcJoin("focus","Salon focus"));
+  const full = btn("Plein écran","sm", () => { const f = document.getElementById("fo"); if (document.fullscreenElement) document.exitFullscreen(); else if (f && f.requestFullscreen) f.requestFullscreen().catch(() => {}); });
+  tools.append(snd, vol, voc, full); ov.appendChild(tools);
+  stage.appendChild(ov); wrap.appendChild(stage);
+  /* Radio : un direct YouTube ou une playlist, au choix de chacun */
+  const side = el("aside","fo-side");
+  side.appendChild(el("h2",null,"Au coin du feu"));
+  const pp = el("div","fo-people"); pp.id = "fo-people"; side.appendChild(pp);
+  side.appendChild(el("h2",null,"Radio"));
+  const src = embedUrl(S.ui.foRadio || "");
+  if (src && FOCUS.on){ const fr = el("div","fo-radio"); const i = document.createElement("iframe"); i.src = src + (src.includes("?") ? "&" : "?") + "autoplay=1"; i.allow = "autoplay; encrypted-media"; i.title = "Radio du salon focus"; fr.appendChild(i); side.appendChild(fr); }
+  const rf = el("form","fo-rf"); const ri = el("input","fo-in"); ri.id = "fo-radio-in"; ri.placeholder = "Lien YouTube d’un direct ou d’une playlist"; ri.value = S.ui.foRadio || "";
+  const rb = el("button","btn sm","OK"); rb.type = "submit"; rf.append(ri, rb);
+  rf.onsubmit = e => { e.preventDefault(); const v = ri.value.trim(); if (v && !embedUrl(v)){ toast("Colle un lien YouTube ou Vimeo."); return; } S.ui.foRadio = v; remember(); render(); };
+  side.appendChild(rf);
+  side.appendChild(el("p","muted fo-note", src ? (FOCUS.on ? "La radio joue pendant ta session." : "La radio démarre quand tu te mets en focus.") : "Colle le lien de ta radio préférée, elle se lancera à chaque session."));
+  wrap.appendChild(side); root.appendChild(wrap);
+  setTimeout(() => { cv._start(); focusPeople(); }, 0);
+}
+
 /* ---------- Idées clients : ce que les clients déposent depuis leur espace ---------- */
 function vIdees(root){
   const me = S.me || "Gabriel", all = (S.d.idees || []).slice().sort((a, b) => (b.at || "").localeCompare(a.at || ""));
@@ -1725,7 +1849,7 @@ function vTachesHub(root){
   const cur = opts.some(o => o[0] === S.ui.tHub) ? S.ui.tHub : "taches";
   (cur === "montage" ? vMontage : vTaches)(root); if (opts.length > 1) hubTabs(root, opts, cur, "tHub");
 }
-const RENDER = {fiches:vFiches, parametres:vParametres, accueil:vAccueil, agenda:vAgendaHub, taches:vTachesHub, commercial:vCommercial, campagnes:vMeta, montage:vMontage, publications:vPublications, clients:vClients, messagerie:vMessagerie, vocal:vVocal, formation:vFormation, idees:vIdees};
+const RENDER = {fiches:vFiches, parametres:vParametres, accueil:vAccueil, agenda:vAgendaHub, taches:vTachesHub, commercial:vCommercial, campagnes:vMeta, montage:vMontage, publications:vPublications, clients:vClients, messagerie:vMessagerie, vocal:vVocal, formation:vFormation, idees:vIdees, focus:vFocus};
 function go(v){ if (MERGED[v]){ S.ui[MERGED[v][1]] = v; remember(); v = MERGED[v][0]; } if (location.hash !== "#"+v) location.hash = v; else { S.view = v; render(); } }
 function fromHash(){ let h = (location.hash||"").replace("#",""); if (h === "editorial"){ S.ui.agClient = AGENCE; if (!S.ui.agLayers.includes("posts")) S.ui.agLayers = S.ui.agLayers.concat("posts"); h = "agenda"; } if (MERGED[h] && canSee(h)){ S.ui[MERGED[h][1]] = h; h = MERGED[h][0]; } S.view = RENDER[h] && canSee(h) ? h : "accueil"; }
 window.addEventListener("hashchange", () => { fromHash(); render(); window.scrollTo(0,0); });
@@ -1744,14 +1868,15 @@ const ICONS = {
   vocal:'<path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3.5" y="13.5" width="4" height="6.5" rx="1.5"/><rect x="16.5" y="13.5" width="4" height="6.5" rx="1.5"/>',
   formation:'<rect x="3.5" y="5.5" width="17" height="12" rx="2"/><path d="M10.5 9v5l4-2.5z"/><path d="M8 20.5h8"/>',
   plus:'<path d="M5 7h14M5 12h14M5 17h14"/>',
-  idees:'<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>'
+  idees:'<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>',
+  focus:'<path d="M12 21c-3.6 0-6.5-2.6-6.5-6.2 0-3.4 2.6-5.2 3.6-8.3.9 1.4 1.4 2.7 1.4 4 1.3-1.1 2.3-3.2 2.1-6 3 2.4 5.9 6 5.9 10.3 0 3.6-2.9 6.2-6.5 6.2z"/><path d="M12 21c-1.6 0-2.8-1.2-2.8-2.8 0-1.7 1.6-2.6 2.8-4.2 1.2 1.6 2.8 2.5 2.8 4.2 0 1.6-1.2 2.8-2.8 2.8z"/>'
 };
-const SHORT = {fiches:"Tableau clients", parametres:"Paramètres", accueil:"Accueil", agenda:"Agenda", taches:"Tâches", commercial:"Commercial", campagnes:"Campagnes", montage:"Montage", publications:"Publications", clients:"Calendrier clients", messagerie:"Messagerie", vocal:"Vocal", formation:"Formation", idees:"Idées clients"};
+const SHORT = {fiches:"Tableau clients", parametres:"Paramètres", accueil:"Accueil", agenda:"Agenda", taches:"Tâches", commercial:"Commercial", campagnes:"Campagnes", montage:"Montage", publications:"Publications", clients:"Calendrier clients", messagerie:"Messagerie", vocal:"Vocal", formation:"Formation", idees:"Idées clients", focus:"Focus"};
 const MOBILE_MAIN = ["accueil","agenda","taches","messagerie"];
 const ico = k => { const s = document.createElementNS("http://www.w3.org/2000/svg","svg"); s.setAttribute("viewBox","0 0 24 24"); s.setAttribute("aria-hidden","true"); s.classList.add("ico"); s.innerHTML = ICONS[k] || ""; return s; };
 function renderTabs(){
   const me = S.me || "Gabriel";
-  const badge = { messagerie: unreadRole(), taches: openTasks().filter(t => t.who === me && lateDays(t.date) > 0).length, commercial: me === "Gabriel" ? S.d.commercial.filter(c => isISO(c.nextDate) && c.nextDate <= today()).length : 0, idees: (S.d.idees || []).filter(i => !(i.seen || []).includes(me)).length, vocal: S.ready ? new Set(VOICE.flatMap(([k]) => voiceHere(k)).filter(n => n !== me)).size : 0 };
+  const badge = { messagerie: unreadRole(), taches: openTasks().filter(t => t.who === me && lateDays(t.date) > 0).length, commercial: me === "Gabriel" ? S.d.commercial.filter(c => isISO(c.nextDate) && c.nextDate <= today()).length : 0, idees: (S.d.idees || []).filter(i => !(i.seen || []).includes(me)).length, focus: FOCUS.people.filter(p => p.name !== me && !p.pause).length, vocal: S.ready ? new Set(VOICE.flatMap(([k]) => voiceHere(k)).filter(n => n !== me)).size : 0 };
   try { const n = badge.messagerie || 0; if (navigator.setAppBadge) { n ? navigator.setAppBadge(n) : navigator.clearAppBadge(); } } catch(e){}
   const link = k => { const a = el("a"); a.href = "#"+k; a.appendChild(ico(k)); a.appendChild(el("span","lb", SHORT[k])); if (k === S.view) a.setAttribute("aria-current","page"); if (badge[k]) a.appendChild(el("span","n",String(badge[k]))); return a; };
   const n = $("#tabs"); n.textContent = "";
@@ -1786,6 +1911,7 @@ function cardLabels(root){
 }
 function render(){
   if (vcIsFull()){ vcStage(); vcRender(); return; }
+  if (document.fullscreenElement && document.fullscreenElement.id === "fo"){ focusPeople(); return; }
   renderTabs();
   const root = $("#app");
   const focusId = document.activeElement && document.activeElement.id; const caret = focusId && document.activeElement.selectionStart;
