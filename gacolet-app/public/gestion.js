@@ -27,7 +27,7 @@ const MERGED = { clients: ["agenda","agHub"], montage: ["taches","tHub"] };
 /* Rôles : ce que chaque siège voit. Le serveur applique les mêmes limites aux données. */
 const ROLE_LABEL = {owner:"Propriétaire", member:"Membre", commercial:"Commercial"};
 /* Poste : le métier de la personne (affiché), distinct du rôle (les droits). */
-const POSTES = ["Direction","Commercial","Vidéaste","Monteur","Community manager","Graphiste","Chargé de communication","Photographe","Alternant","Stagiaire"];
+const POSTES = ["Directeur","Direction","Responsable communication","Responsable vidéo","Commercial","Vidéaste","Monteur","Community manager","Graphiste","Chargé de communication","Photographe","Alternant","Stagiaire"];
 function posteInput(id, value){ const i = el("input"); i.id = id; i.value = value || ""; i.placeholder = "Ex. Vidéaste"; i.maxLength = 60; const dl = el("datalist"); dl.id = id + "-l"; POSTES.forEach(x => { const o = el("option"); o.value = x; dl.appendChild(o); }); i.setAttribute("list", dl.id); return [i, dl]; }
 const ROLE_VIEWS = {
   member: ["accueil","agenda","taches","messagerie","vocal","focus","formation","parametres"],
@@ -1629,9 +1629,10 @@ function vMessagerie(root){
 }
 
 /* ---------- Salon focus : travail au calme, ensemble ---------- */
-const FOCUS = { on: false, task: "", people: [], cv: null, raf: 0, audio: null, vol: 0.5, timer: null, mode: "", end: 0, loaded: false };
+const FOCUS_TOOLS = ["Premiere Pro","After Effects","DaVinci Resolve","CapCut","Photoshop","Lightroom","Illustrator","Canva","Metricool","Meta Business","Google Drive","Mails et appels"];
+const FOCUS = { on: false, task: "", tool: "", people: [], cv: null, raf: 0, audio: null, vol: 0.5, timer: null, mode: "", end: 0, loaded: false };
 function focusApi(body){ return GC.api(body ? "POST" : "GET", "/api/focus", body).then(r => { FOCUS.people = r.people || []; FOCUS.loaded = true; if (S.view === "focus") focusPeople(); renderTabs(); }).catch(() => {}); }
-setInterval(() => { if (!S.ready) return; if (FOCUS.on) focusApi({ task: FOCUS.task }); else if (S.view === "focus" || !FOCUS.loaded) focusApi(); }, 20000);
+setInterval(() => { if (!S.ready) return; if (FOCUS.on) focusApi({ task: FOCUS.task, tool: FOCUS.tool }); else if (S.view === "focus" || !FOCUS.loaded) focusApi(); }, 20000);
 window.addEventListener("beforeunload", () => { if (FOCUS.on) fetch("/api/focus", { method: "POST", keepalive: true, headers: { "Content-Type": "application/json", "Authorization": "Bearer " + (localStorage.getItem("gacolet-gestion-cle") || "") }, body: JSON.stringify({ on: false }) }).catch(() => {}); });
 function focusDur(ms){ const m = Math.max(0, Math.floor(ms / 60000)); if (m < 1) return "un instant"; return m < 60 ? m + " min" : Math.floor(m / 60) + " h" + (m % 60 ? " " + String(m % 60).padStart(2, "0") : ""); }
 /* Cheminée : flammes en particules, braises, lueur qui respire. Dessin original, sans image. */
@@ -1693,7 +1694,7 @@ function focusPeople(){
   if (!list.length){ box.appendChild(el("p","fo-empty","Personne au coin du feu pour l’instant. Lance ta session, les autres te verront.")); return; }
   list.forEach(p => { const c = el("div","fo-p" + (p.pause ? " pause" : "") + (p.name === me ? " me" : ""));
     const av = avatarEl(p.name, 44); av.classList.add("av-click"); av.onclick = () => profileCard(p.name);
-    const tx = el("div","fo-ptx"); tx.append(el("b",null,p.name + (p.name === me ? " (toi)" : "")), el("span",null, p.pause ? "En pause" : p.task ? p.task : "Concentré"), el("small",null, (Date.now() - p.since < 60000 ? "Vient d’arriver" : "En focus depuis " + focusDur(Date.now() - p.since))));
+    const tx = el("div","fo-ptx"); tx.append(el("b",null,p.name + (p.name === me ? " (toi)" : "")), el("span",null, p.pause ? "En pause" : [p.tool, p.task].filter(Boolean).join(", ") || "Concentré"), el("small",null, (Date.now() - p.since < 60000 ? "Vient d’arriver" : "En focus depuis " + focusDur(Date.now() - p.since))));
     c.append(av, tx); box.appendChild(c); });
 }
 function focusTimerLabel(){ if (!FOCUS.end) return ""; const s = Math.max(0, Math.round((FOCUS.end - Date.now()) / 1000)); return Math.floor(s / 60) + " min " + String(s % 60).padStart(2, "0"); }
@@ -1703,8 +1704,8 @@ function focusTimer(min, mode){
   FOCUS.timer = setInterval(() => { const t = document.getElementById("fo-time"); if (t) t.textContent = focusTimerLabel();
     if (Date.now() >= FOCUS.end){ clearInterval(FOCUS.timer); const was = FOCUS.mode; FOCUS.end = 0; FOCUS.mode = "";
       toast(was === "work" ? "Bravo, session terminée. Une pause de 10 minutes ?" : "Fin de la pause, on reprend.");
-      if (FOCUS.on) focusApi({ task: FOCUS.task, pause: false }); render(); } }, 1000);
-  if (FOCUS.on) focusApi({ task: FOCUS.task, pause: mode === "pause" });
+      if (FOCUS.on) focusApi({ task: FOCUS.task, tool: FOCUS.tool, pause: false }); render(); } }, 1000);
+  if (FOCUS.on) focusApi({ task: FOCUS.task, tool: FOCUS.tool, pause: mode === "pause" });
   render();
 }
 function vFocus(root){
@@ -1720,7 +1721,7 @@ function vFocus(root){
   if (!FOCUS.on){
     const inp = el("input","fo-in"); inp.id = "fo-task"; inp.placeholder = "Sur quoi tu bosses ? (facultatif)"; inp.maxLength = 120; inp.value = FOCUS.task;
     inp.oninput = () => { FOCUS.task = inp.value; }; inp.onkeydown = e => { if (e.key === "Enter") go2.click(); };
-    const go2 = btn("Je me mets en focus","lemon", () => { FOCUS.on = true; focusApi({ task: FOCUS.task.trim() }); if (!FOCUS.audio && FOCUS.sound !== false) fireSound(true); render(); });
+    const go2 = btn("Je me mets en focus","lemon", () => { FOCUS.on = true; focusApi({ task: FOCUS.task.trim(), tool: FOCUS.tool }); if (!FOCUS.audio && FOCUS.sound !== false) fireSound(true); render(); });
     ctl.append(inp, go2);
   } else {
     ctl.append(btn(FOCUS.mode === "work" ? "Arrêter le minuteur" : "Session de 50 min", FOCUS.mode === "work" ? "" : "lemon", () => focusTimer(FOCUS.mode === "work" ? 0 : 50, "work")),
@@ -1728,6 +1729,11 @@ function vFocus(root){
       btn("Quitter le salon","", () => { FOCUS.on = false; clearInterval(FOCUS.timer); FOCUS.end = 0; FOCUS.mode = ""; focusApi({ on: false }); fireSound(false); render(); }));
   }
   ov.appendChild(ctl);
+  /* Sur quel outil : visible des autres au coin du feu */
+  const tl = el("div","fo-chips"); tl.setAttribute("role","group"); tl.setAttribute("aria-label","Outil en cours");
+  FOCUS_TOOLS.forEach(n => { const b = el("button","fo-chip",n); b.type = "button"; b.setAttribute("aria-pressed", String(FOCUS.tool === n));
+    b.onclick = () => { FOCUS.tool = FOCUS.tool === n ? "" : n; if (FOCUS.on) focusApi({ task: FOCUS.task, tool: FOCUS.tool }); render(); }; tl.appendChild(b); });
+  ov.appendChild(tl);
   const tools = el("div","fo-tools");
   const snd = btn(FOCUS.audio ? "Couper le feu" : "Son du feu","sm", () => { fireSound(!FOCUS.audio); FOCUS.sound = !!FOCUS.audio; render(); });
   const vol = el("input","fo-vol"); vol.type = "range"; vol.min = 0; vol.max = 1; vol.step = 0.05; vol.value = FOCUS.vol; vol.title = "Volume du feu"; vol.setAttribute("aria-label", vol.title);
