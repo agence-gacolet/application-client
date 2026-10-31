@@ -43,10 +43,10 @@ let Q = "haute"; try { Q = localStorage.getItem("hg-q") || "haute"; } catch (e) 
 const LITE = /lite/.test(location.search), LOW = Q === "basse" || LITE;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !LOW, powerPreference: "high-performance", preserveDrawingBuffer: LITE });
 renderer.setPixelRatio(LOW ? 1 : Math.min(devicePixelRatio, 1.75));
-renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.82;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.72;
 renderer.shadowMap.enabled = !LITE; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0xB9CDE0, 0.0036);
+scene.fog = new THREE.FogExp2(0xA9C2DA, 0.0021);
 /* Ciel réaliste (diffusion atmosphérique) et lumière d'ambiance tirée du ciel */
 const SUN_DIR = new THREE.Vector3().setFromSphericalCoords(1, THREE.MathUtils.degToRad(57), THREE.MathUtils.degToRad(205));
 function makeSky() { const k = new Sky(); k.scale.setScalar(4500); const u = k.material.uniforms; u.turbidity.value = 5.5; u.rayleigh.value = 1.4; u.mieCoefficient.value = 0.004; u.mieDirectionalG.value = 0.82; u.sunPosition.value.copy(SUN_DIR); return k; }
@@ -72,7 +72,7 @@ const gl = new GLTFLoader(manager), load = u => new Promise((ok, ko) => gl.load(
 const texL = new THREE.TextureLoader(manager);
 const A = { chars: {}, hair: {}, clips: [], nat: {}, h: {} };
 const OUTFITS = ["Male_Ranger", "Male_Peasant", "Female_Ranger", "Female_Peasant"];
-const HAIRS = ["Hair_SimpleParted", "Hair_Long", "Hair_Buns", "Hair_Beard", "Hair_Buzzed", "Eyebrows_Regular", "Eyebrows_Female"];
+const HAIRS = ["Hair_SimpleParted", "Hair_Long", "Hair_Buns", "Hair_Beard", "Hair_Buzzed", "Head_Male", "Head_Female"];
 const NAT = ["CommonTree_1", "CommonTree_2", "CommonTree_3", "CommonTree_4", "CommonTree_5", "Pine_1", "Pine_2", "Pine_3", "Pine_4", "Pine_5", "TwistedTree_1", "TwistedTree_2", "Bush_Common", "Bush_Common_Flowers", "Rock_Medium_1", "Rock_Medium_2", "Rock_Medium_3", "Grass_Common_Tall", "Grass_Wispy_Tall", "Grass_Common_Short", "Flower_3_Group", "Flower_4_Group", "Fern_1", "Plant_1_Big", "Clover_1", "Mushroom_Common"];
 try {
   await Promise.all([
@@ -274,7 +274,7 @@ const CHALET = { x: MT.x, z: MT.z, y: MT.h, name: "Le chalet", kind: "chalet" };
   window.__smoke = { x: CHALET.x + 2.8 * Math.cos(.35) - 1.5 * Math.sin(.35), y: MT.h + 13, z: CHALET.z - 2.8 * Math.sin(.35) - 1.5 * Math.cos(.35), parts: [] }; }
 // Brume qui flotte autour de la montagne
 const MIST = []; { const tex = paintTex(256, 256, (x, w, h) => { for (let i = 0; i < 14; i++) { const cx = 40 + trnd() * 176, cy = 70 + trnd() * 116, r = 30 + trnd() * 60; const gr = x.createRadialGradient(cx, cy, 0, cx, cy, r); gr.addColorStop(0, "rgba(255,255,255,.55)"); gr.addColorStop(1, "rgba(255,255,255,0)"); x.fillStyle = gr; x.fillRect(0, 0, w, h); } });
-  for (let i = 0; i < 26; i++) { const a = rnd() * Math.PI * 2, lvl = rnd(), r = MT.r * (1 - lvl * .75) * (.6 + rnd() * .5), y = 12 + lvl * (MT.h - 10);
+  for (let i = 0; i < 26; i++) { const a = rnd() * Math.PI * 2, lvl = rnd(), r = MT.r * (1 - lvl * .6) * (.75 + rnd() * .5), y = 10 + lvl * (MT.h * 0.7);
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: .55 + rnd() * .3, depthWrite: false, fog: false })); const s = 50 + rnd() * 60; sp.scale.set(s, s * .45, 1);
     sp.position.set(MT.x + Math.cos(a) * r, y, MT.z + Math.sin(a) * r); sp.userData = { a, r, y, sp: (rnd() - .5) * .05, op: sp.material.opacity }; scene.add(sp); MIST.push(sp); } }
 // Fumée de la cheminée
@@ -294,9 +294,9 @@ const CLOUDS = [];
   for (let i = 0; i < 26; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: ct, transparent: true, depthWrite: false, fog: false, opacity: .85 })); const s = 120 + rnd() * 160; sp.scale.set(s, s * .4, 1); sp.position.set(-700 + rnd() * 1400, 170 + rnd() * 90, -700 + rnd() * 1400); scene.add(sp); CLOUDS.push(sp); } }
 
 /* ---------- Personnages : héros aux proportions adultes (tenues de rôdeur et de paysan, animations réalistes) ---------- */
-const LOOKS = { Gabriel: { o: "Male_Ranger", hair: ["Hair_SimpleParted", "Hair_Beard", "Eyebrows_Regular"] }, Matis: { o: "Male_Ranger", hair: ["Hair_Buzzed", "Hair_Beard", "Eyebrows_Regular"] }, Clara: { o: "Female_Ranger", hair: ["Hair_Long", "Eyebrows_Female"] } };
-const NPC_LOOKS = [{ o: "Male_Peasant", hair: ["Hair_SimpleParted", "Eyebrows_Regular"] }, { o: "Female_Peasant", hair: ["Hair_Buns", "Eyebrows_Female"] }, { o: "Male_Peasant", hair: ["Hair_Beard", "Hair_Buzzed", "Eyebrows_Regular"] }, { o: "Female_Peasant", hair: ["Hair_Long", "Eyebrows_Female"] }, { o: "Male_Ranger", hair: ["Hair_Long", "Eyebrows_Regular"] }];
-const lookOf = name => { if (LOOKS[name]) return LOOKS[name]; let h = 0; for (const c of String(name)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return [{ o: "Male_Ranger", hair: ["Hair_SimpleParted", "Eyebrows_Regular"] }, { o: "Female_Ranger", hair: ["Hair_Buns", "Eyebrows_Female"] }, { o: "Male_Ranger", hair: ["Hair_Long", "Hair_Beard", "Eyebrows_Regular"] }][h % 3]; };
+const LOOKS = { Gabriel: { o: "Male_Ranger", hair: ["Head_Male", "Hair_Beard"] }, Matis: { o: "Male_Ranger", hair: ["Head_Male", "Hair_Beard"] }, Clara: { o: "Female_Ranger", hair: ["Head_Female"] } };
+const NPC_LOOKS = [{ o: "Male_Peasant", hair: ["Head_Male", "Hair_SimpleParted"] }, { o: "Female_Peasant", hair: ["Head_Female", "Hair_Buns"] }, { o: "Male_Peasant", hair: ["Head_Male", "Hair_Beard", "Hair_Buzzed"] }, { o: "Female_Peasant", hair: ["Head_Female", "Hair_Long"] }, { o: "Male_Peasant", hair: ["Head_Male", "Hair_Long"] }];
+const lookOf = name => { if (LOOKS[name]) return LOOKS[name]; let h = 0; for (const c of String(name)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return [{ o: "Male_Ranger", hair: ["Head_Male"] }, { o: "Female_Ranger", hair: ["Head_Female"] }, { o: "Male_Ranger", hair: ["Head_Male", "Hair_Beard"] }][h % 3]; };
 const HIT = new THREE.MeshBasicMaterial({ visible: false });
 const HERO_H = 4.3;
 function makeChar(name, o) {
@@ -307,7 +307,7 @@ function makeChar(name, o) {
     hc.traverse(c => { if (!c.isSkinnedMesh) return; const bones = c.skeleton.bones.map(b => m.getObjectByName(b.name) || b); const sm = c.clone(); sm.bind(new THREE.Skeleton(bones, c.skeleton.boneInverses), c.bindMatrix); m.add(sm); }); });
   if (!A.h[look.o]) { const b = new THREE.Box3().setFromObject(m); A.h[look.o] = Math.max(0.1, b.max.y - b.min.y); }
   m.scale.multiplyScalar(HERO_H / A.h[look.o]);
-  m.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; c.frustumCulled = false; [].concat(c.material).forEach(mt => { mt.envMapIntensity = 0.75; if (/Hair|Eyebrow/i.test(mt.name)) { mt.alphaTest = 0.4; mt.transparent = false; mt.side = THREE.DoubleSide; } }); } });
+  m.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; c.frustumCulled = false; [].concat(c.material).forEach(mt => { mt.envMapIntensity = 0.75; if (/Hair|Eyebrow/i.test(mt.name)) { mt.alphaTest = 0.4; mt.transparent = false; mt.side = THREE.DoubleSide; } if (/Eyes/i.test(mt.name)) { mt.transparent = false; } }); } });
   g.add(m);
   const hit = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 4.6, 8), HIT); hit.position.y = 2.3; g.add(hit);
   const mixer = new THREE.AnimationMixer(m), actions = {};
@@ -374,12 +374,13 @@ function buildNpcs() {
     npc.position.set(0, 0, -1.6); st.add(npc);
     st.position.set(x, 0, z); st.lookAt(0, 0, 4); NPC_GROUP.add(st);
     const mark = bang(); mark.position.set(x, 6.4, z); NPC_GROUP.add(mark);
-    const n = { kind: "client", name: c, x, z, obj: st, model: npc, mark, coll: { x, z, r: 2.6 } }; COLL.push(n.coll); G.npcs.push(n);
+    st.updateMatrixWorld(true); const wp = npc.getWorldPosition(new THREE.Vector3());
+    const n = { kind: "client", name: c, x: wp.x, z: wp.z, obj: st, model: npc, mark, coll: { x, z, r: 2.4 } }; COLL.push(n.coll); G.npcs.push(n);
   });
   // Un personnage de l'équipe sur le perron de l'agence : Gabriel donne les conseils
   const gab = makeChar("Gabriel", { npc: true, sub: "Seigneur du château" }); gab.position.set(HQ.x - 5, 0, HQ.z + 24); gab.rotation.y = 0.2; NPC_GROUP.add(gab);
   G.npcs.push({ kind: "guide", name: "Gabriel", x: HQ.x - 5, z: HQ.z + 24, obj: gab, model: gab, coll: { x: HQ.x - 5, z: HQ.z + 24, r: 0.8 } }); COLL.push(G.npcs[G.npcs.length - 1].coll);
-  G.npcs.push(Object.assign(BOARD, { coll: null }), Object.assign(MAILBOX, { coll: null }), Object.assign(CHALET, { coll: null, x: CHALET.x, z: CHALET.z + 9 }));
+  G.npcs.push(Object.assign(BOARD, { coll: null }), Object.assign(MAILBOX, { coll: null }), Object.assign(CHALET, { coll: null, x: MT.x, z: MT.z + 9 }));
   refreshMarks();
 }
 function refreshMarks() {
@@ -592,7 +593,7 @@ addEventListener("keydown", e => {
   if (k === "Tab") { e.preventDefault(); targetNearest(); return; }
   if (k === "NumLock") { autorun = !autorun; return; }
   const L = (e.key || "").toLowerCase();
-  if (L === "f") { const n = G.target && G.target.kind ? G.target : nearestNpc(6); if (n && dist(n) < 7) npcWin(n); else if (n) log("Tu es trop loin.", "err"); return; }
+  if (L === "f") { const n = G.target && G.target.kind ? G.target : nearestNpc(9); if (n && dist(n) < 10) npcWin(n); else if (n) log("Tu es trop loin.", "err"); return; }
   if (L === "l") return logWin(); if (L === "c") return charWin(); if (L === "b") return bagWin(); if (L === "m") return mapWin();
   if (k === "Space" && P.grounded) { P.vy = 9; P.grounded = false; G.emote = ""; e.preventDefault(); }
   const d = /^Digit([1-7])$/.exec(k); if (d) { ACTIONS[Number(d[1]) - 1][3](); }
@@ -617,7 +618,7 @@ function pick(cx, cy, button) {
   if (!hit) { if (button === 0) setTarget(null); return; }
   let o = hit.object; while (o && !objs.includes(o)) o = o.parent;
   const n = G.npcs.find(x => x.obj === o); const pl = Object.values(G.others).find(x => x.model === o);
-  if (n) { setTarget(n); if (button === 2) { if (dist(n) < 7) npcWin(n); else log("Tu es trop loin. Approche-toi.", "err"); } }
+  if (n) { setTarget(n); if (button === 2) { if (dist(n) < 10) npcWin(n); else log("Tu es trop loin. Approche-toi.", "err"); } }
   else if (pl) setTarget({ name: pl.name, player: pl });
 }
 const dist = n => Math.hypot(n.x - P.x, n.z - P.z);
@@ -735,7 +736,7 @@ function step() {
   FLAGS.forEach((f, i) => { const p = f.geometry.attributes.position; for (let k = 0; k < p.count; k++) { const x = p.getX(k) + 1.3; p.setZ(k, Math.sin(now * 4 + x * 2.2 + i) * 0.18 * x); } p.needsUpdate = true; });
   TORCHES.forEach((t, i) => t.scale.setScalar(0.85 + Math.sin(now * 13 + i * 2) * 0.12 + Math.sin(now * 7.3) * 0.06));
   WIND.value = now;
-  MIST.forEach(m => { const u = m.userData; u.a += u.sp * dt; m.position.x = MT.x + Math.cos(u.a) * u.r; m.position.z = MT.z + Math.sin(u.a) * u.r; m.position.y = u.y + Math.sin(now * .3 + u.a * 3) * 1.5; m.material.opacity = u.op * Math.max(0, Math.min(1, (m.position.distanceTo(camera.position) - 30) / 60)); });
+  MIST.forEach(m => { const u = m.userData; u.a += u.sp * dt; m.position.x = MT.x + Math.cos(u.a) * u.r; m.position.z = MT.z + Math.sin(u.a) * u.r; m.position.y = u.y + Math.sin(now * .3 + u.a * 3) * 1.5; m.material.opacity = u.op * Math.max(0, Math.min(1, (m.position.distanceTo(camera.position) - 60) / 90)); });
   { const sm = window.__smoke; if (Math.random() < dt * 4) { const p = new THREE.Mesh(new THREE.SphereGeometry(.6, 8, 6), SMOKE_M.clone()); p.position.set(sm.x, sm.y, sm.z); p.userData.t = 0; scene.add(p); sm.parts.push(p); }
     sm.parts = sm.parts.filter(p => { p.userData.t += dt; p.position.y += dt * 2.2; p.position.x += dt * .8; p.scale.setScalar(1 + p.userData.t * .9); p.material.opacity = .5 * Math.max(0, 1 - p.userData.t / 5); if (p.userData.t > 5) { scene.remove(p); p.geometry.dispose(); return false; } return true; }); }
   // Caméra derrière le personnage
@@ -747,7 +748,7 @@ function step() {
   P.model.visible = CAM.dist > 3.2;
   sun.position.copy(SUN_DIR).multiplyScalar(150).add(_v.set(P.x, P.y, P.z)); sun.target.position.set(P.x, P.y, P.z);
   // Indice d'interaction
-  const nn = nearestNpc(6.5); if (nn !== hintN) { hintN = nn; const h = $("#hint"); if (nn) { h.innerHTML = ""; h.append(document.createTextNode("Clic droit ou "), el("kbd", null, "F"), document.createTextNode(" : " + (nn.kind === "mail" ? "ouvrir la boîte aux lettres" : nn.kind === "board" ? "lire le tableau" : nn.kind === "chalet" ? "entrer dans le chalet" : "parler à " + nn.name))); h.classList.add("on"); } else h.classList.remove("on"); }
+  const nn = nearestNpc(9); if (nn !== hintN) { hintN = nn; const h = $("#hint"); if (nn) { h.innerHTML = ""; h.append(document.createTextNode("Clic droit ou "), el("kbd", null, "F"), document.createTextNode(" : " + (nn.kind === "mail" ? "ouvrir la boîte aux lettres" : nn.kind === "board" ? "lire le tableau" : nn.kind === "chalet" ? "entrer dans le chalet" : "parler à " + nn.name))); h.classList.add("on"); } else h.classList.remove("on"); }
   // Minuteries
   if (G.hearthCd > 0) { const before = Math.ceil(G.hearthCd); G.hearthCd -= dt; if (Math.ceil(G.hearthCd) !== before) renderBar(); }
   syncT += dt; if (syncT > 0.1) { syncT = 0; sync(); }

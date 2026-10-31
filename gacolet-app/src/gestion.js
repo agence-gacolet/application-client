@@ -785,7 +785,6 @@ module.exports = function (app, { db, wrap, root }) {
 
   // ---------- Jeu de l’agence : les tâches deviennent des quêtes ----------
   // Positions et paroles en mémoire (éphémères) ; profil (or, sac) et courrier rangés en base, dans des collections réservées au jeu.
-  const GAME = { pl: {}, says: [], sid: 0 };
   const gLevel = xp => Math.floor(Math.sqrt(xp / 100)) + 1;
   async function gProfile(u) {
     const rows = await db.all("SELECT data FROM docs WHERE col = 'tasks' AND deleted = 0");
@@ -806,12 +805,25 @@ module.exports = function (app, { db, wrap, root }) {
     const team = (await db.all("SELECT name FROM gusers WHERE disabled = 0")).map(x => x.name);
     res.json({ me, quests: tasks, mail, team });
   }));
+  // Positions et paroles rangées en base : tous les processus du serveur voient la même chose (sinon les joueurs clignotent)
+  let gReady = null;
+  const gEnsure = () => gReady || (gReady = (async () => {
+    await db.run("CREATE TABLE IF NOT EXISTS game_pos (name VARCHAR(80) NOT NULL PRIMARY KEY, data TEXT NOT NULL, t BIGINT NOT NULL)");
+    await db.run("CREATE TABLE IF NOT EXISTS game_say (id BIGINT NOT NULL PRIMARY KEY, who VARCHAR(80) NOT NULL, text TEXT NOT NULL, at BIGINT NOT NULL)");
+  })().catch(e => { gReady = null; throw e; }));
   app.post("/api/g-game/pos", auth, wrap(async (req, res) => {
+    await gEnsure();
     const b = req.body || {}, n = req.user.name, now = Date.now(), num = v => Math.max(-500, Math.min(500, Number(v) || 0));
-    GAME.pl[n] = { name: n, x: num(b.x), z: num(b.z), y: Math.max(-20, Math.min(250, Number(b.y) || 0)), ry: Number(b.ry) || 0, mv: b.mv ? 1 : 0, emo: String(b.emo || "").slice(0, 12), cls: String(b.cls || "").replace(/[^\w]/g, "").slice(0, 20), lvl: Number(b.lvl) || 1, t: now };
-    if (b.say) { GAME.says.push({ id: ++GAME.sid, who: n, text: String(b.say).slice(0, 200), at: now }); GAME.says = GAME.says.slice(-40); }
+    const me = { name: n, x: num(b.x), z: num(b.z), y: Math.max(-20, Math.min(250, Number(b.y) || 0)), ry: Number(b.ry) || 0, mv: b.mv ? 1 : 0, emo: String(b.emo || "").slice(0, 12), cls: String(b.cls || "").replace(/[^\w]/g, "").slice(0, 20), lvl: Number(b.lvl) || 1, t: now };
+    const js = JSON.stringify(me);
+    const u = await db.run("UPDATE game_pos SET data = ?, t = ? WHERE name = ?", [js, now, n]);
+    if (!u.changes) await db.run("INSERT INTO game_pos (name, data, t) VALUES (?,?,?)", [n, js, now]).catch(() => db.run("UPDATE game_pos SET data = ?, t = ? WHERE name = ?", [js, now, n]));
+    if (b.say) { const id = now * 100 + Math.floor(Math.random() * 100); await db.run("INSERT INTO game_say (id, who, text, at) VALUES (?,?,?,?)", [id, n, String(b.say).slice(0, 200), now]); if (Math.random() < 0.05) await db.run("DELETE FROM game_say WHERE at < ?", [now - 600000]); }
     const since = Number(b.since) || 0;
-    res.json({ players: Object.values(GAME.pl).filter(p => p.name !== n && now - p.t < 15000), says: GAME.says.filter(s => s.id > since && now - s.at < 60000), sid: GAME.sid, now: Date.now() });
+    const players = (await db.all("SELECT data FROM game_pos WHERE t > ? AND name <> ?", [now - 15000, n])).map(r => JSON.parse(r.data));
+    const says = (await db.all("SELECT id, who, text, at FROM game_say WHERE id > ? AND at > ? ORDER BY id", [since, now - 60000])).map(r => ({ id: Number(r.id), who: r.who, text: r.text, at: Number(r.at) }));
+    const sid = says.length ? says[says.length - 1].id : Math.max(since, (now - 60000) * 100);
+    res.json({ players, says, sid, now: Date.now() });
   }));
   app.post("/api/g-game/quest/:id", auth, wrap(async (req, res) => {
     const id = req.params.id; if (!okId(id)) return res.status(400).json({ error: "Demande invalide." });
