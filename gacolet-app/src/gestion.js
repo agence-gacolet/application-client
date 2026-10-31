@@ -808,10 +808,10 @@ module.exports = function (app, { db, wrap, root }) {
   }));
   app.post("/api/g-game/pos", auth, wrap(async (req, res) => {
     const b = req.body || {}, n = req.user.name, now = Date.now(), num = v => Math.max(-500, Math.min(500, Number(v) || 0));
-    GAME.pl[n] = { name: n, x: num(b.x), z: num(b.z), y: Math.max(0, Math.min(20, Number(b.y) || 0)), ry: Number(b.ry) || 0, mv: b.mv ? 1 : 0, emo: String(b.emo || "").slice(0, 12), lvl: Number(b.lvl) || 1, t: now };
+    GAME.pl[n] = { name: n, x: num(b.x), z: num(b.z), y: Math.max(-20, Math.min(250, Number(b.y) || 0)), ry: Number(b.ry) || 0, mv: b.mv ? 1 : 0, emo: String(b.emo || "").slice(0, 12), cls: String(b.cls || "").replace(/[^\w]/g, "").slice(0, 20), lvl: Number(b.lvl) || 1, t: now };
     if (b.say) { GAME.says.push({ id: ++GAME.sid, who: n, text: String(b.say).slice(0, 200), at: now }); GAME.says = GAME.says.slice(-40); }
     const since = Number(b.since) || 0;
-    res.json({ players: Object.values(GAME.pl).filter(p => p.name !== n && now - p.t < 15000), says: GAME.says.filter(s => s.id > since && now - s.at < 60000), sid: GAME.sid });
+    res.json({ players: Object.values(GAME.pl).filter(p => p.name !== n && now - p.t < 15000), says: GAME.says.filter(s => s.id > since && now - s.at < 60000), sid: GAME.sid, now: Date.now() });
   }));
   app.post("/api/g-game/quest/:id", auth, wrap(async (req, res) => {
     const id = req.params.id; if (!okId(id)) return res.status(400).json({ error: "Demande invalide." });
