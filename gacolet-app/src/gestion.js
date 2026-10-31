@@ -852,12 +852,19 @@ module.exports = function (app, { db, wrap, root }) {
   }));
   app.get("/api/g-game", auth, wrap(async (req, res) => {
     const u = req.user, me = await gProfile(u);
-    const tasks = (await db.all("SELECT id, data FROM docs WHERE col = 'tasks' AND deleted = 0")).map(r => Object.assign({ id: r.id }, JSON.parse(r.data || "{}")))
-      .filter(d => d.who === u.name && !d.done).map(d => ({ id: d.id, title: d.title || "Tâche", client: d.client || "", date: d.date || "", note: String(d.note || d.notes || "").slice(0, 400), prio: d.prio || "" }));
+    const allT = (await db.all("SELECT id, data FROM docs WHERE col = 'tasks' AND deleted = 0")).map(r => { try { return Object.assign({ id: r.id }, JSON.parse(r.data || "{}")); } catch (e) { return { id: r.id }; } });
+    const tasks = allT.filter(d => d.who === u.name && !d.done).map(d => ({ id: d.id, title: d.title || "Tâche", client: d.client || "", date: d.date || "", note: String(d.note || d.notes || "").slice(0, 400), prio: d.prio || "" }));
     const mail = (await db.all("SELECT id, data FROM docs WHERE col = 'gmail' AND deleted = 0")).map(r => Object.assign({ id: r.id }, JSON.parse(r.data || "{}")))
       .filter(m => m.to === u.name).sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 60);
     const team = (await db.all("SELECT name FROM gusers WHERE disabled = 0")).map(x => x.name);
-    res.json({ me, quests: tasks, mail, team });
+    // État réel de chaque client, affiché au-dessus de son étal dans le jeu (sans aucun chiffre d'affaires)
+    const nk = v => String(v || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim(), clients = {}, C = n => clients[nk(n)] = clients[nk(n)] || { tasks: 0, who: [], rush: 0, next: "", planned: 0, published: 0, waiting: 0 };
+    const rows = async col => (await db.all("SELECT data FROM docs WHERE col = ? AND deleted = 0", [col])).map(r => { try { return JSON.parse(r.data || "{}"); } catch (e) { return {}; } });
+    allT.filter(d => !d.done && d.client).forEach(d => { const c = C(d.client); c.tasks++; if (d.who && !c.who.includes(d.who)) c.who.push(d.who); });
+    (await rows("rushes")).forEach(d => { if (d.client && d.status !== "Monté") C(d.client).rush++; });
+    (await rows("publications")).forEach(d => { if (!d.client) return; const c = C(d.client); c.next = String(d.next || "").slice(0, 40); c.planned = Number(d.planned) || 0; c.published = Number(d.published) || 0; c.waiting = Number(d.waiting) || 0; });
+    const since = new Date(Date.now() - 3 * 864e5).toISOString().slice(0, 10), recent = allT.filter(d => d.who === u.name && d.done && String(d.doneAt || "") >= since).map(d => ({ id: d.id, title: d.title || "Tâche" }));
+    res.json({ me, quests: tasks, mail, team, clients, recent });
   }));
   // Positions et paroles rangées en base : tous les processus du serveur voient la même chose (sinon les joueurs clignotent)
   let gReady = null;
