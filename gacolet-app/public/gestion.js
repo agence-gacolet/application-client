@@ -19,9 +19,9 @@ const DAYS = ["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"]
 const DEFAULT_COLORS = {"Agence Gacolet":"#1D1D1B","AR Climatisation":"#E8833A","Bonobo":"#2E9E5B","Delta Sud Formation":"#D6334A","Domaine Pagezi":"#7A1F3D","Flora Design":"#C25CC9","France Étanchéité":"#2F6FE4","Gaufrement Bon":"#E3B505","Hugo Maître Nageur":"#1BA6C9","Insolent":"#5C5C57","KR Thermolaquage":"#8C6239","La Vie La Construction":"#F06A1D","Le Petit Mas":"#6E8B3D","Locamex":"#E2559C","Meyer-Pic":"#3D4FB5","Only Clean":"#17A398","Paillotte Bassamoise":"#F2A93B","SOS Pare-Brise Codognan":"#9B2226","SOS Pare-Brise Vendargues":"#4A6C8C","Sport Défense":"#8E44AD","The New Me Montpellier":"#D98BA5","Total Habitat 360":"#6C7A2E"};
 const VIEWS = [
   ["accueil","Accueil"],["agenda","Agenda"],["taches","Tâches"],["messagerie","Messagerie"],["vocal","Vocal"],["commercial","Commercial"],["clients","Calendrier clients"],
-  ["montage","Prêt à monter"],["publications","Publications"],["campagnes","Campagnes"],["formation","Formation"],["parametres","Paramètres"],["fiches","Tableau clients"]
+  ["montage","Prêt à monter"],["publications","Publications"],["campagnes","Campagnes"],["formation","Formation"],["parametres","Paramètres"],["fiches","Tableau clients"],["idees","Idées clients"]
 ];
-const NAV_GROUPS = [["",["accueil"]],["Au quotidien",["agenda","taches","messagerie","vocal"]],["Gestion",["fiches","commercial","publications"]],["Meta",["campagnes"]],["Ressources",["formation"]],["Compte",["parametres"]]];
+const NAV_GROUPS = [["",["accueil"]],["Au quotidien",["agenda","taches","messagerie","vocal"]],["Gestion",["fiches","commercial","publications","idees"]],["Meta",["campagnes"]],["Ressources",["formation"]],["Compte",["parametres"]]];
 /* Onglets fusionnés : le calendrier clients vit dans l’agenda, le montage dans les tâches. */
 const MERGED = { clients: ["agenda","agHub"], montage: ["taches","tHub"] };
 /* Rôles : ce que chaque siège voit. Le serveur applique les mêmes limites aux données. */
@@ -31,10 +31,10 @@ const POSTES = ["Direction","Commercial","Vidéaste","Monteur","Community manage
 function posteInput(id, value){ const i = el("input"); i.id = id; i.value = value || ""; i.placeholder = "Ex. Vidéaste"; i.maxLength = 60; const dl = el("datalist"); dl.id = id + "-l"; POSTES.forEach(x => { const o = el("option"); o.value = x; dl.appendChild(o); }); i.setAttribute("list", dl.id); return [i, dl]; }
 const ROLE_VIEWS = {
   member: ["accueil","agenda","taches","messagerie","vocal","formation","parametres"],
-  commercial: ["accueil","agenda","taches","messagerie","vocal","commercial","clients","montage","publications","campagnes","formation","parametres"]
+  commercial: ["accueil","agenda","taches","messagerie","vocal","commercial","clients","montage","publications","idees","campagnes","formation","parametres"]
 };
 const canSee = k => !S.role || S.role === "owner" || (ROLE_VIEWS[S.role] || []).includes(k);
-const COLLS = ["events","tasks","commercial","campaigns","rushes","publications","clients","cevents","keydates","posts","edtodo","meta","messages","formations","msheets"];
+const COLLS = ["events","tasks","commercial","campaigns","rushes","publications","clients","cevents","keydates","posts","edtodo","meta","messages","formations","msheets","idees"];
 
 /* ---------- Outils ---------- */
 const $ = s => document.querySelector(s);
@@ -539,7 +539,8 @@ function vAccueil(root){
     tiles.push([S.d.campaigns.filter(c => c.status === "À lancer").length, "campagnes à lancer", () => go("campagnes")]);
   }
   ["main","shoot"].forEach(md => { const pre = md === "shoot" ? "tg:" : "", chs = msgChannels(md);
-    const team = chs.filter(k => !k.startsWith(pre + "c:")), cli = chs.filter(k => k.startsWith(pre + "c:"));
+    const isC = k => k.startsWith(pre + "c:") || k.startsWith("cg:");
+    const team = chs.filter(k => !isC(k)), cli = chs.filter(isC);
     const nt = team.reduce((n, k) => n + unreadIn(k), 0), nc = cli.reduce((n, k) => n + unreadIn(k), 0), fc = cli.find(k => unreadIn(k));
     const open = k => () => { S.ui.msgMode = md; if (md === "shoot") S.ui.msgShoot = k; else S.ui.msgCh = k; remember(); go("messagerie"); };
     const sfx = md === "shoot" ? ", tournage" : "";
@@ -1037,13 +1038,16 @@ const MSG_ROLE = {Gabriel:["main","shoot"], Clara:["main"], Matis:["shoot"]};
 function dmKey(a, b){ return "dm:" + [a, b].sort().join("|"); }
 function dmOther(k){ const me = S.me || "Gabriel"; return String(k).slice(3).split("|").find(n => n !== me) || me; }
 function dmChannels(){ const me = S.me || "Gabriel"; const set = new Set((S.ui.dmOpen || []).filter(k => k.startsWith("dm:") && k.slice(3).split("|").includes(me))); S.d.messages.forEach(m => { if (String(m.ch).startsWith("dm:") && m.ch.slice(3).split("|").includes(me)) set.add(m.ch); }); return [...set]; }
-function msgChannels(mode){ const pre = mode === "shoot" ? "tg:" : ""; return CHANNELS.map(c => pre + c[0]).concat(mode === "shoot" ? [] : dmChannels()).concat(clientNames().filter(n => n !== AGENCE).map(n => pre + "c:" + n)); }
+function cgChannels(){ return (S.cgroups || []).map(g => g.ch); }
+function cgOf(k){ return (S.cgroups || []).find(g => g.ch === k); }
+async function loadCgroups(){ try { const r = await GC.api("GET","/api/g-cgroups"); S.cgroups = r.groups || []; renderSoon(); } catch(e){} }
+function msgChannels(mode){ const pre = mode === "shoot" ? "tg:" : ""; return CHANNELS.map(c => pre + c[0]).concat(mode === "shoot" ? [] : dmChannels()).concat(mode === "shoot" ? [] : cgChannels()).concat(clientNames().filter(n => n !== AGENCE).map(n => pre + "c:" + n)); }
 function seenKey(k){ return "seen_" + (S.me || "Gabriel") + "_" + k; }
 function unreadIn(k){ const me = S.me || "Gabriel", s = S.ui[seenKey(k)] || ""; return S.d.messages.filter(m => m.ch === k && m.who !== me && (m.at || "") > s).length; }
 function unreadMode(mode){ return msgChannels(mode).reduce((n, k) => n + unreadIn(k), 0); }
 function unreadRole(){ return ["main","shoot"].reduce((n, m) => n + unreadMode(m), 0); }
 function shootLabel(e){ return fmtD(e.date) + ", " + e.client; }
-function chName(k){ if (String(k).startsWith("dm:")) return dmOther(k); k = k.replace(/^tg:/, ""); const c = CHANNELS.find(x => x[0] === k); return c ? c[1] : k.replace(/^c:/, ""); }
+function chName(k){ if (String(k).startsWith("dm:")) return dmOther(k); if (String(k).startsWith("cg:")){ const g = cgOf(k); return g ? g.name : "Groupe client"; } k = k.replace(/^tg:/, ""); const c = CHANNELS.find(x => x[0] === k); return c ? c[1] : k.replace(/^c:/, ""); }
 /* ---------- Messages vocaux ---------- */
 let REC = null;
 const AUDIO_EL = new Map();
@@ -1113,7 +1117,7 @@ function avatarEl(name, size, opts){
   else a.style.background = c;
   return a;
 }
-function chAvatar(k, size){ if (String(k).startsWith("dm:")) return avatarEl(dmOther(k), size); const base = String(k).replace(/^tg:/, ""); if (base.startsWith("c:")){ const n = base.slice(2); return avatarEl(n, size, { src: "", color: colorOf(n), soft: true }); } return avatarEl("Équipe", size, { logo: true }); }
+function chAvatar(k, size){ if (String(k).startsWith("dm:")) return avatarEl(dmOther(k), size); if (String(k).startsWith("cg:")){ const n = chName(k); return avatarEl(n, size, { src: "", color: colorOf(n) }); } const base = String(k).replace(/^tg:/, ""); if (base.startsWith("c:")){ const n = base.slice(2); return avatarEl(n, size, { src: "", color: colorOf(n), soft: true }); } return avatarEl("Équipe", size, { logo: true }); }
 
 /* ---------- Pièces jointes ---------- */
 
@@ -1248,9 +1252,13 @@ const VC_ICO = {
   micOff:'<svg viewBox="0 0 24 24"><path d="M15 9.3V6a3 3 0 0 0-5.7-1.3M9 9v2a3 3 0 0 0 4.6 2.5M5 11a7 7 0 0 0 11.3 5.5M19 11a7 7 0 0 1-.6 2.8M12 18v3M4 4l16 16"/></svg>',
   cam:'<svg viewBox="0 0 24 24"><rect x="3" y="6.5" width="13" height="11" rx="2"/><path d="m16 10.5 5-3v9l-5-3"/></svg>',
   screen:'<svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="12" rx="1.5"/><path d="M8 20h8M12 16.5V20M12 13V8M9.5 10.5 12 8l2.5 2.5"/></svg>',
-  leave:'<svg viewBox="0 0 24 24"><path d="M4.5 13.5c4.6-4 10.4-4 15 0l-1.8 2.3-3-1.2v-2.2a9 9 0 0 0-5.4 0v2.2l-3 1.2z"/></svg>'
+  leave:'<svg viewBox="0 0 24 24"><path d="M4.5 13.5c4.6-4 10.4-4 15 0l-1.8 2.3-3-1.2v-2.2a9 9 0 0 0-5.4 0v2.2l-3 1.2z"/></svg>',
+  full:'<svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>',
+  unfull:'<svg viewBox="0 0 24 24"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>',
+  grid:'<svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/></svg>',
+  spot:'<svg viewBox="0 0 24 24"><rect x="3" y="4" width="13" height="16" rx="1.5"/><rect x="18" y="4" width="3" height="4" rx=".8"/><rect x="18" y="10" width="3" height="4" rx=".8"/><rect x="18" y="16" width="3" height="4" rx=".8"/></svg>'
 };
-const VC = { room: "", label: "", pid: "", local: null, video: null, kind: "", muted: false, peers: new Map(), polling: false, speak: {}, chat: [] };
+const VC = { room: "", label: "", pid: "", local: null, video: null, kind: "", muted: false, peers: new Map(), polling: false, speak: {}, chat: [], focus: "" };
 S.rtc = { rooms: {} };
 function voiceHere(room){ return (S.rtc.rooms[room] || []).slice(); }
 let RTC_T = 0;
@@ -1346,8 +1354,31 @@ function vcControls(){ const c = el("div","vc-ctl");
   c.append(vcBtn(VC.muted ? "micOff" : "mic", VC.muted ? "Activer le micro" : "Couper le micro", VC.muted, vcMute, VC.muted ? "warn" : ""),
     vcBtn("cam", VC.kind === "cam" ? "Couper la caméra" : "Activer la caméra", VC.kind === "cam", () => vcVideo("cam")),
     vcBtn("screen", VC.kind === "screen" ? "Arrêter le partage d’écran" : "Partager l’écran", VC.kind === "screen", () => vcVideo("screen")),
+    vcBtn(vcSpotOn() ? "grid" : "spot", vcSpotOn() ? "Tout le monde en grand" : "Mettre une image en grand", false, vcToggleSpot),
+    vcBtn(vcIsFull() ? "unfull" : "full", vcIsFull() ? "Quitter le plein écran" : "Plein écran", vcIsFull(), vcFull),
     vcBtn("leave", "Quitter le salon", false, () => vcLeave(), "end"));
   return c; }
+/* Plein écran et image principale : partage d’écran en grand, caméras en petit sur le côté */
+function vcIsFull(){ const f = document.fullscreenElement || document.webkitFullscreenElement; return !!(f && f.id === "vc-stage"); }
+function vcFull(){ const st = document.getElementById("vc-stage"); if (!st) return;
+  if (vcIsFull()){ (document.exitFullscreen || document.webkitExitFullscreen).call(document); return; }
+  const go = st.requestFullscreen || st.webkitRequestFullscreen; if (go){ try { const r = go.call(st); if (r && r.catch) r.catch(() => {}); } catch(e){} } }
+function vcHasV(stream){ return !!(stream && stream.getVideoTracks().some(x => x.readyState === "live" && !x.muted)); }
+function vcMain(){
+  if (VC.focus === "grid") return "";
+  if (VC.focus && (VC.focus === "me" || VC.peers.has(VC.focus))) return VC.focus;
+  let m = ""; VC.peers.forEach((P, k) => { if (!m && vcHasV(P.stream)) m = k; });
+  if (!m && VC.kind === "screen") m = "me";
+  return m;
+}
+function vcSpotOn(){ return !!vcMain(); }
+function vcToggleSpot(){
+  if (vcSpotOn()) VC.focus = "grid";
+  else { let m = ""; VC.peers.forEach((P, k) => { if (!m) m = k; }); VC.focus = m || "me"; }
+  vcStage();
+}
+document.addEventListener("fullscreenchange", () => vcStage());
+document.addEventListener("webkitfullscreenchange", () => vcStage());
 /* Barre d’appel flottante, visible dans tous les onglets pendant un appel */
 function vcRender(){
   let bar = document.getElementById("vc-bar");
@@ -1369,9 +1400,23 @@ function vcTile(id, name, stream, isMe){
 function vcStage(){
   const st = document.getElementById("vc-stage"); if (!st) return; const keep = document.getElementById("vc-in"), kv = keep ? keep.value : "", kf = keep && document.activeElement === keep; st.textContent = "";
   setTimeout(() => { const i = document.getElementById("vc-in"); if (i){ i.value = kv; if (kf) i.focus(); } }, 0);
-  const me = S.me || "Gabriel"; const grid = el("div","vc-grid n" + Math.min(VC.peers.size + 1, 6));
-  grid.appendChild(vcTile("me", me, VC.local, true));
-  VC.peers.forEach(P => grid.appendChild(vcTile(P.pid, P.name, P.stream, false)));
+  const me = S.me || "Gabriel"; const main = vcMain(); let grid;
+  const pick = id => { VC.focus = VC.focus === id || (!VC.focus && main === id) ? "grid" : id; vcStage(); };
+  const tile = (id, name, stream, isMe) => { const t = vcTile(id, name, stream, isMe); t.classList.add("pick"); t.title = "Cliquer pour mettre en grand"; t.onclick = () => pick(id); return t; };
+  if (main){
+    grid = el("div","vc-spot"); const big = el("div","vc-big"), side = el("div","vc-side");
+    const P = main === "me" ? null : VC.peers.get(main);
+    big.appendChild(main === "me" ? vcTile("me", me, VC.local, true) : vcTile(P.pid, P.name, P.stream, false));
+    big.firstChild.title = "Cliquer pour revenir à la grille"; big.firstChild.onclick = () => { VC.focus = "grid"; vcStage(); };
+    if (main !== "me") side.appendChild(tile("me", me, VC.local, true));
+    VC.peers.forEach(Q => { if (Q.pid !== main) side.appendChild(tile(Q.pid, Q.name, Q.stream, false)); });
+    grid.append(big); if (side.childNodes.length) grid.append(side); else grid.classList.add("solo");
+  } else {
+    grid = el("div","vc-grid n" + Math.min(VC.peers.size + 1, 6));
+    grid.appendChild(tile("me", me, VC.local, true));
+    VC.peers.forEach(P => grid.appendChild(tile(P.pid, P.name, P.stream, false)));
+  }
+  st.classList.toggle("is-full", vcIsFull());
   const hd = el("div","vc-sh"); hd.append(el("b",null,VC.label), el("span","muted", VC.peers.size ? (VC.peers.size + 1) + " personnes" : "En attente des autres"));
   const body = el("div","vc-body"); const ch = el("section","vc-chat"); ch.appendChild(el("h3",null,"Discussion du salon"));
   const ms = el("div","vc-msgs"); ms.id = "vc-msgs"; ch.appendChild(ms);
@@ -1443,7 +1488,10 @@ function vMessagerie(root){
   };
   side.appendChild(el("span","wa-lab","Équipe")); CHANNELS.forEach(([k,l]) => row(pre+k, l));
   if (mode !== "shoot"){ const dms = dmChannels(); if (dms.length){ side.appendChild(el("span","wa-lab","Privé")); dms.sort((a, b) => ((lastOf[b] || {}).at || "").localeCompare((lastOf[a] || {}).at || "")).forEach(k => row(k, dmOther(k))); } }
-  side.appendChild(el("span","wa-lab","Clients"));
+  const cgShown = mode === "shoot" ? [] : cgChannels().filter(k => k === ch || lastOf[k] || ((cgOf(k) || {}).people || []).length);
+  if (cgShown.length){ side.appendChild(el("span","wa-lab","Groupes avec les clients"));
+    cgShown.map(k => [k, chName(k)]).sort((a, b) => ((lastOf[b[0]] || {}).at || "").localeCompare((lastOf[a[0]] || {}).at || "") || a[1].localeCompare(b[1])).forEach(([k, n]) => row(k, n)); }
+  side.appendChild(el("span","wa-lab","Clients, entre nous"));
   clientNames().filter(n => n !== AGENCE).map(n => [pre+"c:"+n, n]).sort((a, b) => ((lastOf[b[0]] || {}).at || "").localeCompare((lastOf[a[0]] || {}).at || "") || a[1].localeCompare(b[1])).forEach(([k, n]) => row(k, n));
 
   /* Conversation */
@@ -1451,8 +1499,8 @@ function vMessagerie(root){
   const hd = el("header","wa-head");
   const back = el("button","wa-back"); back.type = "button"; back.setAttribute("aria-label","Retour aux conversations"); back.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>'; back.onclick = () => { S.ui.waConv = false; remember(); render(); };
   const ht = el("div","wa-htx"); const isCli = ch.replace(/^tg:/,"").startsWith("c:");
-  const isDm = ch.startsWith("dm:");
-  ht.append(el("b",null,(mode === "shoot" ? "Tournage, " : "") + chName(ch)), el("small",null, isDm ? "Conversation privée, visible de vous deux seulement" : isCli ? "Échanges de l’équipe sur ce client" : (S.team || []).map(t => t.name).join(", ")));
+  const isDm = ch.startsWith("dm:"), isCg = ch.startsWith("cg:");
+  ht.append(el("b",null,(mode === "shoot" ? "Tournage, " : "") + chName(ch)), el("small",null, isDm ? "Conversation privée, visible de vous deux seulement" : isCg ? "Groupe partagé avec le client" + ((cgOf(ch) || {}).people || []).filter(Boolean).map((p, i) => (i ? ", " : " : ") + p).join("") : isCli ? "Échanges de l’équipe sur ce client, le client ne les voit pas" : (S.team || []).map(t => t.name).join(", ")));
   const hav = chAvatar(ch, 40); if (isDm){ hav.classList.add("av-click"); hav.onclick = () => profileCard(dmOther(ch)); ht.classList.add("av-click"); ht.onclick = () => profileCard(dmOther(ch)); }
   hd.append(back, hav, ht); main.appendChild(hd);
   const list = el("div","wa-msgs"); list.id = "chat-list";
@@ -1468,6 +1516,7 @@ function vMessagerie(root){
     const bub = el("div","wa-bub");
     if (!mine && !grouped){ const nm = el("b","wa-name",m.who || ""); nm.style.color = avColor(m.who); nm.onclick = e => { e.stopPropagation(); profileCard(m.who); }; bub.appendChild(nm); }
     if (m.fwd) bub.appendChild(el("span","wa-fwd","Transféré"));
+    if (m.ext && !grouped) bub.appendChild(el("span","wa-ext","Client"));
     (m.files || []).forEach(f => bub.appendChild(attachEl(f)));
     if (m.audio) bub.appendChild(audioFor(m));
     if (m.text) bub.appendChild(el("div","wa-txt", m.text));
@@ -1526,6 +1575,34 @@ function vMessagerie(root){
   wrap.append(side, main); root.appendChild(wrap);
   list.querySelectorAll("img,video").forEach(x => x.addEventListener(x.tagName === "IMG" ? "load" : "loadedmetadata", () => { list.scrollTop = list.scrollHeight; }, { once: true }));
   requestAnimationFrame(() => { const l = document.getElementById("chat-list"); if (l) l.scrollTop = l.scrollHeight; if (ta.value){ ta.style.height = "auto"; ta.style.height = Math.min(140, ta.scrollHeight) + "px"; } });
+}
+
+/* ---------- Idées clients : ce que les clients déposent depuis leur espace ---------- */
+function vIdees(root){
+  const me = S.me || "Gabriel", all = (S.d.idees || []).slice().sort((a, b) => (b.at || "").localeCompare(a.at || ""));
+  const names = [...new Set(all.map(i => i.client))].sort((a, b) => a.localeCompare(b, "fr"));
+  const f = S.ui.idClient && names.includes(S.ui.idClient) ? S.ui.idClient : "";
+  const sel = el("select","pick"); [["","Tous les clients"]].concat(names.map(n => [n, n])).forEach(([v, l]) => { const o = el("option", null, l); o.value = v; if (v === f) o.selected = true; sel.appendChild(o); });
+  sel.onchange = () => { S.ui.idClient = sel.value; remember(); render(); };
+  const unseen = all.filter(i => !(i.seen || []).includes(me));
+  const markAll = unseen.length ? btn("Tout marquer comme vu","sm", () => unseen.forEach(i => patch("idees", i.id, { seen: [...new Set((i.seen || []).concat(me))] }))) : null;
+  root.appendChild(head("Idées clients", "Idées, photos et vidéos envoyées par les clients depuis leur espace", [sel, markAll]));
+  const list = all.filter(i => !f || i.client === f);
+  if (!list.length){ root.appendChild(el("p","empty","Rien pour l’instant. Les envois des clients arrivent ici.")); return; }
+  const g = el("div","id-grid");
+  list.forEach(i => {
+    const c = el("article","id-card" + ((i.seen || []).includes(me) ? "" : " new"));
+    const h = el("header","id-h"); h.append(avatarEl(i.client, 34, { src: "", color: colorOf(i.client), soft: true }));
+    const t = el("div","id-ht"); t.append(el("b",null,i.client), el("small",null,(i.who || "") + ", " + waTime(i.at))); h.append(t, el("span","pill",i.kind || "Idée")); c.appendChild(h);
+    if (i.text) c.appendChild(el("p","id-tx",i.text));
+    if ((i.files || []).length){ const m = el("div","id-media"); i.files.forEach(x => m.appendChild(attachEl(x))); c.appendChild(m); }
+    const a = el("div","id-acts");
+    if (!(i.seen || []).includes(me)) a.appendChild(btn("Marquer comme vu","sm", () => patch("idees", i.id, { seen: [...new Set((i.seen || []).concat(me))] })));
+    const g2 = (S.cgroups || []).find(x => x.name === i.client);
+    if (g2) a.appendChild(btn("Répondre dans le groupe","sm lemon", () => { S.ui.msgMode = "main"; S.ui.msgCh = g2.ch; S.ui.waConv = true; remember(); go("messagerie"); }));
+    c.appendChild(a); g.appendChild(c);
+  });
+  root.appendChild(g);
 }
 
 /* ---------- Formation ---------- */
@@ -1597,7 +1674,7 @@ function vTachesHub(root){
   const cur = opts.some(o => o[0] === S.ui.tHub) ? S.ui.tHub : "taches";
   (cur === "montage" ? vMontage : vTaches)(root); if (opts.length > 1) hubTabs(root, opts, cur, "tHub");
 }
-const RENDER = {fiches:vFiches, parametres:vParametres, accueil:vAccueil, agenda:vAgendaHub, taches:vTachesHub, commercial:vCommercial, campagnes:vMeta, montage:vMontage, publications:vPublications, clients:vClients, messagerie:vMessagerie, vocal:vVocal, formation:vFormation};
+const RENDER = {fiches:vFiches, parametres:vParametres, accueil:vAccueil, agenda:vAgendaHub, taches:vTachesHub, commercial:vCommercial, campagnes:vMeta, montage:vMontage, publications:vPublications, clients:vClients, messagerie:vMessagerie, vocal:vVocal, formation:vFormation, idees:vIdees};
 function go(v){ if (MERGED[v]){ S.ui[MERGED[v][1]] = v; remember(); v = MERGED[v][0]; } if (location.hash !== "#"+v) location.hash = v; else { S.view = v; render(); } }
 function fromHash(){ let h = (location.hash||"").replace("#",""); if (h === "editorial"){ S.ui.agClient = AGENCE; if (!S.ui.agLayers.includes("posts")) S.ui.agLayers = S.ui.agLayers.concat("posts"); h = "agenda"; } if (MERGED[h] && canSee(h)){ S.ui[MERGED[h][1]] = h; h = MERGED[h][0]; } S.view = RENDER[h] && canSee(h) ? h : "accueil"; }
 window.addEventListener("hashchange", () => { fromHash(); render(); window.scrollTo(0,0); });
@@ -1615,14 +1692,15 @@ const ICONS = {
   messagerie:'<path d="M4.5 6.5A2 2 0 0 1 6.5 4.5h11a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H10l-4.5 3.5v-3.5h0a2 2 0 0 1-1-1.7z"/>',
   vocal:'<path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3.5" y="13.5" width="4" height="6.5" rx="1.5"/><rect x="16.5" y="13.5" width="4" height="6.5" rx="1.5"/>',
   formation:'<rect x="3.5" y="5.5" width="17" height="12" rx="2"/><path d="M10.5 9v5l4-2.5z"/><path d="M8 20.5h8"/>',
-  plus:'<path d="M5 7h14M5 12h14M5 17h14"/>'
+  plus:'<path d="M5 7h14M5 12h14M5 17h14"/>',
+  idees:'<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>'
 };
-const SHORT = {fiches:"Tableau clients", parametres:"Paramètres", accueil:"Accueil", agenda:"Agenda", taches:"Tâches", commercial:"Commercial", campagnes:"Campagnes", montage:"Montage", publications:"Publications", clients:"Calendrier clients", messagerie:"Messagerie", vocal:"Vocal", formation:"Formation"};
+const SHORT = {fiches:"Tableau clients", parametres:"Paramètres", accueil:"Accueil", agenda:"Agenda", taches:"Tâches", commercial:"Commercial", campagnes:"Campagnes", montage:"Montage", publications:"Publications", clients:"Calendrier clients", messagerie:"Messagerie", vocal:"Vocal", formation:"Formation", idees:"Idées clients"};
 const MOBILE_MAIN = ["accueil","agenda","taches","messagerie"];
 const ico = k => { const s = document.createElementNS("http://www.w3.org/2000/svg","svg"); s.setAttribute("viewBox","0 0 24 24"); s.setAttribute("aria-hidden","true"); s.classList.add("ico"); s.innerHTML = ICONS[k] || ""; return s; };
 function renderTabs(){
   const me = S.me || "Gabriel";
-  const badge = { messagerie: unreadRole(), taches: openTasks().filter(t => t.who === me && lateDays(t.date) > 0).length, commercial: me === "Gabriel" ? S.d.commercial.filter(c => isISO(c.nextDate) && c.nextDate <= today()).length : 0, vocal: S.ready ? new Set(VOICE.flatMap(([k]) => voiceHere(k)).filter(n => n !== me)).size : 0 };
+  const badge = { messagerie: unreadRole(), taches: openTasks().filter(t => t.who === me && lateDays(t.date) > 0).length, commercial: me === "Gabriel" ? S.d.commercial.filter(c => isISO(c.nextDate) && c.nextDate <= today()).length : 0, idees: (S.d.idees || []).filter(i => !(i.seen || []).includes(me)).length, vocal: S.ready ? new Set(VOICE.flatMap(([k]) => voiceHere(k)).filter(n => n !== me)).size : 0 };
   try { const n = badge.messagerie || 0; if (navigator.setAppBadge) { n ? navigator.setAppBadge(n) : navigator.clearAppBadge(); } } catch(e){}
   const link = k => { const a = el("a"); a.href = "#"+k; a.appendChild(ico(k)); a.appendChild(el("span","lb", SHORT[k])); if (k === S.view) a.setAttribute("aria-current","page"); if (badge[k]) a.appendChild(el("span","n",String(badge[k]))); return a; };
   const n = $("#tabs"); n.textContent = "";
@@ -1656,6 +1734,7 @@ function cardLabels(root){
   });
 }
 function render(){
+  if (vcIsFull()){ vcStage(); vcRender(); return; }
   renderTabs();
   const root = $("#app");
   const focusId = document.activeElement && document.activeElement.id; const caret = focusId && document.activeElement.selectionStart;
@@ -1956,6 +2035,7 @@ render();
   S.db = db;
   window.claude.use("assets").then(a => { S.assets = a || null; }).catch(() => {});
   try { applyMe(await GC.api("GET","/api/g-me")); } catch(e){}
+  loadCgroups(); setInterval(loadCgroups, 5 * 60000);
   if (!S.me){ if (S.isOwner){ S.me = "Gabriel"; meSel.value = "Gabriel"; } else askWho(); }
   if (S.d.messages) notifyInit();
   COLLS.forEach(c => {
