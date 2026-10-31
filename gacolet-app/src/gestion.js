@@ -649,7 +649,29 @@ module.exports = function (app, { db, wrap, root }) {
     const idees = (await docsLike("idees", '"cid":' + c.id)).filter(i => Number(i.cid) === c.id).sort((a, b) => String(b.at || "").localeCompare(String(a.at || "")));
     const team = (await db.all("SELECT name, role, info FROM gusers WHERE disabled = 0 ORDER BY created_at")).map(r => { const i = infoOf(r); return { name: r.name, role: r.role, avatar: i.avatar || "", poste: i.poste || "" }; });
     const vr = visioRoom(c.id), here = RTC.has(vr) ? [...new Set([...RTC.get(vr).values()].map(p => p.name))] : [];
-    res.json({ visio: { room: vr, here }, me: { name: req.cname, prenom: req.cname.split(" ")[0], entreprise: req.cu.entreprise }, client: { name: c.name, id: c.id }, preview: req.cu.email === PREVIEW_MAIL, messages, idees, team });
+    const bill = await current("billing", "c" + c.id), billing = bill ? { plan: bill.plan || null, docs: bill.docs || [] } : { plan: null, docs: [] };
+    res.json({ visio: { room: vr, here }, me: { name: req.cname, prenom: req.cname.split(" ")[0], entreprise: req.cu.entreprise }, client: { name: c.name, id: c.id }, preview: req.cu.email === PREVIEW_MAIL, messages, idees, team, billing });
+  }));
+  // ---------- Prélèvements, contrats et factures : le propriétaire saisit, le client consulte ----------
+  const cleanBill = b => {
+    const s = (v, n) => String(v == null ? "" : v).trim().slice(0, n);
+    const num = v => { const n = Number(String(v == null ? "" : v).replace(",", ".").replace(/[^0-9.]/g, "")); return isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : 0; };
+    const day = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || "")) ? String(v) : "";
+    const link = v => { const u = s(v, 500); return /^\/f\/[a-f0-9]{32}(\.[a-z0-9]{1,7})?$/.test(u) || /^https:\/\/[^\s"<>]+$/.test(u) ? u : ""; };
+    const p = b.plan || {};
+    const plan = num(p.amount) ? { amount: num(p.amount), tax: p.tax === "HT" ? "HT" : "TTC", day: Math.min(28, Math.max(1, Math.round(Number(p.day)) || 5)), label: s(p.label, 120), method: s(p.method, 60) || "Prélèvement SEPA", start: day(p.start), end: day(p.end), next: day(p.next) } : null;
+    const docs = (Array.isArray(b.docs) ? b.docs : []).slice(0, 400).map(d => ({ id: okId(d.id) ? String(d.id) : newId(), kind: d.kind === "contrat" ? "contrat" : "facture", title: s(d.title, 160), num: s(d.num, 40), date: day(d.date), amount: num(d.amount), status: ["payee", "attente", "retard"].includes(d.status) ? d.status : "payee", url: link(d.url), name: s(d.name, 160) })).filter(d => d.title || d.url);
+    return { plan, docs };
+  };
+  app.get("/api/g-billing/:cid", auth, ownerOnly, wrap(async (req, res) => {
+    const cid = Number(req.params.cid); if (!cid) return res.status(400).json({ error: "Demande invalide." });
+    res.json(await current("billing", "c" + cid) || { plan: null, docs: [] });
+  }));
+  app.put("/api/g-billing/:cid", auth, ownerOnly, wrap(async (req, res) => {
+    const cid = Number(req.params.cid);
+    if (!cid || !await db.one("SELECT id FROM clients WHERE id = ?", [cid])) return res.status(404).json({ error: "Client introuvable." });
+    const data = Object.assign(cleanBill(req.body || {}), { updatedAt: new Date().toISOString(), updatedBy: req.user.name });
+    await put("billing", "c" + cid, data); res.json(data);
   }));
   app.post("/api/c/msg", cauth, wrap(async (req, res) => {
     const b = req.body || {}, text = String(b.text || "").trim().slice(0, 4000), files = cleanFiles(b.files);
