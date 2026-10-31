@@ -418,13 +418,13 @@ module.exports = function (app, { db, wrap, root }) {
   app.post("/api/rtc/leave", auth, hLeave);
   // Salon focus : qui travaille en ce moment, depuis quand, sur quoi. En mémoire, oublié après une minute sans signe de vie.
   const FOCUS = new Map();
-  const focusList = () => { const lim = Date.now() - 60000; FOCUS.forEach((v, k) => { if (v.seen < lim) FOCUS.delete(k); }); return [...FOCUS.entries()].map(([name, v]) => ({ name, since: v.since, task: v.task, pause: v.pause })); };
+  const focusList = () => { const lim = Date.now() - 60000; FOCUS.forEach((v, k) => { if (v.seen < lim) FOCUS.delete(k); }); return [...FOCUS.entries()].map(([name, v]) => ({ name, since: v.since, task: v.task, tool: v.tool, pause: v.pause })); };
   app.get("/api/focus", auth, (req, res) => res.json({ people: focusList() }));
   app.post("/api/focus", auth, (req, res) => {
     if (req.user.preview) return res.status(403).json({ error: "Aperçu en lecture seule." });
     const b = req.body || {}, name = req.user.name;
     if (b.on === false) FOCUS.delete(name);
-    else { const cur = FOCUS.get(name); FOCUS.set(name, { since: cur ? cur.since : Date.now(), task: String(b.task != null ? b.task : (cur ? cur.task : "")).trim().slice(0, 120), pause: !!b.pause, seen: Date.now() }); }
+    else { const cur = FOCUS.get(name); FOCUS.set(name, { since: cur ? cur.since : Date.now(), task: String(b.task != null ? b.task : (cur ? cur.task : "")).trim().slice(0, 120), tool: String(b.tool != null ? b.tool : (cur ? cur.tool : "")).trim().slice(0, 40), pause: !!b.pause, seen: Date.now() }); }
     res.json({ people: focusList() });
   });
   // Invitations
