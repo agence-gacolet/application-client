@@ -814,7 +814,7 @@ module.exports = function (app, { db, wrap, root }) {
   app.post("/api/g-game/pos", auth, wrap(async (req, res) => {
     await gEnsure();
     const b = req.body || {}, n = req.user.name, now = Date.now(), num = v => Math.max(-500, Math.min(500, Number(v) || 0));
-    const me = { name: n, x: num(b.x), z: num(b.z), y: Math.max(-20, Math.min(250, Number(b.y) || 0)), ry: Number(b.ry) || 0, mv: b.mv ? 1 : 0, emo: String(b.emo || "").slice(0, 12), cls: String(b.cls || "").replace(/[^\w]/g, "").slice(0, 20), lvl: Number(b.lvl) || 1, t: now };
+    const me = { name: n, x: num(b.x), z: num(b.z), y: Math.max(-20, Math.min(250, Number(b.y) || 0)), ry: Number(b.ry) || 0, mv: b.mv ? 1 : 0, emo: String(b.emo || "").slice(0, 12), cls: String(b.cls || "").replace(/[^\w]/g, "").slice(0, 20), lvl: Number(b.lvl) || 1, t: now, ride: ["car", "horse"].includes(b.ride) ? b.ride : "", rp: Number(b.rp) || 0, rr: Number(b.rr) || 0, sp: Number(b.sp) || 0 };
     // Une seule partie par personne : si le jeu est ouvert dans deux onglets, le plus récent prend la main
     me.ss = Number(b.ss) || 0;
     const prev = await db.one("SELECT data, t FROM game_pos WHERE name = ?", [n]);
