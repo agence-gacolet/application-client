@@ -559,7 +559,7 @@ module.exports = function (app, { db, wrap, root }) {
       if (!canRead(u, r.col)) continue;
       if (Number(r.deleted)) { docs.push({ col: r.col, id: r.id, deleted: true, data: null }); continue; }
       const d = JSON.parse(r.data || "{}");
-      if (r.col === "clients" && u.role !== "owner") { const keep = {}; ["name", "color", "title", "calendar", "leadWeeks", "recap"].forEach(k => { if (d[k] != null) keep[k] = d[k]; }); docs.push({ col: r.col, id: r.id, deleted: false, data: keep }); continue; }
+      if (r.col === "clients" && u.role !== "owner") { const keep = {}; ["name", "color", "title", "calendar", "leadWeeks", "recap", "logo"].forEach(k => { if (d[k] != null) keep[k] = d[k]; }); docs.push({ col: r.col, id: r.id, deleted: false, data: keep }); continue; }
       if (visible(u, r.col, d)) docs.push({ col: r.col, id: r.id, deleted: false, data: d });
       else if (since) docs.push({ col: r.col, id: r.id, deleted: true, data: null }); // n'est plus visible (réattribué...)
     }
