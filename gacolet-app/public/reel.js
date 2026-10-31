@@ -113,7 +113,12 @@ async function buildTerrain() { say("Chargement des sols…");
   terrain.material = mat; }
 
 /* ---------- Herbe : des dizaines de milliers de brins autour du joueur, qui suivent le relief et le vent ---------- */
-const GR = LOWQ ? 24 : 30, GN = LOWQ ? 90000 : 170000;
+const GR = LOWQ ? 24 : 32, GN = LOWQ ? 50000 : 90000;
+const GRASS_GLSL = `attribute vec4 aOff; uniform float uTime; uniform vec2 uCam; uniform float uR; uniform sampler2D hMap; uniform float hMin; uniform float hRange; uniform float hSize;
+      float dec(vec4 t){ return (t.r * 255.0 * 256.0 + t.g * 255.0) / 65535.0; }
+      vec2 hd(vec2 w){ vec2 p = (w / hSize + .5) * 511.0; vec2 i = floor(p), f = p - i; ivec2 a = ivec2(clamp(i, vec2(0.0), vec2(510.0)));
+        vec4 t00 = texelFetch(hMap, a, 0), t10 = texelFetch(hMap, a + ivec2(1, 0), 0), t01 = texelFetch(hMap, a + ivec2(0, 1), 0), t11 = texelFetch(hMap, a + ivec2(1, 1), 0);
+        float h = mix(mix(dec(t00), dec(t10), f.x), mix(dec(t01), dec(t11), f.x), f.y); float d = mix(mix(t00.b, t10.b, f.x), mix(t01.b, t11.b, f.x), f.y); return vec2(h * hRange + hMin, d); }`;
 const grassU = { uTime: { value: 0 }, uCam: { value: new THREE.Vector2() }, uR: { value: GR }, hMap: { value: hmTex }, hMin: { value: hMin }, hRange: { value: hMax - hMin }, hSize: { value: WORLD } };
 { const bg = new THREE.BufferGeometry(), segs = 4, pos = [], uvs = [], idx = [];
   for (let i = 0; i <= segs; i++) { const t = i / segs, w = .022 * (1 - t * .92); pos.push(-w, t, 0, w, t, 0); uvs.push(0, t, 1, t); if (i < segs) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); } }
@@ -132,7 +137,7 @@ const grassU = { uTime: { value: 0 }, uCam: { value: new THREE.Vector2() }, uR: 
       .replace("#include <begin_vertex>", `
       vec2 wp = uCam + mod(aOff.xy - uCam + uR, 2.0 * uR) - uR; vec2 hdv = hd(wp); float dist = length(wp - uCam);
       float keep = step(aOff.z, hdv.y) * (1.0 - smoothstep(uR * .7, uR, dist)); vFade = keep; vT = position.y; vRnd = aOff.z;
-      float hgt = (.16 + aOff.z * .34 + step(.93, fract(aOff.z * 13.7)) * .25) * keep; float c = cos(aOff.w), s = sin(aOff.w);
+      float hgt = (.1 + aOff.z * .2) * keep; float c = cos(aOff.w), s = sin(aOff.w);
       vec3 transformed = vec3(position.x * c, position.y * hgt, position.x * s);
       float wv = sin(uTime * 1.7 + wp.x * .35 + wp.y * .22) * .5 + sin(uTime * 3.1 + wp.x * .9) * .2;
       float lean = (fract(aOff.z * 7.31) - .5) * .9, yy = position.y * position.y * hgt; transformed += vec3(-s, 0.0, c) * lean * yy;
@@ -142,6 +147,24 @@ const grassU = { uTime: { value: 0 }, uCam: { value: new THREE.Vector2() }, uR: 
       if (vFade < .01) discard; vec3 base = mix(vec3(.06, .09, .02), vec3(.11, .14, .04), vRnd), tip = mix(vec3(.42, .5, .16), vec3(.7, .62, .3), vRnd * vRnd);
       diffuseColor.rgb = mix(base, tip, smoothstep(0.0, 1.0, vT)) * (.85 + vRnd * .3) * (.35 + .65 * vT);`); };
   const grass = new THREE.Mesh(ig, gm); grass.frustumCulled = false; grass.receiveShadow = true; scene.add(grass); }
+
+/* Touffes d'herbe scannées (Poly Haven) : vraies formes et vraies textures, posées autour du joueur, qui suivent le relief et le vent */
+function wrapGrass(gltf, per, R, minTris, scale) { gltf.scene.updateMatrixWorld(true); const list = []; gltf.scene.traverse(m => { if (m.isMesh) list.push(m); });
+  list.forEach(m => { const g0 = m.geometry.clone().applyMatrix4(m.matrixWorld), n = (g0.index ? g0.index.count : g0.attributes.position.count) / 3; if (n < (minTris || 0)) return;
+    g0.computeBoundingBox(); const bb = g0.boundingBox, c = bb.getCenter(new THREE.Vector3()); g0.translate(-c.x, -bb.min.y, -c.z);
+    const ig = new THREE.InstancedBufferGeometry(); ig.index = g0.index; Object.entries(g0.attributes).forEach(([k, v]) => ig.setAttribute(k, v)); ig.instanceCount = per;
+    const off = new Float32Array(per * 4); for (let i = 0; i < per; i++) { off[i * 4] = (Math.random() * 2 - 1) * R; off[i * 4 + 1] = (Math.random() * 2 - 1) * R; off[i * 4 + 2] = Math.random(); off[i * 4 + 3] = Math.random() * Math.PI * 2; }
+    ig.setAttribute("aOff", new THREE.InstancedBufferAttribute(off, 4));
+    const mat = m.material.clone(); mat.transparent = false; mat.alphaTest = .4; mat.side = THREE.DoubleSide; mat.envMapIntensity = .55;
+    mat.onBeforeCompile = s => { Object.assign(s.uniforms, grassU, { uR: { value: R } });
+      s.vertexShader = s.vertexShader.replace("#include <common>", "#include <common>\n" + GRASS_GLSL)
+        .replace("#include <beginnormal_vertex>", "#include <beginnormal_vertex>\nfloat gc = cos(aOff.w), gs = sin(aOff.w); objectNormal = vec3(objectNormal.x * gc - objectNormal.z * gs, objectNormal.y, objectNormal.x * gs + objectNormal.z * gc);")
+        .replace("#include <begin_vertex>", `vec2 wp = uCam + mod(aOff.xy - uCam + uR, 2.0 * uR) - uR; vec2 hdv = hd(wp); float dist = length(wp - uCam);
+          float keep = step(aOff.z * .9, hdv.y) * (1.0 - smoothstep(uR * .65, uR, dist)); float sc = (${scale.toFixed(2)} + aOff.z * .5) * keep;
+          vec3 p = position * sc; vec3 transformed = vec3(p.x * gc - p.z * gs, p.y, p.x * gs + p.z * gc);
+          float wv = sin(uTime * 1.6 + wp.x * .35 + wp.y * .22) * .5 + sin(uTime * 3.0 + wp.x * .9) * .2; transformed.x += wv * .2 * p.y * p.y * 4.0; transformed.z += wv * .08 * p.y * p.y * 4.0;
+          transformed += vec3(wp.x, hdv.x - .03, wp.y);`); };
+    const mesh = new THREE.Mesh(ig, mat); mesh.frustumCulled = false; mesh.receiveShadow = true; scene.add(mesh); }); }
 
 /* ---------- Placement ---------- */
 const SOLID = [];
@@ -173,7 +196,7 @@ async function buildTrees() { say("Pousse des arbres…");
 
 /* ---------- Rochers, souches, fougères, buissons, campement ---------- */
 async function buildProps() { say("Pose des rochers et des plantes…");
-  const ids = ["boulder_01", "rock_moss_set_01", "rock_07", "tree_stump_01", "dead_tree_trunk", "fern_02", "shrub_02", "nettle_plant", "stone_fire_pit", "Barrel_01", "Lantern_01", "WoodenTable_01"], M = {};
+  const ids = ["boulder_01", "rock_moss_set_01", "rock_07", "tree_stump_01", "dead_tree_trunk", "fern_02", "shrub_02", "nettle_plant", "stone_fire_pit", "Barrel_01", "Lantern_01", "WoodenTable_01", "grass_medium_02", "grass_medium_01"], M = {};
   await Promise.all(ids.map(id => phModel(id).then(g => M[id] = g).catch(e => console.warn(id, e))));
   const L = {}; const add = (id, x, z, s, ry, sink) => ((L[id] = L[id] || []).push({ x, y: height(x, z) - (sink || 0), z, s, ry }));
   scatter(70, (x, z) => pathD(x, z) > 4 && Math.hypot(x, z) > 22 && farFromSolid(x, z, 3), (x, z) => { const s = .8 + rnd() * 2.2; add(rnd() < .5 ? "boulder_01" : "rock_07", x, z, s, rnd() * 6.3, s * .25); SOLID.push({ x, z, r: s * .8 }); });
@@ -182,6 +205,8 @@ async function buildProps() { say("Pose des rochers et des plantes…");
   scatter(18, (x, z) => forest(x, z) > .3 && farFromSolid(x, z, 4), (x, z) => { add("dead_tree_trunk", x, z, 1 + rnd() * .4, rnd() * 6.3, .1); });
   scatter(LOWQ ? 250 : 600, (x, z) => forest(x, z) > .25 && pathD(x, z) > 3, (x, z) => add(rnd() < .6 ? "fern_02" : "nettle_plant", x, z, .8 + rnd() * .8, rnd() * 6.3));
   scatter(LOWQ ? 120 : 260, (x, z) => pathD(x, z) > 3.5 && Math.hypot(x, z) > 20, (x, z) => add("shrub_02", x, z, .7 + rnd() * .9, rnd() * 6.3));
+  if (M.grass_medium_02) wrapGrass(M.grass_medium_02, LOWQ ? 500 : 1000, 22, 0, .85);
+  if (M.grass_medium_01) wrapGrass(M.grass_medium_01, LOWQ ? 140 : 260, 22, 600, .9);
   // campement au centre de la clairière
   add("stone_fire_pit", 0, 0, 1, 0, .05); SOLID.push({ x: 0, z: 0, r: 1.1 });
   [[3.2, 1.6, .4], [-2.6, 2.4, 2.1], [.4, -3.1, 1.2]].forEach(([x, z, r]) => { add("tree_stump_01", x, z, .7, r, .05); SOLID.push({ x, z, r: .45 }); });
