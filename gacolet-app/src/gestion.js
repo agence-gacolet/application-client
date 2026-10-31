@@ -6,7 +6,7 @@ const fs = require("fs");
 const crypto = require("crypto");
 const multer = require("multer");
 
-const COLLS = ["events", "tasks", "commercial", "campaigns", "rushes", "publications", "clients", "cevents", "keydates", "posts", "edtodo", "meta", "messages", "formations", "msheets", "idees"];
+const COLLS = ["events", "tasks", "commercial", "campaigns", "rushes", "publications", "clients", "cevents", "keydates", "posts", "edtodo", "meta", "messages", "formations", "msheets", "idees", "pilotage", "ca"];
 const ROLES = ["owner", "member", "commercial"];
 const ACCESS = {
   member: {
@@ -26,6 +26,8 @@ const VIEW_COLLS = { agenda: ["events", "tasks", "cevents", "keydates", "posts"]
 const DEFAULT_VIEWS = { member: ["agenda", "taches", "messagerie", "vocal", "focus", "formation"],
   commercial: ["agenda", "taches", "messagerie", "vocal", "focus", "commercial", "clients", "montage", "publications", "idees", "campagnes", "formation"] };
 const SEED = [["Gabriel", "gabriel"], ["Matis", "matis"], ["Clara", "clara"]];
+// Le chiffre d'affaires et le plan chalet ne sont visibles que par Matis et Gabriel, quel que soit le rôle
+const DUO = ["Matis", "Gabriel"];
 
 module.exports = function (app, { db, wrap, root }) {
   const okCol = c => COLLS.includes(c);
@@ -39,6 +41,12 @@ module.exports = function (app, { db, wrap, root }) {
     await db.run("CREATE TABLE IF NOT EXISTS gusers (id VARCHAR(40) NOT NULL PRIMARY KEY, username VARCHAR(60) NOT NULL, name VARCHAR(80) NOT NULL, role VARCHAR(20) NOT NULL, pass VARCHAR(200) NOT NULL DEFAULT '', pv INT NOT NULL DEFAULT 0, disabled INT NOT NULL DEFAULT 0, info VARCHAR(2000) NOT NULL DEFAULT '', created_at VARCHAR(30) NOT NULL)");
     if (!(await db.one("SELECT id FROM gusers LIMIT 1"))) {
       for (const [name, username] of SEED) await db.run("INSERT INTO gusers (id, username, name, role, pass, pv, disabled, created_at) VALUES (?,?,?,?,'',0,0,?)", [newId(), username, name, "owner", stamp()]);
+    }
+    if (!(await db.one("SELECT id FROM docs WHERE col = 'meta' AND id = 'seed-prospects-reseaux'"))) {
+      const t = new Date().toISOString(), day = t.slice(0, 10), have = (await db.all("SELECT data FROM docs WHERE col = 'commercial' AND deleted = 0")).map(r => { try { return String(JSON.parse(r.data).company || "").toLowerCase(); } catch (e) { return ""; } });
+      for (const company of ["Carla Cota Design", "Mazet des délices", "EVA Nîmes"]) { if (have.includes(company.toLowerCase())) continue;
+        await db.run("INSERT INTO docs (col, id, data, deleted, updated_at) VALUES ('commercial',?,?,0,?)", [newId(), JSON.stringify({ company, kind: "Prospect", source: "Réseaux sociaux", stage: "à contacter", nextAction: "Premier contact", nextDate: day, order: 999, createdAt: t, updatedAt: t, createdBy: "Tableau Veleda" }), t]); }
+      await db.run("INSERT INTO docs (col, id, data, deleted, updated_at) VALUES ('meta','seed-prospects-reseaux',?,0,?)", [JSON.stringify({ done: t }), t]);
     }
   })().catch(e => { ready = null; throw e; }));
   app.use(["/api/g", "/api/g-"], (req, res, next) => ensure().then(() => next(), e => res.status(500).json({ error: "Base indisponible.", detail: String(e.message || e).slice(0, 300) })));
@@ -104,8 +112,8 @@ module.exports = function (app, { db, wrap, root }) {
 
   // ---------- Droits par rôle ----------
   const viewColls = u => (u.views || []).flatMap(v => VIEW_COLLS[v] || []);
-  const canRead = (u, col) => u.role === "owner" || (ACCESS[u.role] && ACCESS[u.role].read.includes(col)) || viewColls(u).includes(col);
-  const canWriteCol = (u, col) => u.role === "owner" || (ACCESS[u.role] && ACCESS[u.role].write.includes(col)) || viewColls(u).includes(col);
+  const canRead = (u, col) => col === "ca" ? DUO.includes(u.name) : u.role === "owner" || (ACCESS[u.role] && ACCESS[u.role].read.includes(col)) || viewColls(u).includes(col);
+  const canWriteCol = (u, col) => col === "ca" ? DUO.includes(u.name) : u.role === "owner" || (ACCESS[u.role] && ACCESS[u.role].write.includes(col)) || viewColls(u).includes(col);
   function visible(u, col, d) {
     if (!canRead(u, col)) return false;
     if (col === "messages" && String(d.ch || "").startsWith("dm:")) return String(d.ch).slice(3).split("|").includes(u.name);
@@ -117,6 +125,7 @@ module.exports = function (app, { db, wrap, root }) {
   }
   // before : document actuel (ou null), after : document voulu (ou null pour une suppression), keys : champs modifiés
   function allowed(u, col, before, after, keys) {
+    if (col === "ca") return DUO.includes(u.name) ? "" : "Réservé à Matis et Gabriel.";
     if (col === "messages") {
       if (before && before.who !== u.name && !(u.role === "owner" && !after)) return "Tu ne peux retirer que tes propres messages.";
       if (after && after.who !== u.name) return "Message refusé.";
