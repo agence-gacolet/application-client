@@ -1197,6 +1197,8 @@ function msgMenu(anchor, m, ch, mine){
   document.querySelectorAll(".wa-menu").forEach(x => x.remove());
   const me = S.me || "Gabriel", menu = el("div","wa-menu");
   const item = (label, fn, cls) => { const b = el("button", cls || null, label); b.type = "button"; b.onclick = e => { e.stopPropagation(); fn(b); }; menu.appendChild(b); return b; };
+  const er = el("div","wa-menu-re"); REACTS.forEach(k => { const b = el("button", ((m.re || {})[k] || []).includes(me) ? "on" : null, k); b.type = "button"; b.setAttribute("aria-label","Réagir " + k); b.onclick = e => { e.stopPropagation(); menu.remove(); react(m, k); }; er.appendChild(b); }); menu.appendChild(er);
+  item("Répondre", () => { menu.remove(); replyTo(m, ch); });
   item("Transférer", () => { menu.remove(); forwardMsg(m); });
   item("En faire une tâche", () => { menu.remove(); editTask({who: me, title: (m.text || (m.audio ? "Écouter le message vocal" : "Voir le fichier de " + m.who)).slice(0,120), client: ch.replace(/^tg:/, "").startsWith("c:") ? ch.replace(/^tg:/, "").slice(2) : ""}); });
   if (m.text && navigator.clipboard) item("Copier le texte", () => { navigator.clipboard.writeText(m.text).catch(() => {}); menu.remove(); });
@@ -1513,8 +1515,30 @@ function newInvite(){
     onSave: async out => { try { const r = await GC.api("POST","/api/rtc/invites",{ label: out.label, days: Number(out.days) || 7 }); copyInvite(r.link); S.invites = null; render(); } catch(e){ toast(e.message); throw e; } } });
 }
 window.addEventListener("beforeunload", () => { if (VC.room) navigator.sendBeacon && fetch("/api/rtc/leave", { method: "POST", keepalive: true, headers: { "Content-Type": "application/json", "Authorization": "Bearer " + (localStorage.getItem("gacolet-gestion-cle") || "") }, body: JSON.stringify({ room: VC.room, pid: VC.pid }) }).catch(() => {}); });
+/* Messagerie en direct : réponses, réactions, « en train d’écrire », « vu », sans saut de page */
+const REACTS = ["👍","❤️","😂","😮","🙏","🔥"];
+const MSG_SHOWN = new Set(); let MSG_CH = "", SEEN_SENT = "", TYPING_AT = 0;
+async function react(m, e){ const me = S.me || "Gabriel"; const re = Object.assign({}, m.re || {}); const had = (re[e] || []).includes(me);
+  Object.keys(re).forEach(k => { re[k] = (re[k] || []).filter(n => n !== me); if (!re[k].length) delete re[k]; }); if (!had) re[e] = (re[e] || []).concat(me);
+  m.re = re; render(); try { await GC.api("POST","/api/g-react", { id: m.id, e }); } catch(x){ toast(x.message); } }
+function replyTo(m, ch){ S.ui.reply = { ch, id: m.id, who: m.who, text: (m.text || msgPreview(m)).slice(0, 140) }; render(); setTimeout(() => { const t = document.getElementById("chat-input"); if (t) t.focus(); }, 30); }
+function typingPing(ch){ const n = Date.now(); if (n - TYPING_AT < 2500) return; TYPING_AT = n; GC.api("POST","/api/g-typing", { ch }).catch(() => {}); }
+function liveFill(){
+  const L = window.GC_LIVE || {}, ch = MSG_CH, me = S.me || "Gabriel";
+  const ty = document.getElementById("wa-typing");
+  if (ty){ const who = ((L.typing || {})[ch] || []).filter(n => n !== me); ty.hidden = !who.length;
+    const lb = ty.querySelector("span"); if (lb) lb.textContent = who.length ? (who.length === 1 ? who[0] + " écrit" : who.join(" et ") + " écrivent") : "";
+    if (who.length){ const l = document.getElementById("chat-list"); if (l && l.scrollHeight - l.scrollTop - l.clientHeight < 120) l.scrollTop = l.scrollHeight; } }
+  const sv = document.getElementById("wa-seen");
+  if (sv){ const at = sv.dataset.at || "", r = (L.reads || {})[ch] || {}; const by = Object.keys(r).filter(n => n !== me && r[n] >= at);
+    sv.textContent = by.length ? (ch.startsWith("dm:") ? "Vu" : "Vu par " + by.join(", ")) : "Envoyé"; sv.classList.toggle("on", !!by.length); }
+}
+window.addEventListener("gc-live", () => { if (S.view === "messagerie") liveFill(); });
 function vMessagerie(root){
   const me = S.me || "Gabriel";
+  const OLD = document.getElementById("chat-list"), OLD_IN = document.getElementById("chat-input");
+  const keep = OLD ? { ch: OLD.dataset.ch, top: OLD.scrollTop, bottom: OLD.scrollHeight - OLD.scrollTop - OLD.clientHeight < 80 } : null;
+  const keepIn = OLD_IN && document.activeElement === OLD_IN ? { a: OLD_IN.selectionStart, b: OLD_IN.selectionEnd } : null;
   const mode = S.ui.msgMode || "main";
   const pre = mode === "shoot" ? "tg:" : "";
   let ch = mode === "shoot" ? (S.ui.msgShoot || "") : (S.ui.msgCh || "general");
@@ -1557,31 +1581,45 @@ function vMessagerie(root){
   hd.append(back, hav, ht);
   if (isCg && mode !== "shoot"){ const pv = btn("Message privé","sm", () => { const k = "cdm:" + ch.slice(3) + "|" + me; S.ui.cdmOpen = [...new Set((S.ui.cdmOpen || []).concat(k))]; S.ui.msgCh = k; S.ui.waConv = true; remember(); render(); }); pv.classList.add("wa-hbtn"); hd.appendChild(pv); }
   main.appendChild(hd);
-  const list = el("div","wa-msgs"); list.id = "chat-list";
+  const list = el("div","wa-msgs"); list.id = "chat-list"; list.dataset.ch = ch;
   const msgs = S.d.messages.filter(m => m.ch === ch).sort((a,b) => (a.at||"").localeCompare(b.at||""));
+  const firstPaint = MSG_CH !== ch; MSG_CH = ch; const lastMine = [...msgs].reverse().find(m => m.who === me);
   if (!msgs.length) list.appendChild(el("p","wa-empty","Aucun message ici pour l’instant. Écris le premier."));
   let prev = null;
   msgs.forEach(m => {
     const md = new Date(m.at||0), d = iso(md);
     if (!prev || iso(new Date(prev.at||0)) !== d){ const dl = fmtDL(d); list.appendChild(el("div","wa-day", d === today() ? "Aujourd’hui" : d === addDays(today(), -1) ? "Hier" : dl.charAt(0).toUpperCase()+dl.slice(1))); prev = null; }
     const mine = m.who === me, grouped = prev && prev.who === m.who && (Date.parse(m.at) - Date.parse(prev.at)) < 5*60000;
-    const line = el("div","wa-line" + (mine ? " mine" : "") + (grouped ? " cont" : ""));
+    const fresh = !firstPaint && !MSG_SHOWN.has(m.id); MSG_SHOWN.add(m.id);
+    const line = el("div","wa-line" + (mine ? " mine" : "") + (grouped ? " cont" : "") + (fresh ? " new" : "")); line.id = "m-" + m.id;
     if (!mine){ if (grouped) line.appendChild(el("span","av-sp")); else { const av = avatarEl(m.who, 30); av.classList.add("av-click"); av.title = "Voir le profil de " + m.who; av.onclick = () => profileCard(m.who); line.appendChild(av); } }
     const bub = el("div","wa-bub");
     if (!mine && !grouped){ const nm = el("b","wa-name",m.who || ""); nm.style.color = avColor(m.who); nm.onclick = e => { e.stopPropagation(); profileCard(m.who); }; bub.appendChild(nm); }
     if (m.fwd) bub.appendChild(el("span","wa-fwd","Transféré"));
     if (m.ext && !grouped) bub.appendChild(el("span","wa-ext","Client"));
+    if (m.rep){ const q = el("button","wa-quote"); q.type = "button"; q.append(el("b",null,m.rep.who === me ? "Vous" : m.rep.who), el("span",null,m.rep.text || ""));
+      q.onclick = e => { e.stopPropagation(); const t = document.getElementById("m-" + m.rep.id); if (t){ t.scrollIntoView({ block: "center", behavior: "smooth" }); t.classList.remove("flash"); void t.offsetWidth; t.classList.add("flash"); } }; bub.appendChild(q); }
     (m.files || []).forEach(f => bub.appendChild(attachEl(f)));
     if (m.audio) bub.appendChild(audioFor(m));
     if (m.text) bub.appendChild(el("div","wa-txt", m.text));
     bub.appendChild(el("span","wa-time", hhmm(md)));
-    const col = el("div","wa-col"); col.appendChild(bub); line.appendChild(col);
+    const col = el("div","wa-col"); col.appendChild(bub);
+    const rk = Object.keys(m.re || {}).filter(k => (m.re[k] || []).length);
+    if (rk.length){ const rr = el("div","wa-re"); rk.forEach(k => { const b = el("button", (m.re[k].includes(me) ? "on" : null)); b.type = "button"; b.title = m.re[k].join(", "); b.append(document.createTextNode(k), el("span",null,String(m.re[k].length))); b.onclick = e => { e.stopPropagation(); react(m, k); }; rr.appendChild(b); }); col.appendChild(rr); }
+    if (lastMine && m.id === lastMine.id){ const sv = el("span","wa-seen","Envoyé"); sv.id = "wa-seen"; sv.dataset.at = m.at || ""; col.appendChild(sv); }
+    line.appendChild(col);
+    bub.ondblclick = e => { e.preventDefault(); react(m, "❤️"); };
+    let sx = 0, sy = 0, dx = 0;
+    line.addEventListener("touchstart", e => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; dx = 0; }, { passive: true });
+    line.addEventListener("touchmove", e => { const x = e.touches[0].clientX - sx, y = e.touches[0].clientY - sy; if (Math.abs(y) > Math.abs(x)) return; dx = Math.max(0, Math.min(80, x)); col.style.transform = "translateX(" + dx + "px)"; }, { passive: true });
+    line.addEventListener("touchend", () => { col.style.transform = ""; if (dx > 60){ try { navigator.vibrate && navigator.vibrate(10); } catch(e){} replyTo(m, ch); } dx = 0; });
     const dots = el("button","wa-dots"); dots.type = "button"; dots.title = "Plus d’options"; dots.setAttribute("aria-label", dots.title);
     dots.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>';
     dots.onclick = e => { e.stopPropagation(); msgMenu(dots, m, ch, mine); };
     line.appendChild(dots);
     list.appendChild(line); prev = m;
   });
+  const ty = el("div","wa-typing"); ty.id = "wa-typing"; ty.hidden = true; ty.append(el("i"), el("i"), el("i"), el("span")); list.appendChild(ty);
   main.appendChild(list);
 
   /* Saisie */
@@ -1592,6 +1630,8 @@ function vMessagerie(root){
       const x = el("button",null,"Retirer"); x.type = "button"; x.onclick = () => { PENDING.files = PENDING.files.filter(y => y !== f); render(); }; c.appendChild(x); pv.appendChild(c); });
     form.appendChild(pv);
   }
+  const rep = S.ui.reply && S.ui.reply.ch === ch ? S.ui.reply : null;
+  if (rep){ const rb = el("div","wa-repbar"); const tx = el("div"); tx.append(el("b",null,"Réponse à " + (rep.who === me ? "vous" : rep.who)), el("span",null,rep.text)); const x = el("button","wa-ic"); x.type = "button"; x.setAttribute("aria-label","Annuler la réponse"); x.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>'; x.onclick = () => { S.ui.reply = null; render(); }; rb.append(tx, x); form.appendChild(rb); }
   const bar = el("div","wa-bar");
   const fi = el("input"); fi.type = "file"; fi.multiple = true; fi.hidden = true; fi.onchange = () => { addFiles(ch, [...fi.files]); fi.value = ""; };
   const gif = el("button","wa-ic wa-gif","GIF"); gif.type = "button"; gif.title = "Envoyer un GIF"; gif.onclick = () => gifPicker(ch, me);
@@ -1604,13 +1644,14 @@ function vMessagerie(root){
   const go2 = el("button","wa-send"); go2.type = "submit";
   const ready = () => !!ta.value.trim() || (PENDING.ch === ch && PENDING.files.some(f => f.url));
   const setBtn = () => { const r = ready(); go2.innerHTML = r ? SEND : MIC; go2.setAttribute("aria-label", r ? "Envoyer" : "Enregistrer un message vocal"); go2.dataset.mode = r ? "send" : "mic"; };
-  ta.oninput = () => { S.ui.msgDraft = ta.value; ta.style.height = "auto"; ta.style.height = Math.min(140, ta.scrollHeight) + "px"; setBtn(); };
+  ta.oninput = () => { S.ui.msgDraft = ta.value; ta.style.height = "auto"; ta.style.height = Math.min(140, ta.scrollHeight) + "px"; setBtn(); if (ta.value.trim()) typingPing(ch); };
   const send = async () => {
     if (PENDING.ch === ch && PENDING.busy){ toast("Attends la fin de l’envoi des fichiers."); return; }
     const t = ta.value.trim(), files = PENDING.ch === ch ? PENDING.files.filter(f => f.url).map(f => ({ url: f.url, name: f.name, type: f.type, size: f.size })) : [];
     if (!t && !files.length){ if (REC) recStop(true); recStart(ch); return; }
-    S.ui.msgDraft = ""; ta.value = ""; PENDING = { ch: "", files: [], busy: 0 };
-    try { await save("messages", null, Object.assign({ch, text: t, who: me, at: new Date().toISOString()}, files.length ? { files } : {})); } catch(e){ S.ui.msgDraft = t; }
+    const rp = S.ui.reply && S.ui.reply.ch === ch ? { id: S.ui.reply.id, who: S.ui.reply.who, text: S.ui.reply.text } : null;
+    S.ui.msgDraft = ""; ta.value = ""; PENDING = { ch: "", files: [], busy: 0 }; S.ui.reply = null; TYPING_AT = 0; GC.api("POST","/api/g-typing", { ch, stop: 1 }).catch(() => {});
+    try { await save("messages", null, Object.assign({ch, text: t, who: me, at: new Date().toISOString()}, files.length ? { files } : {}, rp ? { rep: rp } : {})); } catch(e){ S.ui.msgDraft = t; }
   };
   ta.onkeydown = e => { if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); if (ready()) send(); } };
   form.onsubmit = e => { e.preventDefault(); send(); };
@@ -1628,7 +1669,15 @@ function vMessagerie(root){
   main.appendChild(form);
   wrap.append(side, main); root.appendChild(wrap);
   list.querySelectorAll("img,video").forEach(x => x.addEventListener(x.tagName === "IMG" ? "load" : "loadedmetadata", () => { list.scrollTop = list.scrollHeight; }, { once: true }));
-  requestAnimationFrame(() => { const l = document.getElementById("chat-list"); if (l) l.scrollTop = l.scrollHeight; if (ta.value){ ta.style.height = "auto"; ta.style.height = Math.min(140, ta.scrollHeight) + "px"; } });
+  const same = keep && keep.ch === ch;
+  if (same && !keep.bottom) list.scrollTop = keep.top;
+  requestAnimationFrame(() => { const l = document.getElementById("chat-list");
+    if (l){ if (!same || keep.bottom) l.scrollTo({ top: l.scrollHeight, behavior: same ? "smooth" : "auto" }); else l.scrollTop = keep.top; }
+    if (ta.value){ ta.style.height = "auto"; ta.style.height = Math.min(140, ta.scrollHeight) + "px"; }
+    if (keepIn && same){ ta.focus({ preventScroll: true }); try { ta.setSelectionRange(keepIn.a, keepIn.b); } catch(e){} }
+    liveFill(); });
+  const last = msgs[msgs.length - 1];
+  if (last && !document.hidden && (S.ui.waConv || window.matchMedia("(min-width:901px)").matches)){ const k = ch + "|" + last.at; if (k !== SEEN_SENT){ SEEN_SENT = k; GC.api("POST","/api/g-seen", { ch, at: last.at }).catch(() => {}); } }
 }
 
 /* ---------- Salon focus : travail au calme, ensemble ---------- */
@@ -1835,7 +1884,7 @@ function vTachesHub(root){
 const RENDER = {fiches:vFiches, parametres:vParametres, accueil:vAccueil, agenda:vAgendaHub, taches:vTachesHub, commercial:vCommercial, campagnes:vMeta, montage:vMontage, publications:vPublications, clients:vClients, messagerie:vMessagerie, vocal:vVocal, formation:vFormation, idees:vIdees, focus:vFocus};
 function go(v){ if (MERGED[v]){ S.ui[MERGED[v][1]] = v; remember(); v = MERGED[v][0]; } if (location.hash !== "#"+v) location.hash = v; else { S.view = v; render(); } }
 function fromHash(){ let h = (location.hash||"").replace("#",""); if (h === "editorial"){ S.ui.agClient = AGENCE; if (!S.ui.agLayers.includes("posts")) S.ui.agLayers = S.ui.agLayers.concat("posts"); h = "agenda"; } if (MERGED[h] && canSee(h)){ S.ui[MERGED[h][1]] = h; h = MERGED[h][0]; } S.view = RENDER[h] && canSee(h) ? h : "accueil"; }
-window.addEventListener("hashchange", () => { fromHash(); render(); window.scrollTo(0,0); });
+window.addEventListener("hashchange", () => { const go = () => { fromHash(); render(); window.scrollTo(0,0); }; if (document.startViewTransition && !matchMedia("(prefers-reduced-motion: reduce)").matches) document.startViewTransition(go); else go(); });
 const ICONS = {
   fiches:'<rect x="4" y="4.5" width="16" height="15" rx="1.5"/><path d="M4 9.5h16M9.5 9.5v10"/>',
   parametres:'<circle cx="12" cy="12" r="3.2"/><path d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6 6l1.6 1.6M16.4 16.4 18 18M6 18l1.6-1.6M16.4 7.6 18 6"/>',
