@@ -51,16 +51,18 @@ const canvas = $("#gl");
    Réglable dans le menu (Échap). */
 let Q = ""; try { Q = localStorage.getItem("hg-q") || ""; } catch (e) {}
 const LITE = /lite/.test(location.search);
+// Rendu réaliste par défaut (ciel en photo, arbres générés, herbe et rochers scannés) ; ?style=village pour revenir au style bas poly
+const REAL = !/style=village/.test(location.search);
 if (LITE) Q = "basse";
 const AUTO = !Q; if (!Q) Q = "moyenne";
 const LOW = Q === "basse", MID = Q === "moyenne", HIGH = Q === "haute";
 const QK = LOW ? 0.12 : MID ? 0.4 : 1;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !LOW, powerPreference: "high-performance", preserveDrawingBuffer: LITE });
 renderer.setPixelRatio(LOW ? 0.85 : MID ? Math.min(devicePixelRatio, 1.25) : Math.min(devicePixelRatio, 1.75));
-renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.86;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = REAL ? 0.8 : 0.86;
 renderer.shadowMap.enabled = !LITE && !LOW; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0xA9C2DA, 0.0021);
+scene.fog = new THREE.FogExp2(0xA9C2DA, REAL ? 0.0016 : 0.0021);
 /* Ciel réaliste (diffusion atmosphérique) et lumière d'ambiance tirée du ciel */
 const SUN_DIR = new THREE.Vector3().setFromSphericalCoords(1, THREE.MathUtils.degToRad(57), THREE.MathUtils.degToRad(205));
 function makeSky() { const k = new Sky(); k.scale.setScalar(4500); const u = k.material.uniforms; u.turbidity.value = 5.5; u.rayleigh.value = 1.4; u.mieCoefficient.value = 0.004; u.mieDirectionalG.value = 0.82; u.sunPosition.value.copy(SUN_DIR); return k; }
@@ -85,7 +87,7 @@ composer.addPass(cine);
 const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.22, 0.55, 0.92); if (HIGH) composer.addPass(bloom); composer.addPass(new OutputPass());
 const grade = new ShaderPass({ uniforms: { tDiffuse: { value: null }, sat: { value: 1.18 }, con: { value: 1.07 }, time: { value: 0 } }, vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
   fragmentShader: "uniform sampler2D tDiffuse; uniform float sat; uniform float con; varying vec2 vUv; uniform float time; void main(){ vec4 c = texture2D(tDiffuse, vUv); float l = dot(c.rgb, vec3(0.299, 0.587, 0.114)); vec3 r = mix(vec3(l), c.rgb, sat); r = (r - 0.5) * con + 0.5 + 0.012; float L = clamp(dot(r, vec3(0.299, 0.587, 0.114)), 0.0, 1.0); r *= mix(vec3(.93, 1.0, 1.07), vec3(1.0), smoothstep(0.0, .45, L)); r *= mix(vec3(1.0), vec3(1.05, 1.0, .91), smoothstep(.5, 1.0, L)); vec2 q = vUv - .5; r *= 1.0 - dot(q, q) * .6; r += (fract(sin(dot(vUv + fract(time), vec2(12.9898, 78.233))) * 43758.5453) - .5) * .02; gl_FragColor = vec4(clamp(r, 0.0, 1.0), c.a); }" });
-composer.addPass(grade);
+composer.addPass(grade); if (REAL) { grade.uniforms.sat.value = .97; grade.uniforms.con.value = 1.05; }
 function resize() { renderer.setSize(innerWidth, innerHeight, false); composer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
 addEventListener("resize", resize); resize();
 
@@ -100,6 +102,12 @@ const WIND = { value: 0 };
 /* ---------- Chargement des modèles (personnages KayKit, nature Quaternius, licences CC0) ---------- */
 const manager = new THREE.LoadingManager(); manager.onProgress = (u, a, b) => { const p = document.querySelector("#loading p"); if (p) p.textContent = "Chargement du monde… " + Math.round(a / b * 100) + " %"; };
 const gl = new GLTFLoader(manager), load = u => new Promise((ok, ko) => gl.load(u, ok, undefined, ko));
+// Poly Haven (CC0) : modèles scannés et ciels en photo, chargés directement depuis leur serveur
+const phInfo = id => fetch("https://api.polyhaven.com/files/" + id).then(r => r.json());
+async function phModel(id) { const f = await phInfo(id), g = f.gltf["1k"].gltf, inc = {}; Object.entries(g.include || {}).forEach(([k, v]) => inc[k] = v.url);
+  const man = new THREE.LoadingManager(); man.setURLModifier(u => { const k = Object.keys(inc).find(p => u.endsWith(p)); return k ? inc[k] : u; });
+  return new Promise((ok, ko) => new GLTFLoader(man).load(g.url, ok, undefined, ko)); }
+async function phHdri(id) { const f = await phInfo(id); return new Promise((ok, ko) => new RGBELoader().load(f.hdri["2k"].hdr.url, ok, undefined, ko)); }
 const texL = new THREE.TextureLoader(manager);
 const A = { chars: {}, hair: {}, clips: [], nat: {}, h: {} };
 const OUTFITS = ["Male_Ranger", "Male_Peasant", "Female_Ranger", "Female_Peasant"];
@@ -116,7 +124,10 @@ try {
     ...NAT.map(n => load("/hameau/nature/" + n + ".gltf").then(g => A.nat[n] = g.scene)),
     new Promise(ok => { A.rockTex = texL.load("/hameau/nature/Rocks_Diffuse.webp", ok, undefined, ok); }),
     // V13 : tout le Hameau dans le style du « Medieval Village Pack » (low poly peint, toits violets façon Warcraft III)
-    load("/hameau/village/medieval_village_pack.glb").then(g => A.village = g).catch(e => console.warn("pack village", e))
+    load("/hameau/village/medieval_village_pack.glb").then(g => A.village = g).catch(e => console.warn("pack village", e)),
+    ...(REAL ? ["leafy_grass", "rocky_terrain_02", "brown_mud_leaves_01", "cobblestone_floor_04", "castle_wall_varriation", "medieval_blocks_02"].flatMap(n => ["diff", "nor"].map(k => new Promise(ok => { const t = texL.load("/hameau/tex/" + n + "_" + k + ".jpg", ok, undefined, ok); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; if (k === "diff") t.colorSpace = THREE.SRGBColorSpace; (A.tx = A.tx || {})[n + "_" + k] = t; }))) : []),
+    REAL ? import("https://cdn.jsdelivr.net/npm/@dgreenheck/ez-tree@1.1.0/build/ez-tree.es.js").then(m => A.EZ = m).catch(e => console.warn("arbres", e)) : null,
+    ...(REAL ? ["boulder_01", "rock_moss_set_01", "rock_07", "shrub_02", "fern_02", "nettle_plant", "grass_medium_01", "grass_medium_02", "grass_bermuda_01"].map(id => phModel(id).then(g => (A.ph = A.ph || {})[id] = g).catch(e => console.warn(id, e))) : [])
   ]);
 } catch (e) { return gate("Le monde n’a pas pu se charger. Recharge la page. (" + (e.message || e) + ")"); }
 try { A.kclips = retargetToKnight(); } catch (e) { console.warn("reciblage", e); A.kclips = []; }
@@ -136,8 +147,8 @@ function paintify(t, sz, sat, warm) { const img = t && t.image; if (!img || !img
       const mr = sum(0, x0, y0, x1, y1) / n, mg = sum(1, x0, y0, x1, y1) / n, mb = sum(2, x0, y0, x1, y1) / n, ml = mr * .3 + mg * .59 + mb * .11, v = sum(3, x0, y0, x1, y1) / n - ml * ml; if (v < best) { best = v; br = mr; bg = mg; bb = mb; } }
     const l = br * .3 + bg * .59 + bb * .11, k = sat || 1.25, i = (yy * N + xx) * 4; out[i] = l + (br - l) * k + (warm || 6); out[i + 1] = l + (bg - l) * k + (warm || 6) * .5; out[i + 2] = l + (bb - l) * k - (warm || 6) * .4; out[i + 3] = 255; }
   D.data.set(out); x.putImageData(D, 0, 0); const nt = new THREE.CanvasTexture(c); nt.colorSpace = THREE.SRGBColorSpace; nt.wrapS = nt.wrapT = THREE.RepeatWrapping; nt.repeat.copy(t.repeat); nt.anisotropy = 8; return nt; }
-const TX = A.tx || {}; ["leafy_grass_diff", "cobblestone_floor_04_diff", "castle_wall_varriation_diff", "brown_mud_leaves_01_diff", "medieval_blocks_02_diff", "rocky_terrain_02_diff"].forEach(k => { if (TX[k]) try { TX[k] = paintify(TX[k], k === "leafy_grass_diff" ? 512 : 1024, k === "leafy_grass_diff" ? 1.35 : 1.2); } catch (e) { console.warn("peinture", k, e); } });
-["leafy_grass_nor", "cobblestone_floor_04_nor", "castle_wall_varriation_nor", "medieval_blocks_02_nor"].forEach(k => { delete TX[k]; }); if (TX.rocky_terrain_02_diff) A.rockTex = TX.rocky_terrain_02_diff;
+const TX = A.tx || {}; if (!REAL) ["leafy_grass_diff", "cobblestone_floor_04_diff", "castle_wall_varriation_diff", "brown_mud_leaves_01_diff", "medieval_blocks_02_diff", "rocky_terrain_02_diff"].forEach(k => { if (TX[k]) try { TX[k] = paintify(TX[k], k === "leafy_grass_diff" ? 512 : 1024, k === "leafy_grass_diff" ? 1.35 : 1.2); } catch (e) { console.warn("peinture", k, e); } });
+if (!REAL) ["leafy_grass_nor", "cobblestone_floor_04_nor", "castle_wall_varriation_nor", "medieval_blocks_02_nor"].forEach(k => { delete TX[k]; }); if (TX.rocky_terrain_02_diff) A.rockTex = TX.rocky_terrain_02_diff;
 if (A.hdr) { A.hdr.mapping = THREE.EquirectangularReflectionMapping; scene.remove(sky); scene.background = A.hdr; scene.backgroundIntensity = 0.9; scene.backgroundBlurriness = 0.0;
   const pm = new THREE.PMREMGenerator(renderer); scene.environment = pm.fromEquirectangular(A.hdr).texture; scene.environmentIntensity = 0.8; scene.fog.color.set(0xB4C6D6); }
 
@@ -240,7 +251,7 @@ groundMat.onBeforeCompile = sh => { sh.uniforms.tRock = { value: A.rockTex }; sh
   sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nattribute float aTrail; varying float vTrail; varying vec3 vWP; varying vec3 vWN;").replace("#include <worldpos_vertex>", "#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz; vWN = normalize(mat3(modelMatrix) * objectNormal); vTrail = aTrail;");
   sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform sampler2D tRock; uniform sampler2D tDirt; uniform sampler2D tPaint; varying float vTrail; varying vec3 vWP; varying vec3 vWN;").replace("#include <map_fragment>", `
     vec3 g1 = texture2D(map, vWP.xz * 0.16).rgb, g1b = texture2D(map, vWP.xz * 0.037 + 0.21).rgb, g2 = texture2D(tPaint, vWP.xz * 0.0071 + 0.37).rgb;
-    vec3 grass = mix(mix(g1, g1b, 0.45) * vec3(0.95, 1.18, 0.72), g2 * 1.05, 0.45) * (0.8 + g2.g * 0.4);
+    ${REAL ? "vec3 grass = mix(g1, g1b, 0.5) * vec3(0.92, 0.95, 0.8) * (0.78 + g2.g * 0.35);" : "vec3 grass = mix(mix(g1, g1b, 0.45) * vec3(0.95, 1.18, 0.72), g2 * 1.05, 0.45) * (0.8 + g2.g * 0.4);"}
     vec3 rock = mix(texture2D(tRock, vWP.xz * 0.05).rgb, texture2D(tRock, vWP.xz * 0.011).rgb, 0.4);
     float slope = 1.0 - clamp(vWN.y, 0.0, 1.0);
     float rk = clamp(smoothstep(0.22, 0.42, slope) + smoothstep(30.0, 55.0, vWP.y) * 0.85, 0.0, 1.0);
@@ -561,7 +572,55 @@ for (let i = 0; i < Math.round(520 * (LOW ? 0.25 : MID ? 0.6 : 1)); i++) { const
   for (let i = 0; i < near + far; i++) { const fr = i >= near, a = rnd() * Math.PI * 2, d = fr ? 120 + rnd() * 200 : 30.5 + Math.pow(rnd(), .7) * 100, x = Math.cos(a) * d, z = Math.sin(a) * d;
     if (onTrail(x, z, -1.5) || Math.hypot(x, z) < 31 || (Math.abs(x) < 3.6 && Math.abs(z) < 170) || (Math.abs(z) < 3.6 && Math.abs(x) < 170) || (Math.abs(x - HQ.x) < 26 && Math.abs(z - HQ.z) < 20) || mountainH(x, z) > 32) continue;
     const k = rnd(); put(k < .45 ? "Grass_Common_Tall" : k < .8 ? "Grass_Wispy_Tall" : "Grass_Common_Short", x, z, 1.1 + rnd() * .9, -0.05); } }
-Object.keys(PL).forEach(n => instance(n, PL[n], { shadow: /Tree|Pine|Rock|Bush/.test(n), wind: /Grass/.test(n) ? 0.07 : /Tree|Pine/.test(n) ? 0.006 : 0.03, allWind: /Grass|Fern|Plant|Clover|Flower/.test(n), double: /Grass/.test(n) }));
+/* ---------- Rendu réaliste : arbres EZ-Tree (MIT), rochers et plantes scannés, herbe scannée autour du joueur ---------- */
+const CHUNKS = [], EZT = [];
+function phChunks(gltf, list, shadow, far) { if (!gltf || !list.length) return; gltf.scene.updateMatrixWorld(true); const meshes = []; gltf.scene.traverse(o => { if (o.isMesh) meshes.push(o); }); const cells = {};
+  list.forEach(p => { const k = Math.floor(p.x / 100) + "," + Math.floor(p.z / 100); (cells[k] = cells[k] || []).push(p); });
+  Object.values(cells).forEach(cl => { const cx = cl.reduce((a, p) => a + p.x, 0) / cl.length, cz = cl.reduce((a, p) => a + p.z, 0) / cl.length;
+    meshes.forEach(mesh => { const im = new THREE.InstancedMesh(mesh.geometry, mesh.material, cl.length);
+      cl.forEach((p, i) => { _q.setFromAxisAngle(_v.set(0, 1, 0), p.r); _m.compose(_s.set(p.x, p.y, p.z), _q, new THREE.Vector3(p.s, p.s, p.s)); im.setMatrixAt(i, _m.multiply(mesh.matrixWorld)); });
+      im.computeBoundingSphere(); im.castShadow = !!shadow; im.receiveShadow = true; [].concat(mesh.material).forEach(mt => { mt.side = THREE.DoubleSide; if (mt.transparent) { mt.transparent = false; mt.alphaTest = .4; } }); scene.add(im); CHUNKS.push({ o: im, x: cx, z: cz, far }); }); }); }
+function realPlace(n, list) { const ph = A.ph || {};
+  if (/Tree|Pine/.test(n) && A.EZ) { if (!EZT.length) { [["Oak Large", 101, 34], ["Oak Large", 202, 30], ["Ash Large", 7, 32], ["Aspen Large", 9, 30], ["Pine Large", 3, 40], ["Pine Large", 44, 36], ["Pine Medium", 5, 26]].forEach(([p, s, hgt]) => { const t = new A.EZ.Tree(); t.loadPreset(p); t.options.seed = s; t.generate(); t.updateMatrixWorld(true);
+        const b = new THREE.Box3().setFromObject(t); t.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } }); EZT.push({ t, k: hgt / Math.max(.1, b.max.y - b.min.y), pine: /Pine/.test(p) }); }); }
+    const pine = /Pine/.test(n), cand = EZT.filter(e => e.pine === pine); list.forEach((p, i) => { const E = cand[Math.abs(i * 7 + Math.floor(p.x)) % cand.length] || cand[0], c = E.t.clone(), s = E.k * (.75 + (p.s % 1) * .5) * (/Twisted/.test(n) ? .6 : 1);
+      c.scale.setScalar(s); c.position.set(p.x, p.y - .3, p.z); c.rotation.y = p.r; scene.add(c); CHUNKS.push({ o: c, x: p.x, z: p.z, far: 420 }); }); return true; }
+  if (/Rock/.test(n) && ph.boulder_01) { const a = [], b = []; list.forEach((p, i) => (i % 3 ? a : b).push(Object.assign({}, p, { s: p.s * .9 }))); phChunks(ph.boulder_01, a, true, 420); phChunks(ph.rock_moss_set_01 || ph.boulder_01, b.map(p => Object.assign({}, p, { s: p.s * 1.4 })), true, 300); return true; }
+  if (/Bush/.test(n) && ph.shrub_02) { phChunks(ph.shrub_02, list.map(p => Object.assign({}, p, { s: p.s * 1.5 })), false, 220); return true; }
+  if (/Fern|Plant|Clover|Flower|Mushroom/.test(n) && ph.fern_02) { phChunks(/Plant|Clover/.test(n) && ph.nettle_plant ? ph.nettle_plant : ph.fern_02, list.map(p => Object.assign({}, p, { s: 2.2 + (p.s % 1) * 1.2 })), false, 150); return true; }
+  if (/Grass/.test(n) && ph.grass_medium_02) return true; // remplacée par l'herbe scannée autour du joueur
+  return false; }
+// Herbe scannée : touffes posées en continu autour du joueur, qui suivent le relief (carte des hauteurs) et le vent
+const RG = { u: null, list: [] };
+if (REAL && A.ph && A.ph.grass_medium_02) { const HM = 512, W = 900, data = new Uint8Array(HM * HM * 4); let lo = 1e9, hi = -1e9; const hs = new Float32Array(HM * HM);
+  for (let j = 0; j < HM; j++) for (let i = 0; i < HM; i++) { const x = (i / (HM - 1) - .5) * W, z = (j / (HM - 1) - .5) * W, h = heightAt(x, z); hs[j * HM + i] = h; lo = Math.min(lo, h); hi = Math.max(hi, h); }
+  for (let j = 0; j < HM; j++) for (let i = 0; i < HM; i++) { const k = j * HM + i, x = (i / (HM - 1) - .5) * W, z = (j / (HM - 1) - .5) * W, v = Math.round((hs[k] - lo) / (hi - lo) * 65535);
+    const ok = !onTrail(x, z, -1) && Math.hypot(x, z) > 31 && !(Math.abs(x) < 4 && Math.abs(z) < 170) && !(Math.abs(z) < 4 && Math.abs(x) < 170) && !(Math.abs(x - HQ.x) < 46 && Math.abs(z - HQ.z) < 38) && mountainH(x, z) < 34 && !QUARTERS.some(q => Math.hypot(x - q.x, z - q.z) < 20) && !FIELDS.some(F => Math.hypot(x - F.x, z - F.z) < Math.max(F.w, F.d) / 2 + 2);
+    data.set([v >> 8, v & 255, ok ? 255 : 0, 255], k * 4); }
+  const hmTex = new THREE.DataTexture(data, HM, HM, THREE.RGBAFormat, THREE.UnsignedByteType); hmTex.needsUpdate = true;
+  RG.u = { uTime: WIND, uCam: { value: new THREE.Vector2() }, hMap: { value: hmTex }, hMin: { value: lo }, hRange: { value: hi - lo }, hSize: { value: W } };
+  const GL = `attribute vec4 aOff; uniform float uTime; uniform vec2 uCam; uniform float uR; uniform sampler2D hMap; uniform float hMin; uniform float hRange; uniform float hSize;
+    float dec(vec4 t){ return (t.r * 255.0 * 256.0 + t.g * 255.0) / 65535.0; }
+    vec2 hd(vec2 w){ vec2 p = (w / hSize + .5) * 511.0; vec2 i = floor(p), f = p - i; ivec2 a = ivec2(clamp(i, vec2(0.0), vec2(510.0)));
+      vec4 t00 = texelFetch(hMap, a, 0), t10 = texelFetch(hMap, a + ivec2(1, 0), 0), t01 = texelFetch(hMap, a + ivec2(0, 1), 0), t11 = texelFetch(hMap, a + ivec2(1, 1), 0);
+      return vec2(mix(mix(dec(t00), dec(t10), f.x), mix(dec(t01), dec(t11), f.x), f.y) * hRange + hMin, mix(mix(t00.b, t10.b, f.x), mix(t01.b, t11.b, f.x), f.y)); }`;
+  const wrap = (gltf, per, Rr, minTris, scale) => { gltf.scene.updateMatrixWorld(true); const ms = []; gltf.scene.traverse(m => { if (m.isMesh) ms.push(m); });
+    ms.forEach(m => { const g0 = m.geometry.clone().applyMatrix4(m.matrixWorld), n = (g0.index ? g0.index.count : g0.attributes.position.count) / 3; if (n < (minTris || 0)) return;
+      g0.computeBoundingBox(); const bb = g0.boundingBox, c = bb.getCenter(new THREE.Vector3()); g0.translate(-c.x, -bb.min.y, -c.z);
+      const ig = new THREE.InstancedBufferGeometry(); ig.index = g0.index; Object.entries(g0.attributes).forEach(([k, v]) => ig.setAttribute(k, v)); ig.instanceCount = per;
+      const off = new Float32Array(per * 4); for (let i = 0; i < per; i++) off.set([(Math.random() * 2 - 1) * Rr, (Math.random() * 2 - 1) * Rr, Math.random(), Math.random() * 6.283], i * 4); ig.setAttribute("aOff", new THREE.InstancedBufferAttribute(off, 4));
+      const mat = m.material.clone(); mat.transparent = false; mat.alphaTest = .4; mat.side = THREE.DoubleSide; mat.envMapIntensity = .7; mat.normalMap = null; mat.roughnessMap = null; mat.roughness = .9; mat.metalness = 0; mat.emissive = new THREE.Color(0x2A2A0C);
+      mat.onBeforeCompile = s => { Object.assign(s.uniforms, RG.u, { uR: { value: Rr } });
+        s.vertexShader = s.vertexShader.replace("#include <common>", "#include <common>\n" + GL)
+          .replace("#include <beginnormal_vertex>", "#include <beginnormal_vertex>\nfloat gc = cos(aOff.w), gs = sin(aOff.w); objectNormal = normalize(mix(vec3(objectNormal.x * gc - objectNormal.z * gs, objectNormal.y, objectNormal.x * gs + objectNormal.z * gc), vec3(0.0, 1.0, 0.0), .65));")
+          .replace("#include <begin_vertex>", `vec2 wp = uCam + mod(aOff.xy - uCam + uR, 2.0 * uR) - uR; vec2 hdv = hd(wp); float dist = length(wp - uCam);
+            float keep = step(.5, hdv.y) * (1.0 - smoothstep(uR * .65, uR, dist)); float sc = ${scale.toFixed(2)} * (.7 + aOff.z * .65) * keep;
+            vec3 p = position * sc; vec3 transformed = vec3(p.x * gc - p.z * gs, p.y, p.x * gs + p.z * gc);
+            float wv = sin(uTime * 1.6 + wp.x * .15 + wp.y * .1) * .5 + sin(uTime * 3.0 + wp.x * .4) * .2; transformed.x += wv * .08 * p.y * p.y; transformed.z += wv * .03 * p.y * p.y;
+            transformed += vec3(wp.x, hdv.x - .05, wp.y);`); };
+      const mesh = new THREE.Mesh(ig, mat); mesh.frustumCulled = false; mesh.receiveShadow = true; scene.add(mesh); RG.list.push(mesh); }); };
+  const k = LOW ? .45 : MID ? .75 : 1; wrap(A.ph.grass_medium_02, Math.round(550 * k), 48, 0, 3.6); if (A.ph.grass_medium_01) wrap(A.ph.grass_medium_01, Math.round(820 * k), 48, 600, 3.8); if (A.ph.grass_bermuda_01) wrap(A.ph.grass_bermuda_01, Math.round(600 * k), 48, 0, 3.8); }
+Object.keys(PL).forEach(n => (REAL && realPlace(n, PL[n])) || instance(n, PL[n], { shadow: /Tree|Pine|Rock|Bush/.test(n), wind: /Grass/.test(n) ? 0.07 : /Tree|Pine/.test(n) ? 0.006 : 0.03, allWind: /Grass|Fern|Plant|Clover|Flower/.test(n), double: /Grass/.test(n) }));
 
 // Le chalet en haut de la montagne : notre objectif
 const CHALET = { x: MT.x, z: MT.z, y: MT.h, name: "Le chalet", kind: "chalet" };
@@ -620,6 +679,7 @@ function dayNight() { const qh = new URLSearchParams(location.search).get("h"), 
   HEMI.intensity = .55 * (1 - night) + .2 * night; HEMI.color.set(0xD6E6FF).lerp(_c2.set(0x3A4C86), night); HEMI.groundColor.set(0x5B6B3A).lerp(_c2.set(0x1A2030), night);
   scene.environmentIntensity = .55 * (1 - night) + .07 * night; scene.fog.color.set(0xA9C2DA).lerp(_c2.set(0xE8A070), dusk * .5).lerp(_c2.set(0x141C33), night);
   CLOUD_U.sunDir.value.copy(sky.material.uniforms.sunPosition.value); CLOUD_U.lit.value.set(0xFFFBF4).lerp(_c2.set(0xFFB070), dusk).lerp(_c2.set(0x2A3350), night); CLOUD_U.shade.value.set(0x9AA6BE).lerp(_c2.set(0xB0707A), dusk * .7).lerp(_c2.set(0x0E1220), night); CLOUD_U.alpha.value = .95 - night * .35;
+  if (REAL) realSky(el, night);
   DN.el = el; DN.az = az; DN.stars.material.opacity = night; DN.lights.forEach(L => L.intensity = night * 260); LAMPS.forEach(l => l.material.color.set(night > .3 ? 0xFFB347 : 0xC98A3A)); }
 // Nuages
 const CLOUDS = [];
@@ -635,6 +695,20 @@ const CLOUD = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000, 1, 1).rotateX(M
       vec3 col = mix(shade, lit, sh) + lit * pow(1.0 - dn, 3.0) * .25; float far = 1.0 - smoothstep(1300.0, 2100.0, length(vW.xz - cameraPosition.xz));
       gl_FragColor = vec4(col, dn * alpha * far); }` }));
 CLOUD.position.y = 290; CLOUD.renderOrder = -1; scene.add(CLOUD);
+// Ciel réaliste : une photo HDR selon la hauteur du soleil (midi, après-midi, coucher) ; le soleil, sa couleur et la brume sont lus dans la photo. La nuit reprend le ciel calculé et les étoiles.
+const RS = { band: "", env0: null, loading: null, sun: new THREE.Vector3(0, 1, 0), col: new THREE.Color(1, 1, 1), fog: new THREE.Color(0xA9C2DA), int: 3 };
+function applyHdrSun() { SUN_DIR.copy(RS.sun); sky.material.uniforms.sunPosition.value.copy(RS.sun); sun.color.copy(RS.col); sun.intensity = RS.int; scene.fog.color.copy(RS.fog); HEMI.intensity = .22; }
+function realSky(el, night) { if (!RS.env0) RS.env0 = scene.environment;
+  if (night > .5) { if (RS.band !== "nuit") { RS.band = "nuit"; scene.background = null; scene.environment = RS.env0; sky.visible = true; CLOUD.visible = true; } return; }
+  const band = el > 35 ? "kloofendal_43d_clear_puresky" : el > 12 ? "qwantani_puresky" : "qwantani_sunset_puresky";
+  if (RS.band === band) { applyHdrSun(); return; } if (RS.loading === band) return; RS.loading = band;
+  phHdri(band).then(t => { t.mapping = THREE.EquirectangularReflectionMapping; const W = t.image.width, H = t.image.height, d = t.image.data, st = d.length / (W * H), get = i => t.type === THREE.HalfFloatType ? THREE.DataUtils.fromHalfFloat(d[i]) : d[i];
+    let best = -1, bi = 0; for (let y = 0; y < H / 2; y += 2) for (let x = 0; x < W; x += 2) { const i = (y * W + x) * st, l = get(i) + get(i + 1) + get(i + 2); if (l > best) { best = l; bi = y * W + x; } }
+    const u = (bi % W) / W, v = Math.floor(bi / W) / H, phi = (u - .5) * Math.PI * 2, th = v * Math.PI; RS.sun.set(Math.sin(th) * Math.cos(phi), Math.cos(th), Math.sin(th) * Math.sin(phi)).normalize();
+    const c = new THREE.Color(get(bi * st), get(bi * st + 1), get(bi * st + 2)); c.multiplyScalar(1 / (Math.max(c.r, c.g, c.b) || 1)); RS.col.copy(c).lerp(new THREE.Color(1, 1, 1), .25); RS.int = 1.3 + Math.min(1, Math.asin(RS.sun.y) / .5) * 2.4;
+    const fy = Math.floor(H * .47), fc = new THREE.Color(0, 0, 0); let n = 0; for (let x = 0; x < W; x += 8) { const i = (fy * W + x) * st; fc.r += get(i); fc.g += get(i + 1); fc.b += get(i + 2); n++; } RS.fog.copy(fc.multiplyScalar(.55 / n));
+    scene.background = t; scene.backgroundIntensity = 1; const pm = new THREE.PMREMGenerator(renderer); scene.environment = pm.fromEquirectangular(t).texture; pm.dispose(); scene.environmentIntensity = .75; sky.visible = false; CLOUD.visible = false;
+    RS.band = band; RS.loading = null; applyHdrSun(); }).catch(e => { RS.loading = null; console.warn("ciel", e); }); }
 dayNight();
 
 /* Transfert des animations universelles sur le squelette du chevalier :
@@ -1578,6 +1652,7 @@ function step() {
   camera.position.copy(tmp); camera.lookAt(head);
   if (G.pass) P.model.visible = false; else if (!G.ride || G.ride.kind !== "car") P.model.visible = CAM.dist > 3.2;
   G.dnT = (G.dnT || 0) + dt; if (G.dnT > 20) { G.dnT = 0; dayNight(); } updWalkers(dt);
+  if (REAL) { if ((G.cullT = (G.cullT || 0) + dt) > .4) { G.cullT = 0; CHUNKS.forEach(c => c.o.visible = Math.hypot(c.x - P.x, c.z - P.z) < c.far); } if (RG.u) RG.u.uCam.value.set(P.x, P.z); EZT.forEach(e => e.t.update(now)); }
   sun.position.copy(SUN_DIR).multiplyScalar(150).add(_v.set(P.x, P.y, P.z)); sun.target.position.set(P.x, P.y, P.z);
   // Indice d'interaction
   const rdH = !G.ride && !G.pass && nearestRide(7), ocH = !G.ride && !G.pass && nearOtherCar(9.5);
