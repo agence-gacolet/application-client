@@ -311,7 +311,7 @@ function vVisio(root){
   const ev = ((S.d && S.d.events) || [])[0];
   if (ev) tx.appendChild(el("p","cl-next","Prochain rendez-vous : " + fmtDL(ev.date) + (ev.title ? ", " + ev.title : "")));
   c.appendChild(tx);
-  const b = btn("Rejoindre la visio","lemon", () => { location.href = "/visio"; }); c.appendChild(b);
+  const b = btn("Rejoindre la visio","lemon", () => { location.href = "/visio" + (APERCU ? "?c=" + encodeURIComponent(APERCU) : ""); }); c.appendChild(b);
   root.appendChild(c);
   root.appendChild(el("p","status","Le navigateur demande l’accès au micro la première fois. La caméra reste coupée tant que vous ne l’activez pas."));
 }
@@ -442,7 +442,8 @@ function start(){
   $("#login").hidden = true; $("#shell").hidden = false;
   load(); startPoll();
 }
-if (APERCU){ const b = el("div","cl-apercu","Aperçu de l’agence : vous voyez l’espace de ce client, en lecture seule."); document.body.appendChild(b); }
+const TEST = (() => { try { return new URLSearchParams(location.search).get("test") === "1"; } catch(e){ return false; } })();
+if (APERCU){ const b = el("div","cl-apercu", TEST ? "Mode test : tout fonctionne vraiment, les actions sont signées Test Agence." : "Aperçu de l’agence : vous voyez l’espace de ce client, en lecture seule."); document.body.appendChild(b); }
 if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
 start();
 })();
