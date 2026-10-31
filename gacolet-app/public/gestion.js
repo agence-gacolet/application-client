@@ -1704,35 +1704,56 @@ function focusApi(body){ return GC.api(body ? "POST" : "GET", "/api/focus", body
 setInterval(() => { if (!S.ready) return; if (FOCUS.on) focusApi({ task: FOCUS.task, tool: FOCUS.tool }); else if (S.view === "focus" || !FOCUS.loaded) focusApi(); }, 20000);
 window.addEventListener("beforeunload", () => { if (FOCUS.on) fetch("/api/focus", { method: "POST", keepalive: true, headers: { "Content-Type": "application/json", "Authorization": "Bearer " + (localStorage.getItem("gacolet-gestion-cle") || "") }, body: JSON.stringify({ on: false }) }).catch(() => {}); });
 function focusDur(ms){ const m = Math.max(0, Math.floor(ms / 60000)); if (m < 1) return "un instant"; return m < 60 ? m + " min" : Math.floor(m / 60) + " h" + (m % 60 ? " " + String(m % 60).padStart(2, "0") : ""); }
-/* Cheminée : une vraie vidéo de feu en boucle (YouTube, sans pub), en fond de tout le salon. Le son se règle depuis le salon. */
-const FIRES = ["cdKop6aixVE","KkGQjCAGVUo","cDZSQkOidlI"];
+/* Ambiances et radios du salon : uniquement des directs YouTube en continu (24 h sur 24).
+   Un seul lecteur pour l’image et un seul pour la musique : changer de paysage ou de station ne recharge rien.
+   Si un direct s’arrête ou ne répond plus, on passe tout seul au suivant de la même liste. */
+const FIRES = ["mKCieTImjvU","ITBtNXd5WJs","9xFr2HRttck","-5k7kSe8xck"];
 const CLAUDE_FM = "https://www.youtube.com/live/AUQKjgKQF7w";
-/* Paysages en vidéo longue (plusieurs heures) et radios de concentration */
-const SCENES = [["Cheminée", FIRES], ["Pluie sur la ville", ["FFjWJzCTf4g","fe5Vo9U0FJE"]], ["Océan", ["WHPEKLQID4U","BigUSVTBQbA"]], ["Neige", ["v_waduKEJmI","yCmUAYTFmQQ"]], ["Forêt", ["EHklxmBvzwc","Q-tFM4K7IjA"]]];
-const RADIOS = [["Claude FM", CLAUDE_FM], ["Piano jazz", "https://www.youtube.com/watch?v=Dx5qFachd3A"], ["Jazz au coin du feu", "https://www.youtube.com/watch?v=O8q9nnyK6Xw"], ["Jazz de bureau", "https://www.youtube.com/watch?v=IaSpAD53mtA"], ["Café jazz", "https://www.youtube.com/watch?v=MYPVQccHhAQ"], ["Lofi", "https://www.youtube.com/watch?v=jfKfPfyJRdk"]];
+const SCENES = [["Cheminée", FIRES], ["Pluie", ["g2dWy9TTFN4","kBNaBktShA4","-7MUx7iMeVI"]], ["Océan", ["_BMi3usEwi8","ItjcFGbp_tM","quXkhxjsU1c"]], ["Neige", ["M29up1tNcL0","orGNLuCHNtQ","rZ7JjeOADnk"]], ["Forêt", ["8kEzFZvtLzM","EU_-InlIg_I","qHXFLsnKDq0"]]];
+const RADIOS = [["Claude FM", ["AUQKjgKQF7w"]], ["Piano jazz", ["Dx5qFachd3A","Hqps7kyZQ20"]], ["Jazz du matin", ["TlUDYyjBdwQ","Dx5qFachd3A"]], ["Jazz d’époque", ["jeZbRuPPlqc","Pr6wm391iF0"]], ["Café jazz", ["fEvM-OUbaKs","4RjIhkB0ldE"]], ["Lofi", ["jfKfPfyJRdk"]]];
 const sceneOf = () => SCENES[(S.ui.foScene || 0) % SCENES.length];
+const stationOf = () => RADIOS[Math.min(RADIOS.length - 1, Math.max(0, S.ui.foSt || 0))];
+let YT_READY = null;
+function ytApi(){ return YT_READY || (YT_READY = new Promise(ok => { if (window.YT && window.YT.Player) return ok(window.YT); const prev = window.onYouTubeIframeAPIReady; window.onYouTubeIframeAPIReady = () => { if (prev) try { prev(); } catch(e){} ok(window.YT); }; const sc = document.createElement("script"); sc.src = "https://www.youtube.com/iframe_api"; document.head.appendChild(sc); })); }
 function ytCmd(fr, func, args){ try { fr.contentWindow.postMessage(JSON.stringify({ event: "command", func, args: args || [] }), "*"); } catch(e){} }
-function fireVideo(){
-  const sc = sceneOf(), id = sc[1][(S.ui.foFire || 0) % sc[1].length];
-  if (FOCUS.vid && FOCUS.vid.dataset.id === id) return FOCUS.vid;
-  const w = el("div","fo-vid"); w.dataset.id = id;
-  const fr = document.createElement("iframe"); fr.title = sceneOf()[0]; fr.allow = "autoplay; encrypted-media"; fr.tabIndex = -1;
-  fr.src = "https://www.youtube-nocookie.com/embed/" + id + "?autoplay=1&mute=1&loop=1&playlist=" + id + "&controls=0&disablekb=1&modestbranding=1&rel=0&playsinline=1&iv_load_policy=3&enablejsapi=1";
-  fr.onload = () => setTimeout(() => { if (FOCUS.sound){ ytCmd(fr, "unMute"); ytCmd(fr, "setVolume", [Math.round(FOCUS.vol * 100)]); } }, 800);
-  w.appendChild(fr); FOCUS.vid = w; return w;
+/* Lecteur qui saute au direct suivant en cas d’erreur, de fin ou de blocage */
+function livePlayer(host, list, opts){
+  const P = { list: list.slice(), i: 0, player: null, bad: 0, ready: false };
+  P.load = (lst) => { if (lst){ P.list = lst.slice(); P.i = 0; } P.bad = 0; if (P.ready) P.player.loadVideoById(P.list[P.i]); };
+  P.next = () => { P.i = (P.i + 1) % P.list.length; P.bad = 0; if (P.ready) P.player.loadVideoById(P.list[P.i]); };
+  ytApi().then(YT => {
+    P.player = new YT.Player(host, { host: "https://www.youtube-nocookie.com", videoId: P.list[0],
+      playerVars: { autoplay: 1, mute: opts.mute ? 1 : 0, controls: 0, disablekb: 1, modestbranding: 1, rel: 0, playsinline: 1, iv_load_policy: 3, fs: 0 },
+      events: { onReady: e => { P.ready = true; if (opts.onReady) opts.onReady(e.target); e.target.playVideo(); },
+        onError: () => P.next(), onStateChange: e => { if (e.data === 0) P.next(); } } });
+  });
+  /* Surveillance : un direct terminé passe au suivant, un direct bloqué en chargement plus de 30 s aussi */
+  P.timer = setInterval(() => { if (!P.ready || P.paused) return; let st = -1; try { st = P.player.getPlayerState(); } catch(e){} if (st === 1) { P.bad = 0; return; } if (st === 0) return P.next(); if (st === 3) { if (++P.bad >= 4) P.next(); return; } try { P.player.playVideo(); } catch(e){} }, 8000);
+  return P;
 }
-function fireSound(on){ FOCUS.sound = !!on; const fr = FOCUS.vid && FOCUS.vid.querySelector("iframe"); if (!fr) return; if (on){ ytCmd(fr, "unMute"); ytCmd(fr, "setVolume", [Math.round(FOCUS.vol * 100)]); } else ytCmd(fr, "mute"); }
-function radioFrame(src){
-  if (FOCUS.radio && FOCUS.radio.dataset.src === src) return FOCUS.radio;
-  const w = el("div","fo-radio"); w.dataset.src = src; const i = document.createElement("iframe"); i.src = src + (src.includes("?") ? "&" : "?") + "autoplay=1&rel=0"; i.allow = "autoplay; encrypted-media"; i.title = "Radio du salon focus"; w.appendChild(i);
-  FOCUS.radio = w; return w;
+function fireVideo(){
+  if (FOCUS.vid) return FOCUS.vid;
+  const w = el("div","fo-vid"); const inner = el("div"); w.appendChild(inner); FOCUS.vid = w;
+  FOCUS.vp = livePlayer(inner, sceneOf()[1], { mute: true, onReady: p => { if (FOCUS.sound){ p.unMute(); p.setVolume(Math.round(FOCUS.vol * 100)); } else p.mute(); } });
+  return w;
+}
+function setScene(k){ S.ui.foScene = k; remember(); if (FOCUS.vp) FOCUS.vp.load(sceneOf()[1]); render(); }
+function fireSound(on){ FOCUS.sound = !!on; const p = FOCUS.vp && FOCUS.vp.ready && FOCUS.vp.player; if (!p) return; if (on){ p.unMute(); p.setVolume(Math.round(FOCUS.vol * 100)); } else p.mute(); }
+/* La radio : un lecteur caché, seule la musique compte */
+function radioSync(){
+  const want = FOCUS.on && S.ui.foRadioOn !== false;
+  if (!FOCUS.radio){ const box = el("div","fo-radio-bg"); box.setAttribute("aria-hidden","true"); const inner = el("div"); box.appendChild(inner); document.body.appendChild(box); FOCUS.radio = box;
+    FOCUS.rp = livePlayer(inner, stationOf()[1], { mute: false, onReady: p => { p.setVolume(80); if (!(FOCUS.on && S.ui.foRadioOn !== false)){ FOCUS.rp.paused = true; p.pauseVideo(); } } }); FOCUS.rp.st = S.ui.foSt || 0; }
+  const rp = FOCUS.rp; if (!rp.ready) return;
+  if (want){ if (rp.st !== (S.ui.foSt || 0)){ rp.st = S.ui.foSt || 0; rp.load(stationOf()[1]); } rp.paused = false; try { rp.player.playVideo(); } catch(e){} }
+  else { rp.paused = true; try { rp.player.pauseVideo(); } catch(e){} }
 }
 function focusPeople(){
   const box = document.getElementById("fo-people"); if (!box) return; box.textContent = "";
   const me = S.me || "Gabriel", list = FOCUS.people.slice().sort((a, b) => a.since - b.since);
-  if (!list.length){ box.appendChild(el("p","fo-empty","Personne en focus pour l’instant. Lance ta session, les autres te verront.")); return; }
+  if (!list.length){ box.appendChild(el("p","fo-empty","Personne en focus")); return; }
   list.forEach(p => { const c = el("div","fo-p" + (p.pause ? " pause" : "") + (p.name === me ? " me" : ""));
-    const av = avatarEl(p.name, 44); av.classList.add("av-click"); av.onclick = () => profileCard(p.name);
+    const av = avatarEl(p.name, 30); av.classList.add("av-click"); av.onclick = () => profileCard(p.name);
     const tx = el("div","fo-ptx"); tx.append(el("b",null,p.name + (p.name === me ? " (toi)" : "")), el("span",null, p.pause ? "En pause" : "Concentré"), el("small",null, (Date.now() - p.since < 60000 ? "Vient d’arriver" : "En focus depuis " + focusDur(Date.now() - p.since))));
     c.append(av, tx); box.appendChild(c); });
 }
@@ -1752,13 +1773,17 @@ function vFocus(root){
   const wrap = el("section","fo"); wrap.id = "fo";
   wrap.append(fireVideo(), el("div","fo-shade"));
   const ov = el("div","fo-ov"); ov.id = "fo-ov"; wrap.appendChild(ov);
+  /* Plein cadre : les personnes en petit en haut à gauche, les commandes en bas qui apparaissent au mouvement de la souris */
   const side = el("aside","fo-side");
-  side.appendChild(el("h2",null,"En focus"));
   const pp = el("div","fo-people"); pp.id = "fo-people"; side.appendChild(pp);
-  side.appendChild(el("h2",null,"Radio"));
-  const rs = el("div","fo-rslot"); rs.id = "fo-rslot"; side.appendChild(rs);
-  const sc = el("div"); sc.id = "fo-sctl"; side.appendChild(sc);
-  wrap.appendChild(side); root.appendChild(wrap);
+  const rs = el("div","fo-rslot"); rs.id = "fo-rslot";
+  const bar = el("div","fo-bar"); const ba = el("div","fo-bar-a"); ba.id = "fo-bar-a"; const sc = el("div","fo-bar-r"); sc.id = "fo-sctl"; bar.append(ba, sc);
+  const x = el("button","fo-x"); x.type = "button"; x.setAttribute("aria-label","Fermer le salon"); x.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>'; x.onclick = () => { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); go("accueil"); };
+  wrap.append(side, rs, bar, x); root.appendChild(wrap);
+  let idleT = 0; const wake = () => { wrap.classList.remove("idle"); clearTimeout(idleT); idleT = setTimeout(() => { if (!bar.matches(":hover") && !bar.contains(document.activeElement)) wrap.classList.add("idle"); }, 2600); };
+  ["mousemove","pointerdown","touchstart","keydown"].forEach(ev => wrap.addEventListener(ev, wake, { passive: true })); wake();
+  /* Le navigateur bloque parfois le son sans geste : au premier clic on relance la musique */
+  wrap.addEventListener("pointerdown", () => { const rp = FOCUS.rp; if (rp && rp.ready && !rp.paused) try { if (rp.player.getPlayerState() !== 1) rp.player.playVideo(); } catch(e){} }, { passive: true });
   focusFill();
 }
 /* Met à jour le salon sans recharger la vidéo du feu ni la radio */
@@ -1766,34 +1791,30 @@ function focusFill(){
   const ov = document.getElementById("fo-ov"), sc = document.getElementById("fo-sctl"), rs = document.getElementById("fo-rslot"); if (!ov) return;
   const fo = document.getElementById("fo"), nv = fireVideo(), cur = fo.querySelector(".fo-vid"); if (cur && cur !== nv) fo.replaceChild(nv, cur);
   if (document.activeElement && sc.contains(document.activeElement)){ focusPeople(); return; }
-  ov.textContent = ""; sc.textContent = "";
+  const ba = document.getElementById("fo-bar-a"); ov.textContent = ""; sc.textContent = ""; if (ba) ba.textContent = "";
   const h = el("h1","fo-h"); h.append(document.createTextNode("Salon "), el("span",null,"focus")); ov.appendChild(h);
   ov.appendChild(el("p","fo-sub", FOCUS.on ? "Tu es en focus. Les autres voient que tu travailles." : "Un coin calme pour travailler ensemble. Chacun voit qui est concentré, sans se déranger."));
   if (FOCUS.end){ const t = el("p","fo-time", focusTimerLabel()); t.id = "fo-time"; ov.appendChild(t); }
   const ctl = el("div","fo-ctl");
   if (!FOCUS.on) ctl.appendChild(btn("Je me mets en focus","lemon", () => { FOCUS.on = true; const f = document.getElementById("fo"); if (f && f.requestFullscreen && !document.fullscreenElement) f.requestFullscreen().catch(() => {}); focusApi({ task: "", tool: FOCUS.tool }); render(); }));
-  else ctl.append(btn(FOCUS.mode === "work" ? "Arrêter le minuteur" : "Session de 50 min", FOCUS.mode === "work" ? "" : "lemon", () => focusTimer(FOCUS.mode === "work" ? 0 : 50, "work")),
-      btn(FOCUS.mode === "pause" ? "Reprendre" : "Pause de 10 min","", () => focusTimer(FOCUS.mode === "pause" ? 0 : 10, "pause")),
-      btn("Quitter le salon","", () => { FOCUS.on = false; clearInterval(FOCUS.timer); FOCUS.end = 0; FOCUS.mode = ""; focusApi({ on: false }); render(); }));
-  ov.appendChild(ctl);
+  else ctl.append(btn("Quitter le salon","", () => { FOCUS.on = false; clearInterval(FOCUS.timer); FOCUS.end = 0; FOCUS.mode = ""; focusApi({ on: false }); render(); }));
+  (ba || ov).appendChild(ctl);
   /* Choix du paysage, puis une barre discrète : son, volume, vocal, plein écran */
   const scn = el("div","fo-scenes"); scn.setAttribute("role","group"); scn.setAttribute("aria-label","Paysage");
   SCENES.forEach(([n], k) => { const cur = ((S.ui.foScene || 0) % SCENES.length) === k; const b = el("button","fo-scene",n); b.type = "button"; b.setAttribute("aria-pressed", String(cur));
-    b.onclick = () => { if (cur) S.ui.foFire = (S.ui.foFire || 0) + 1; else { S.ui.foScene = k; S.ui.foFire = 0; } remember(); render(); }; scn.appendChild(b); });
-  ov.appendChild(scn);
+    b.onclick = () => { b.blur(); if (cur){ if (FOCUS.vp) FOCUS.vp.next(); } else setScene(k); }; scn.appendChild(b); });
+  (ba || ov).appendChild(scn);
   const tools = el("div","fo-tools");
   const snd = btn(FOCUS.sound ? "Couper le son" : "Son de l’ambiance","sm", () => { fireSound(!FOCUS.sound); render(); });
   const vol = el("input","fo-vol"); vol.type = "range"; vol.min = 0; vol.max = 1; vol.step = 0.05; vol.value = FOCUS.vol; vol.title = "Volume de l’ambiance"; vol.setAttribute("aria-label", vol.title);
-  vol.oninput = () => { FOCUS.vol = Number(vol.value); const fr = FOCUS.vid && FOCUS.vid.querySelector("iframe"); if (fr && FOCUS.sound) ytCmd(fr, "setVolume", [Math.round(FOCUS.vol * 100)]); };
+  vol.oninput = () => { FOCUS.vol = Number(vol.value); const p = FOCUS.vp && FOCUS.vp.ready && FOCUS.vp.player; if (p && FOCUS.sound) p.setVolume(Math.round(FOCUS.vol * 100)); };
   const voc = VC.room === "focus" ? btn("Quitter le vocal","sm", () => vcLeave()) : btn("Vocal","sm", () => vcJoin("focus","Salon focus"));
   const full = btn(document.fullscreenElement ? "Réduire" : "Plein écran","sm", () => { const f = document.getElementById("fo"); if (document.fullscreenElement) document.exitFullscreen(); else if (f && f.requestFullscreen) f.requestFullscreen().catch(() => {}); });
-  tools.append(snd, vol, voc, full); ov.appendChild(tools);
-  const radio = S.ui.foRadio || CLAUDE_FM, src = embedUrl(radio);
-  const want = src && FOCUS.on && S.ui.foRadioOn !== false ? src : "";
-  if (!want){ rs.textContent = ""; FOCUS.radio = null; } else if (!FOCUS.radio || FOCUS.radio.dataset.src !== want || FOCUS.radio.parentNode !== rs){ rs.textContent = ""; rs.appendChild(radioFrame(want)); }
+  tools.append(snd, vol, voc, full); (ba || ov).appendChild(tools);
+  radioSync(); if (FOCUS.rp && !FOCUS.rp.ready) ytApi().then(() => setTimeout(radioSync, 1500));
   const rr = el("div","fo-stations");
-  RADIOS.forEach(([n, u]) => { const on = (S.ui.foRadio || CLAUDE_FM) === u && S.ui.foRadioOn !== false; const b = el("button","fo-st" + (on ? " on" : ""), n); b.type = "button"; b.setAttribute("aria-pressed", String(on));
-    b.onclick = () => { b.blur(); if (on){ S.ui.foRadioOn = false; FOCUS.radio = null; } else { S.ui.foRadio = u === CLAUDE_FM ? "" : u; S.ui.foRadioOn = true; FOCUS.radio = null; } remember(); render(); }; rr.appendChild(b); });
+  RADIOS.forEach(([n], k) => { const on = (S.ui.foSt || 0) === k && S.ui.foRadioOn !== false; const b = el("button","fo-st" + (on ? " on" : ""), n); b.type = "button"; b.setAttribute("aria-pressed", String(on));
+    b.onclick = () => { b.blur(); if (on) S.ui.foRadioOn = false; else { S.ui.foSt = k; S.ui.foRadioOn = true; } remember(); render(); }; rr.appendChild(b); });
   sc.appendChild(rr);
   sc.appendChild(el("p","muted fo-note", FOCUS.on ? (S.ui.foRadioOn === false ? "Radio coupée. Choisis une station." : "Appuie sur la station en cours pour la couper.") : "La radio démarre quand tu te mets en focus."));
   focusPeople();
