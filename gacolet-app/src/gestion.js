@@ -416,6 +416,17 @@ module.exports = function (app, { db, wrap, root }) {
   app.post("/api/rtc/signal", auth, hSignal);
   app.post("/api/rtc/chat", auth, hChat);
   app.post("/api/rtc/leave", auth, hLeave);
+  // Salon focus : qui travaille en ce moment, depuis quand, sur quoi. En mémoire, oublié après une minute sans signe de vie.
+  const FOCUS = new Map();
+  const focusList = () => { const lim = Date.now() - 60000; FOCUS.forEach((v, k) => { if (v.seen < lim) FOCUS.delete(k); }); return [...FOCUS.entries()].map(([name, v]) => ({ name, since: v.since, task: v.task, pause: v.pause })); };
+  app.get("/api/focus", auth, (req, res) => res.json({ people: focusList() }));
+  app.post("/api/focus", auth, (req, res) => {
+    if (req.user.preview) return res.status(403).json({ error: "Aperçu en lecture seule." });
+    const b = req.body || {}, name = req.user.name;
+    if (b.on === false) FOCUS.delete(name);
+    else { const cur = FOCUS.get(name); FOCUS.set(name, { since: cur ? cur.since : Date.now(), task: String(b.task != null ? b.task : (cur ? cur.task : "")).trim().slice(0, 120), pause: !!b.pause, seen: Date.now() }); }
+    res.json({ people: focusList() });
+  });
   // Invitations
   app.get("/api/rtc/invites", auth, staffOnly, wrap(async (req, res) => {
     const rows = await db.all("SELECT data FROM docs WHERE col = ? AND deleted = 0", ["rtcinv"]);
