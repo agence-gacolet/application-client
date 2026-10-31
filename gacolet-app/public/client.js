@@ -85,7 +85,7 @@ const myName = () => (S.f && S.f.me.name) || "";
 const unread = () => S.f ? [...new Set(S.f.messages.map(m => m.ch))].reduce((n, k) => n + unreadIn(k), 0) : 0;
 
 /* ---------- Navigation ---------- */
-const VIEWS = [["accueil","Accueil"],["valider","À valider"],["stats","Statistiques"],["meta","Meta"],["messagerie","Messagerie"],["visio","Visio"],["idees","Mes idées"]];
+const VIEWS = [["accueil","Accueil"],["valider","À valider"],["stats","Statistiques"],["meta","Meta"],["messagerie","Messagerie"],["visio","Visio"],["idees","Mes idées"],["prel","Prélèvements"]];
 const MOBILE = ["accueil","valider","messagerie","stats"];
 const ICONS = {
   accueil:'<path d="M4 11.2 12 4.8l8 6.4V20h-5.6v-5.2H9.6V20H4z"/>',
@@ -93,13 +93,14 @@ const ICONS = {
   messagerie:'<path d="M4.5 6.5A2 2 0 0 1 6.5 4.5h11a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H10l-4.5 3.5v-3.5h0a2 2 0 0 1-1-1.7z"/>',
   visio:'<rect x="3" y="6.5" width="13" height="11" rx="2"/><path d="m16 10.5 5-3v9l-5-3"/>',
   stats:'<path d="M4 20V11M10 20V5M16 20v-6M22 20H2"/>',
+  prel:'<rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19M6.5 15h4"/>',
   meta:'<path d="M4 10v4l3 .4L15 19V5L7 9.6z"/><path d="M18.2 9.4a3.6 3.6 0 0 1 0 5.2"/>',
   plus:'<path d="M5 7h14M5 12h14M5 17h14"/>',
   idees:'<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>'
 };
 const ico = k => { const s = document.createElementNS("http://www.w3.org/2000/svg","svg"); s.setAttribute("viewBox","0 0 24 24"); s.setAttribute("aria-hidden","true"); s.classList.add("ico"); s.innerHTML = ICONS[k] || ""; return s; };
 function renderTabs(){
-  const badge = { valider: waiting(), messagerie: S.view === "messagerie" ? 0 : unread() };
+  const badge = { valider: waiting(), messagerie: S.view === "messagerie" ? 0 : unread(), prel: billDue().length };
   const link = ([k, l]) => { const a = el("a"); a.href = "#"+k; a.appendChild(ico(k)); a.appendChild(el("span","lb",l)); if (k === S.view) a.setAttribute("aria-current","page"); if (badge[k]) a.appendChild(el("span","n",String(badge[k]))); return a; };
   const lockMark = a => { a.appendChild(el("span","lk-dot","Découvrir")); return a; };
   const link2 = v => { const a = link(v); if ((v[0] === "meta" && !has("meta")) || ((v[0] === "stats" || v[0] === "valider") && !has("com"))) { a.classList.add("lk-nav"); lockMark(a); } return a; };
@@ -515,8 +516,69 @@ function valPreview(pv){
   pv.appendChild(g);
 }
 
+/* ---------- Prélèvements, contrats et factures ---------- */
+const BILL_ST = { payee: "Payée", attente: "À régler", retard: "En retard" };
+const billOf = () => (S.f && S.f.billing) || { plan: null, docs: [] };
+const billDue = () => billOf().docs.filter(d => d.kind === "facture" && d.status !== "payee");
+const eur = n => Number(n || 0).toLocaleString("fr-FR", { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 }) + " €";
+const longD = s => { const [y, m, d] = String(s).split("-").map(Number); return (d === 1 ? "1er" : d) + " " + MONTHS[m - 1] + " " + y; };
+/* Prochaine date de prélèvement : la date forcée par l’agence si elle est à venir, sinon le jour fixe du mois */
+function nextDebit(p){
+  if (!p) return "";
+  const t = today(); if (p.next && p.next >= t) return p.next;
+  const pad = n => String(n).padStart(2, "0");
+  let [y, m] = t.split("-").map(Number);
+  for (let i = 0; i < 14; i++){ const d = y + "-" + pad(m) + "-" + pad(p.day || 5);
+    if (d >= t && (!p.start || d >= p.start)){ return p.end && d > p.end ? "" : d; }
+    m++; if (m > 12){ m = 1; y++; } }
+  return "";
+}
+function askAgency(text){
+  const owner = ((S.f && S.f.team) || []).find(t => t.role === "owner" && /gab/i.test(t.name)) || ((S.f && S.f.team) || []).find(t => t.role === "owner");
+  S.mmode = "main"; S.mch = owner ? "dm:" + owner.name : "grp"; S.conv = true; S.draft = text; go("messagerie");
+}
+function docRow(d){
+  const r = el(d.url ? "a" : "div","bl-row" + (d.status === "retard" ? " late" : "")); if (d.url){ r.href = d.url; r.target = "_blank"; r.rel = "noopener"; }
+  const ic = el("span","bl-ic"); ic.innerHTML = d.kind === "contrat" ? '<svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>' : '<svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>';
+  const tx = el("div","bl-tx"); tx.appendChild(el("b",null, d.title || (d.kind === "contrat" ? "Contrat" : "Facture") + (d.num ? " " + d.num : "")));
+  const sub = [d.kind === "contrat" ? (d.date ? "Signé le " + longD(d.date) : "") : [d.num && d.title ? "N° " + d.num : "", d.date ? longD(d.date) : ""].filter(Boolean).join(", ")].filter(Boolean).join("");
+  if (sub) tx.appendChild(el("small",null,sub));
+  r.append(ic, tx);
+  const end = el("div","bl-end");
+  if (d.kind === "facture"){ if (d.amount) end.appendChild(el("b","bl-amt",eur(d.amount))); end.appendChild(el("span","bl-st " + d.status, BILL_ST[d.status] || "")); }
+  if (d.url) end.appendChild(el("span","bl-open", d.kind === "contrat" ? "Ouvrir" : "PDF"));
+  r.appendChild(end); return r;
+}
+function vPrel(root){
+  root.appendChild(head(["Mes", "prélèvements"], "Votre abonnement, vos contrats et vos factures, au même endroit."));
+  const b = billOf(), p = b.plan, nx = nextDebit(p);
+  const contrats = b.docs.filter(d => d.kind === "contrat").sort((x, y) => (y.date || "").localeCompare(x.date || ""));
+  const factures = b.docs.filter(d => d.kind === "facture").sort((x, y) => (y.date || "").localeCompare(x.date || ""));
+  if (!p && !b.docs.length){
+    const e = el("div","bl-empty"); e.append(el("b",null,"Rien à afficher pour l’instant"), el("p",null,"Votre échéancier, votre contrat et vos factures apparaîtront ici dès que l’agence les aura ajoutés."));
+    e.appendChild(btn("Poser une question à l’agence","", () => askAgency("Bonjour, j’ai une question sur ma facturation."))); root.appendChild(e); return;
+  }
+  if (p){
+    const hero = el("div","st-hero bl-hero");
+    hero.appendChild(el("span",null, nx ? "Prochain prélèvement" : "Abonnement"));
+    if (nx){ const [y, m, d] = nx.split("-").map(Number); const days = Math.round((new Date(y, m - 1, d) - new Date(today() + "T00:00:00")) / 864e5);
+      hero.appendChild(el("b",null, (d === 1 ? "1er" : d) + " " + MONTHS[m - 1]));
+      hero.appendChild(el("em",null, eur(p.amount) + " " + p.tax + (days === 0 ? ", aujourd’hui" : days === 1 ? ", demain" : ", dans " + days + " jours"))); }
+    else { hero.appendChild(el("b",null, eur(p.amount))); hero.appendChild(el("em",null, p.end && p.end < today() ? "Engagement terminé le " + longD(p.end) : "Aucun prélèvement prévu pour l’instant")); }
+    root.appendChild(hero);
+    root.appendChild(kpis([[eur(p.amount) + " " + p.tax, p.label || "par mois"],["Le " + p.day, "de chaque mois", p.method],[p.end ? longD(p.end) : "", "fin d’engagement", p.start ? "depuis le " + longD(p.start) : ""]]));
+  }
+  const due = billDue();
+  if (due.length){ const w = el("p","bl-warn", due.length === 1 ? "Une facture est en attente de règlement." : due.length + " factures sont en attente de règlement."); root.appendChild(w); }
+  if (contrats.length){ root.appendChild(el("h2","cl-h2","Contrats")); const l = el("div","bl-list"); contrats.forEach(d => l.appendChild(docRow(d))); root.appendChild(l); }
+  root.appendChild(el("h2","cl-h2","Factures"));
+  if (factures.length){ const l = el("div","bl-list"); factures.forEach(d => l.appendChild(docRow(d))); root.appendChild(l); }
+  else root.appendChild(el("p","empty","Vos factures apparaîtront ici."));
+  const q = el("div","bl-help"); q.append(el("span",null,"Une question sur un prélèvement ou une facture ?"), btn("Écrire à l’agence","sm", () => askAgency("Bonjour, j’ai une question sur ma facturation."))); root.appendChild(q);
+}
+
 /* ---------- Rendu ---------- */
-const R = { accueil: vAccueil, valider: vValider, stats: vStats, meta: vMeta, messagerie: vMessagerie, visio: vVisio, idees: vIdees };
+const R = { accueil: vAccueil, valider: vValider, stats: vStats, meta: vMeta, messagerie: vMessagerie, visio: vVisio, idees: vIdees, prel: vPrel };
 function fromHash(){ const h = location.hash.replace("#",""); S.view = R[h] ? h : "accueil"; }
 function render(){
   if (!S.d || !S.f) return;
