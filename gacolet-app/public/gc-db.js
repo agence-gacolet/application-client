@@ -25,10 +25,12 @@
   const docsOf = c => Object.keys(cache[c] || {}).map(id => ({ id, exists: true, data: () => JSON.parse(JSON.stringify(cache[c][id])) }));
   const emit = c => (subs[c] || []).forEach(s => { try { s.cb({ docs: docsOf(c) }); } catch (e) { console.error(e); } });
 
-  async function sync() {
+  let liveV = 0;
+  async function sync(wait) {
     if (running) return; running = true;
     try {
-      const j = await call("GET", "/api/g/changes" + (since ? "?since=" + encodeURIComponent(since) : ""));
+      const j = await call("GET", "/api/g/changes" + (since ? "?since=" + encodeURIComponent(since) + (wait ? "&wait=1&v=" + liveV : "") : ""));
+      if (j.live){ liveV = j.live.v; window.GC_LIVE = j.live; window.dispatchEvent(new CustomEvent("gc-live", { detail: j.live })); }
       const touched = new Set();
       if (j.full) Object.keys(subs).forEach(c => { cache[c] = {}; touched.add(c); });
       j.docs.forEach(d => {
@@ -51,10 +53,18 @@
   }
   function start() {
     if (timer) return;
-    sync();
-    timer = setInterval(() => { if (!document.hidden) sync(); }, 5000);
+    /* Attente longue : le serveur répond dès qu’un message ou un changement arrive */
+    timer = 1;
+    (async function loop(){
+      for (;;){
+        if (document.hidden){ await new Promise(r => setTimeout(r, 1500)); continue; }
+        const t0 = Date.now(); try { await sync(!!since); } catch (e) {}
+        if (document.documentElement.hasAttribute("data-offline")) await new Promise(r => setTimeout(r, 3000));
+        else if (Date.now() - t0 < 300) await new Promise(r => setTimeout(r, 300));
+      }
+    })();
     document.addEventListener("visibilitychange", () => { if (!document.hidden) sync(); });
-    window.addEventListener("focus", sync);
+    window.addEventListener("focus", () => sync());
   }
 
   /* Écriture : mise à jour locale immédiate, puis envoi au serveur */
