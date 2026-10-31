@@ -15,7 +15,7 @@ self.addEventListener("fetch", e => {
 // Pastille : un compteur partagé avec la page (qui le remet au bon chiffre quand on l'ouvre)
 const BADGE = "/__badge";
 async function getBadge(){ try { const r = await (await caches.open("gc-badge")).match(BADGE); return r ? Number(await r.text()) || 0 : 0; } catch(e){ return 0; } }
-async function setBadge(n){ try { await (await caches.open("gc-badge")).put(BADGE, new Response(String(n))); } catch(e){} try { if (n > 0 && self.navigator.setAppBadge) await self.navigator.setAppBadge(n); else if (self.navigator.clearAppBadge) await self.navigator.clearAppBadge(); } catch(e){} }
+async function setBadge(n){ try { await (await caches.open("gc-badge")).put(BADGE, new Response(String(n))); } catch(e){} try { if (n > 0 && self.navigator.setAppBadge) await self.navigator.setAppBadge(n); } catch(e){} }
 
 self.addEventListener("push", e => {
   let d = {}; try { d = e.data ? e.data.json() : {}; } catch(x){ d = { body: e.data ? e.data.text() : "" }; }
@@ -37,4 +37,4 @@ self.addEventListener("notificationclick", e => {
     await self.clients.openWindow(url + (data.ch ? (url.includes("#") ? "" : "#messagerie") : ""));
   })());
 });
-self.addEventListener("message", e => { if (e.data && e.data.type === "badge") e.waitUntil(setBadge(Number(e.data.n) || 0)); });
+self.addEventListener("message", e => { if (e.data && e.data.type === "badge") e.waitUntil(caches.open("gc-badge").then(c => c.put(BADGE, new Response(String(Number(e.data.n) || 0)))).catch(() => {})); });
