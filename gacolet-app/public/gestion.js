@@ -1531,9 +1531,13 @@ function liveFill(){
   if (ty){ const who = ((L.typing || {})[ch] || []).filter(n => n !== me); ty.hidden = !who.length;
     const lb = ty.querySelector("span"); if (lb) lb.textContent = who.length ? (who.length === 1 ? who[0] + " écrit" : who.join(" et ") + " écrivent") : "";
     if (who.length){ const l = document.getElementById("chat-list"); if (l && l.scrollHeight - l.scrollTop - l.clientHeight < 120) l.scrollTop = l.scrollHeight; } }
+  const r0 = (L.reads || {})[ch] || {}, readers = Object.keys(r0).filter(n => n !== me);
+  document.querySelectorAll(".wa-tk").forEach(t => { const by = readers.filter(n => r0[n] >= (t.dataset.at || "")); t.classList.toggle("read", !!by.length); t.title = by.length ? "Lu par " + by.join(", ") : "Envoyé"; });
+  const hs = document.querySelector(".wa-head .wa-htx small");
+  if (hs){ if (!hs.dataset.base) hs.dataset.base = hs.textContent; const who = ((L.typing || {})[ch] || []).filter(n => n !== me); hs.textContent = who.length ? (ch.startsWith("dm:") ? "écrit…" : who.join(", ") + (who.length > 1 ? " écrivent…" : " écrit…")) : hs.dataset.base; hs.classList.toggle("typing", !!who.length); }
   const sv = document.getElementById("wa-seen");
   if (sv){ const at = sv.dataset.at || "", r = (L.reads || {})[ch] || {}; const by = Object.keys(r).filter(n => n !== me && r[n] >= at);
-    sv.textContent = by.length ? (ch.startsWith("dm:") ? "Vu" : "Vu par " + by.join(", ")) : "Envoyé"; sv.classList.toggle("on", !!by.length); }
+    sv.textContent = by.length ? "Vu par " + by.join(", ") : ""; sv.classList.toggle("on", !!by.length); }
 }
 window.addEventListener("gc-live", () => { if (S.view === "messagerie") liveFill(); });
 function vMessagerie(root){
@@ -1604,11 +1608,13 @@ function vMessagerie(root){
     (m.files || []).forEach(f => bub.appendChild(attachEl(f)));
     if (m.audio) bub.appendChild(audioFor(m));
     if (m.text) bub.appendChild(el("div","wa-txt", m.text));
-    bub.appendChild(el("span","wa-time", hhmm(md)));
+    const tm = el("span","wa-time", hhmm(md));
+    if (mine){ const tk = el("span","wa-tk"); tk.dataset.at = m.at || ""; tk.innerHTML = '<svg viewBox="0 0 18 12" aria-hidden="true"><path d="M1 6.5 4.5 10 11 2.5M7 9.5l.5.5L14 2.5"/></svg>'; tk.title = "Envoyé"; tm.appendChild(tk); }
+    bub.appendChild(tm);
     const col = el("div","wa-col"); col.appendChild(bub);
     const rk = Object.keys(m.re || {}).filter(k => (m.re[k] || []).length);
     if (rk.length){ const rr = el("div","wa-re"); rk.forEach(k => { const b = el("button", (m.re[k].includes(me) ? "on" : null)); b.type = "button"; b.title = m.re[k].join(", "); b.append(document.createTextNode(k), el("span",null,String(m.re[k].length))); b.onclick = e => { e.stopPropagation(); react(m, k); }; rr.appendChild(b); }); col.appendChild(rr); }
-    if (lastMine && m.id === lastMine.id){ const sv = el("span","wa-seen","Envoyé"); sv.id = "wa-seen"; sv.dataset.at = m.at || ""; col.appendChild(sv); }
+    if (lastMine && m.id === lastMine.id && !ch.startsWith("dm:")){ const sv = el("span","wa-seen",""); sv.id = "wa-seen"; sv.dataset.at = m.at || ""; col.appendChild(sv); }
     line.appendChild(col);
     bub.ondblclick = e => { e.preventDefault(); react(m, "❤️"); };
     let sx = 0, sy = 0, dx = 0;
@@ -1623,6 +1629,10 @@ function vMessagerie(root){
   });
   const ty = el("div","wa-typing"); ty.id = "wa-typing"; ty.hidden = true; ty.append(el("i"), el("i"), el("i"), el("span")); list.appendChild(ty);
   main.appendChild(list);
+  const down = el("button","wa-down"); down.type = "button"; down.setAttribute("aria-label","Aller aux derniers messages"); down.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+  down.onclick = () => list.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
+  list.addEventListener("scroll", () => down.classList.toggle("on", list.scrollHeight - list.scrollTop - list.clientHeight > 240), { passive: true });
+  main.appendChild(down);
 
   /* Saisie */
   const form = el("form","wa-form");
