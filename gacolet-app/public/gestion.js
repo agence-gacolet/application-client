@@ -2053,9 +2053,74 @@ function pmCodes(w){
     const cp = btn("Copier","sm", e => { e.stopPropagation(); copyCode(x.code); });
     const rn = btn("Renouveler","sm", async e => { e.stopPropagation(); if (!rn.classList.contains("armed")){ rn.classList.add("armed"); rn.textContent = "Confirmer"; setTimeout(() => { rn.classList.remove("armed"); rn.textContent = "Renouveler"; }, 3000); return; }
       try { const r = await GC.api("PATCH","/api/g-codes/" + x.id, { renew: true }); toast("Nouveau code pour " + x.name + " : " + r.code); } catch(err){ toast(err.message); } reloadCodes(); });
-    a.append(cp, rn); if (!x.active) a.appendChild(el("span","pill l2","Désactivé")); td(tr, a,"nw"); tb.appendChild(tr); });
+    const fb = btn("Facturation","sm", e => { e.stopPropagation(); billingForm(x); });
+    a.append(fb, cp, rn); if (!x.active) a.appendChild(el("span","pill l2","Désactivé")); td(tr, a,"nw"); tb.appendChild(tr); });
   c.appendChild(rows.length ? tw : el("p","empty", t ? "Aucun client ne correspond." : "Aucun client pour l’instant."));
   w.appendChild(c);
+}
+/* Facturation d’un client : échéancier, contrats et factures, visibles dans son espace (page Prélèvements) */
+async function billingForm(x){
+  let B; try { B = await GC.api("GET","/api/g-billing/" + x.id); } catch(e){ toast(e.message); return; }
+  B = { plan: B.plan || null, docs: (B.docs || []).slice() };
+  const p = Object.assign({ amount: "", tax: "TTC", day: 5, label: x.formula || "", method: "Prélèvement SEPA", start: "", end: "", next: "" }, B.plan || {});
+  openModal(m => {
+    m.classList.add("wide");
+    const h = el("h3",null,"Facturation de " + x.name); h.id = "mtitle"; m.appendChild(h);
+    m.appendChild(el("p","muted","Le client voit tout ceci dans sa page Prélèvements. Le prochain prélèvement est calculé tout seul à partir du jour du mois."));
+    const f = el("form","form cd-form"); f.noValidate = true;
+    const fld = (label, inp, half) => { const l = el("label", half ? null : "full"); l.appendChild(el("span",null,label)); l.appendChild(inp); f.appendChild(l); return inp; };
+    const inp = (v, o) => Object.assign(el("input"), Object.assign({ value: v == null ? "" : v }, o || {}));
+    const sel = (opts, v) => { const s = el("select"); opts.forEach(([k, l]) => { const o = el("option",null,l); o.value = k; s.appendChild(o); }); s.value = v; return s; };
+    f.appendChild(el("h4","cd-h full","Abonnement"));
+    const iA = fld("Montant mensuel (€)", inp(p.amount, { type: "text", inputMode: "decimal", placeholder: "Ex. 450" }), true);
+    const iT = fld("HT ou TTC", sel([["TTC","TTC"],["HT","HT"]], p.tax), true);
+    const iD = fld("Jour du prélèvement", inp(p.day, { type: "number", min: 1, max: 28 }), true);
+    const iMth = fld("Mode de paiement", sel([["Prélèvement SEPA","Prélèvement SEPA"],["Virement","Virement"],["Carte bancaire","Carte bancaire"]], p.method), true);
+    const iL = fld("Formule affichée", inp(p.label, { placeholder: "Ex. Formule Standard" }));
+    const iS = fld("Début du contrat", inp(p.start, { type: "date" }), true);
+    const iE = fld("Fin d’engagement", inp(p.end, { type: "date" }), true);
+    const iN = fld("Forcer la date du prochain prélèvement (facultatif)", inp(p.next, { type: "date" }), true);
+    m.appendChild(f);
+    m.appendChild(el("h4","cd-h","Contrats et factures"));
+    const list = el("div","bl-admin"); m.appendChild(list);
+    const draw = () => { list.textContent = "";
+      if (!B.docs.length) list.appendChild(el("p","muted","Aucun document pour l’instant."));
+      B.docs.slice().sort((a, b) => (b.date || "").localeCompare(a.date || "")).forEach(d => { const r = el("div","bl-arow");
+        const tx = el("div"); tx.append(el("b",null,(d.kind === "contrat" ? "Contrat : " : "Facture : ") + (d.title || d.num || "sans titre")), el("small",null,[d.num ? "N° " + d.num : "", d.date ? fmtFR(d.date) : "", d.amount ? d.amount.toLocaleString("fr-FR") + " €" : "", d.url ? "fichier joint" : "sans fichier"].filter(Boolean).join(", ")));
+        r.appendChild(tx);
+        if (d.kind === "facture"){ const s = sel([["payee","Payée"],["attente","À régler"],["retard","En retard"]], d.status); s.className = "pick sm"; s.onchange = () => { d.status = s.value; }; r.appendChild(s); }
+        r.appendChild(btn("Retirer","sm", () => { B.docs = B.docs.filter(y => y !== d); draw(); }));
+        list.appendChild(r); }); };
+    draw();
+    const add = el("form","form cd-form bl-add"); add.noValidate = true;
+    const fa = (label, i, half) => { const l = el("label", half ? null : "full"); l.appendChild(el("span",null,label)); l.appendChild(i); add.appendChild(l); return i; };
+    const aK = fa("Type", sel([["facture","Facture"],["contrat","Contrat"]], "facture"), true);
+    const aS = fa("Statut", sel([["payee","Payée"],["attente","À régler"],["retard","En retard"]], "payee"), true);
+    const aTi = fa("Titre", inp("", { placeholder: "Ex. Facture novembre 2026" }));
+    const aNu = fa("Numéro", inp("", { placeholder: "Ex. F-2026-031" }), true);
+    const aDa = fa("Date", inp(today(), { type: "date" }), true);
+    const aAm = fa("Montant (€)", inp("", { inputMode: "decimal" }), true);
+    const aFi = fa("Fichier PDF", Object.assign(el("input"), { type: "file", accept: "application/pdf,image/*" }), true);
+    const aUr = fa("Ou lien (Qonto, Drive…)", inp("", { type: "url", placeholder: "https://" }));
+    aK.onchange = () => { aS.disabled = aK.value === "contrat"; };
+    const addBtn = btn("Ajouter ce document","", async () => {
+      let url = aUr.value.trim(), name = "";
+      if (aFi.files[0]){ addBtn.disabled = true; addBtn.textContent = "Envoi…"; try { const r = await S.assets.upload(aFi.files[0]); url = r.url; name = aFi.files[0].name; } catch(e){ toast(e.message); addBtn.disabled = false; addBtn.textContent = "Ajouter ce document"; return; } }
+      if (url && !/^https:\/\//.test(url) && !url.startsWith("/f/")){ toast("Le lien doit commencer par https://"); return; }
+      if (!aTi.value.trim() && !url){ toast("Donne au moins un titre ou un fichier."); addBtn.disabled = false; addBtn.textContent = "Ajouter ce document"; return; }
+      B.docs.push({ kind: aK.value, title: aTi.value.trim(), num: aNu.value.trim(), date: aDa.value, amount: aAm.value, status: aK.value === "contrat" ? "payee" : aS.value, url, name });
+      aTi.value = ""; aNu.value = ""; aAm.value = ""; aFi.value = ""; aUr.value = ""; addBtn.disabled = false; addBtn.textContent = "Ajouter ce document"; draw(); toast("Ajouté. Pense à enregistrer.");
+    });
+    addBtn.type = "button"; add.onsubmit = e => e.preventDefault(); f.onsubmit = e => e.preventDefault();
+    add.appendChild(Object.assign(el("div","full"), {}).appendChild(addBtn).parentNode);
+    m.appendChild(add);
+    const a = el("div","actions");
+    a.append(btn("Annuler","", closeModal), btn("Enregistrer","lemon", async () => {
+      const plan = { amount: iA.value, tax: iT.value, day: iD.value, label: iL.value, method: iMth.value, start: iS.value, end: iE.value, next: iN.value };
+      try { await GC.api("PUT","/api/g-billing/" + x.id, { plan, docs: B.docs }); toast("Facturation de " + x.name + " enregistrée."); closeModal(); } catch(e){ toast(e.message); }
+    }));
+    m.appendChild(a);
+  });
 }
 function editCode(x){
   const isNew = !x.id;
