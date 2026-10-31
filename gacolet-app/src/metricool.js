@@ -59,7 +59,7 @@ function mapPost(p) {
     id: "mc" + p.id,
     date: dt.slice(0, 10),
     time: dt.slice(11, 16),
-    net: provs.map(x => NET[x.network] || x.network).join(" · "),
+    net: provs.map(x => NET[x.network] || x.network).join(", "),
     type: story ? "Story" : ig.type === "TRIAL_REEL" ? "Réel test" : fb.type === "REEL" || ig.type === "REEL" ? "Réel" : "Publication",
     label: p.draft ? "Brouillon" : published ? "Publiée" : "Programmée",
     title: yt.title || first || (story ? "Story" : "Publication"),
