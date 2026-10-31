@@ -80,7 +80,7 @@ async function setSky(k) { say("Chargement du ciel…"); const t = await phHdri(
   const elev = Math.asin(SUN.y); sun.intensity = 1.2 + Math.min(1, elev / .5) * 2.6;
   // couleur de la brume : moyenne du ciel juste au-dessus de l'horizon
   const fy = Math.floor(Hh * .47), fc = new THREE.Color(0, 0, 0); let n = 0; for (let x = 0; x < W; x += 8) { const i = (fy * W + x) * st; fc.r += get(i); fc.g += get(i + 1); fc.b += get(i + 2); n++; } fc.multiplyScalar(1 / n);
-  scene.fog.color.copy(fc).multiplyScalar(.55); scene.fog.density = elev < .25 ? .0042 : .003;
+  scene.fog.color.copy(fc).multiplyScalar(.55); scene.fog.density = elev < .25 ? .0034 : .0026;
   if (skyEnv) skyEnv.dispose(); skyEnv = pmrem.fromEquirectangular(t).texture; scene.environment = skyEnv; scene.environmentIntensity = .75; scene.background = t; scene.backgroundIntensity = 1;
   $("#tod").textContent = SKIES[k][1]; say(""); }
 
@@ -155,10 +155,10 @@ function wrapGrass(gltf, per, R, minTris, scale) { gltf.scene.updateMatrixWorld(
     const ig = new THREE.InstancedBufferGeometry(); ig.index = g0.index; Object.entries(g0.attributes).forEach(([k, v]) => ig.setAttribute(k, v)); ig.instanceCount = per;
     const off = new Float32Array(per * 4); for (let i = 0; i < per; i++) { off[i * 4] = (Math.random() * 2 - 1) * R; off[i * 4 + 1] = (Math.random() * 2 - 1) * R; off[i * 4 + 2] = Math.random(); off[i * 4 + 3] = Math.random() * Math.PI * 2; }
     ig.setAttribute("aOff", new THREE.InstancedBufferAttribute(off, 4));
-    const mat = m.material.clone(); mat.transparent = false; mat.alphaTest = .4; mat.side = THREE.DoubleSide; mat.envMapIntensity = .55;
+    const mat = m.material.clone(); mat.transparent = false; mat.alphaTest = .4; mat.side = THREE.DoubleSide; mat.envMapIntensity = .7; mat.normalMap = null; mat.roughnessMap = null; mat.roughness = .9; mat.metalness = 0; mat.emissive = new THREE.Color(0x2A2A0C); mat.emissiveIntensity = 1;
     mat.onBeforeCompile = s => { Object.assign(s.uniforms, grassU, { uR: { value: R } });
       s.vertexShader = s.vertexShader.replace("#include <common>", "#include <common>\n" + GRASS_GLSL)
-        .replace("#include <beginnormal_vertex>", "#include <beginnormal_vertex>\nfloat gc = cos(aOff.w), gs = sin(aOff.w); objectNormal = vec3(objectNormal.x * gc - objectNormal.z * gs, objectNormal.y, objectNormal.x * gs + objectNormal.z * gc);")
+        .replace("#include <beginnormal_vertex>", "#include <beginnormal_vertex>\nfloat gc = cos(aOff.w), gs = sin(aOff.w); objectNormal = normalize(mix(vec3(objectNormal.x * gc - objectNormal.z * gs, objectNormal.y, objectNormal.x * gs + objectNormal.z * gc), vec3(0.0, 1.0, 0.0), .65));")
         .replace("#include <begin_vertex>", `vec2 wp = uCam + mod(aOff.xy - uCam + uR, 2.0 * uR) - uR; vec2 hdv = hd(wp); float dist = length(wp - uCam);
           float keep = step(aOff.z * .9, hdv.y) * (1.0 - smoothstep(uR * .65, uR, dist)); float sc = ${scale.toFixed(2)} * (.7 + aOff.z * .65) * keep;
           vec3 p = position * sc; vec3 transformed = vec3(p.x * gc - p.z * gs, p.y, p.x * gs + p.z * gc);
@@ -206,7 +206,7 @@ async function buildProps() { say("Pose des rochers et des plantes…");
   scatter(LOWQ ? 250 : 600, (x, z) => forest(x, z) > .25 && pathD(x, z) > 3, (x, z) => add(rnd() < .6 ? "fern_02" : "nettle_plant", x, z, .8 + rnd() * .8, rnd() * 6.3));
   scatter(LOWQ ? 120 : 260, (x, z) => pathD(x, z) > 3.5 && Math.hypot(x, z) > 20, (x, z) => add("shrub_02", x, z, .7 + rnd() * .9, rnd() * 6.3));
   if (M.grass_medium_02) wrapGrass(M.grass_medium_02, LOWQ ? 700 : 1300, 20, 0, 1.7);
-  if (M.grass_medium_01) wrapGrass(M.grass_medium_01, LOWQ ? 160 : 320, 20, 600, 1.5);
+  if (M.grass_medium_01) wrapGrass(M.grass_medium_01, LOWQ ? 260 : 520, 20, 600, 1.6);
   if (M.grass_bermuda_01) wrapGrass(M.grass_bermuda_01, LOWQ ? 300 : 600, 20, 0, 1.6);
   // campement au centre de la clairière
   add("stone_fire_pit", 0, 0, 1, 0, .05); SOLID.push({ x: 0, z: 0, r: 1.1 });
