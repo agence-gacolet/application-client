@@ -11,11 +11,11 @@
 <link rel="apple-touch-icon" href="/icon-v4-512.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Gacolet">
 <link rel="preload" href="/fonts/inter.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/bebas-neue.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/gestion.css?v=4">
+<link rel="stylesheet" href="/gestion.css?v=5">
 </head>
 <body>
 <style>
@@ -100,6 +100,9 @@
 </script>
 <script>/* Pas de zoom au pincement ni au double appui : comportement d’une app */
 ["gesturestart","gesturechange","gestureend"].forEach(t => document.addEventListener(t, e => e.preventDefault(), { passive: false }));
-document.addEventListener("touchmove", e => { if (e.touches && e.touches.length > 1) e.preventDefault(); }, { passive: false });</script>
+document.addEventListener("touchmove", e => { if (e.touches && e.touches.length > 1) e.preventDefault(); }, { passive: false });
+/* Ordinateur : pas de zoom au clavier ni au pincement du pavé tactile */
+document.addEventListener("keydown", e => { if ((e.ctrlKey || e.metaKey) && ["+","-","=","_"].includes(e.key)) e.preventDefault(); }, { passive: false });
+document.addEventListener("wheel", e => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });</script>
 </body>
 </html>
