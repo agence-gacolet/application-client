@@ -76,11 +76,13 @@ button{font:inherit;cursor:pointer}
   function peer(pid, name){
     if (V.peers.has(pid)) return V.peers.get(pid);
     const pc = new RTCPeerConnection({ iceServers: [{ urls: ["stun:stun.l.google.com:19302","stun:stun1.l.google.com:19302"] }] });
-    const P = { pid, name, pc, polite: V.pid > pid, makingOffer: false, ignoreOffer: false, stream: new MediaStream(), audio: el("audio"), vs: null };
-    P.audio.autoplay = true; P.audio.srcObject = P.stream; document.body.appendChild(P.audio);
+    const P = { pid, name, pc, polite: V.pid > pid, makingOffer: false, ignoreOffer: false, stream: new MediaStream(), astream: new MediaStream(), audio: el("audio"), vs: null };
+    /* Son sans délai : l’audio voyage seul (pas synchronisé sur l’image) et se joue avec le plus petit tampon possible */
+    P.audio.autoplay = true; P.audio.srcObject = P.astream; document.body.appendChild(P.audio);
     V.local.getAudioTracks().forEach(t => pc.addTrack(t, V.local));
-    if (V.video) P.vs = pc.addTrack(V.video, V.local);
-    pc.ontrack = e => { if (!P.stream.getTracks().includes(e.track)) P.stream.addTrack(e.track); e.track.onended = e.track.onmute = e.track.onunmute = draw; P.stream.onremovetrack = draw; meter(pid, P.stream); draw(); };
+    if (V.video) P.vs = pc.addTrack(V.video);
+    pc.ontrack = e => { if (!P.stream.getTracks().includes(e.track)) P.stream.addTrack(e.track);
+      if (e.track.kind === "audio"){ if (!P.astream.getTracks().includes(e.track)) P.astream.addTrack(e.track); try { e.receiver.jitterBufferTarget = 0; } catch(x){} try { e.receiver.playoutDelayHint = 0; } catch(x){} } e.track.onended = e.track.onmute = e.track.onunmute = draw; P.stream.onremovetrack = draw; meter(pid, P.stream); draw(); };
     pc.onicecandidate = e => { if (e.candidate) send(pid, { candidate: e.candidate }); };
     pc.onnegotiationneeded = async () => { try { P.makingOffer = true; await pc.setLocalDescription(); send(pid, { description: pc.localDescription }); } catch(e){} finally { P.makingOffer = false; } };
     V.peers.set(pid, P); draw(); return P;
@@ -118,8 +120,8 @@ button{font:inherit;cursor:pointer}
   async function video(kind){
     if (V.kind === kind){ stopVideo(); return; }
     let t; try { const st = kind === "screen" ? await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 } }) : await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } }); t = st.getVideoTracks()[0]; } catch(e){ return; }
-    if (V.video){ const o = V.video; V.local.removeTrack(o); V.local.addTrack(t); V.video = t; V.peers.forEach(P => { if (P.vs) P.vs.replaceTrack(t); else P.vs = P.pc.addTrack(t, V.local); }); o.stop(); }
-    else { V.video = t; V.local.addTrack(t); V.peers.forEach(P => { P.vs = P.pc.addTrack(t, V.local); }); }
+    if (V.video){ const o = V.video; V.local.removeTrack(o); V.local.addTrack(t); V.video = t; V.peers.forEach(P => { if (P.vs) P.vs.replaceTrack(t); else P.vs = P.pc.addTrack(t); }); o.stop(); }
+    else { V.video = t; V.local.addTrack(t); V.peers.forEach(P => { P.vs = P.pc.addTrack(t); }); }
     V.kind = kind; t.onended = () => { if (V.video === t) stopVideo(); }; draw();
   }
   function stopVideo(){ if (!V.video) return; const t = V.video; V.video = null; V.kind = ""; V.peers.forEach(P => { if (P.vs){ try { P.pc.removeTrack(P.vs); } catch(e){} P.vs = null; } }); try { V.local.removeTrack(t); } catch(e){} t.stop(); draw(); }
