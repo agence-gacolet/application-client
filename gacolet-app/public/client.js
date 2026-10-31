@@ -190,7 +190,7 @@ function openViewer(p, start){
   const bot = el("div","cl-vbot");
   if (p.text){ const cap = el("p","cl-vcap",p.text); bot.appendChild(cap); }
   if (canDecide(p)){ const a = el("div","cl-acts");
-    a.append(btn("Valider","lemon", () => { close(); decide(p, "ok"); }), btn("Demander une modification","", () => { close(); openBox(p, "mod"); }), btn("Refuser","danger", () => { close(); openBox(p, "no"); }));
+    a.append(btn("Valider","lemon", () => { close(); decide(p, "ok"); }), btn("Demander une modification","", () => { close(); openBox(p, "mod"); }));
     bot.appendChild(a); }
   else bot.appendChild(el("p","cl-vst", ST_LABEL[p.status] + (p.decidedBy ? " par " + p.decidedBy : "")));
   ov.appendChild(bot);
@@ -204,12 +204,13 @@ const canDecide = p => p.status !== "ok" && !p.published && !(S.f && S.f.preview
 function openBox(p, kind){ S.modOpen = p.id; S.modKind = kind; render(); setTimeout(() => { const t = document.getElementById("mod-" + p.id); if (t){ t.scrollIntoView({ block: "center", behavior: "smooth" }); t.focus(); } }, 0); }
 function vValider(root){
   const cnt = s => posts().filter(p => p.status === s).length;
-  const n = { wait: waiting(), mod: cnt("mod"), no: cnt("no") };
-  root.appendChild(head(["À", "valider"], "Faites défiler chaque contenu, puis validez, demandez une modification ou refusez. Rien n’est publié sans votre accord.",
-    [segm([["wait","À valider" + (n.wait ? " " + n.wait : "")],["mod","Modifications" + (n.mod ? " " + n.mod : "")],["no","Refusées" + (n.no ? " " + n.no : "")],["ok","Validées"]], S.pf, v => { S.pf = v; render(); })]));
+  const n = { wait: waiting(), mod: cnt("mod") + cnt("no") };
+  root.appendChild(head(["À", "valider"], "Faites défiler chaque contenu, puis validez ou expliquez ce qu’il faut changer. Rien n’est publié sans votre accord.",
+    [segm([["wait","À valider" + (n.wait ? " " + n.wait : "")],["mod","Modifications" + (n.mod ? " " + n.mod : "")],["ok","Validées"]], S.pf, v => { S.pf = v; render(); })]));
   if (!has("com")){ locked(root, "com", valPreview); return; }
   if (S.d.postsError) root.appendChild(el("p","status",S.d.postsError));
-  const list = posts().filter(p => p.status === S.pf);
+  if (S.pf === "no") S.pf = "mod";
+  const list = posts().filter(p => p.status === S.pf || (S.pf === "mod" && p.status === "no"));
   if (!list.length){ root.appendChild(el("p","empty", S.pf === "wait" ? "Rien en attente. On vous prévient dès que la suite est prête." : "Rien ici pour l’instant.")); return; }
   const g = el("div","cl-posts");
   list.forEach(p => {
@@ -223,17 +224,16 @@ function vValider(root){
     if (p.note) b.appendChild(el("p","cl-note" + (p.status === "no" ? " no" : ""), (p.status === "no" ? "Votre raison : " : "Votre demande : ") + p.note));
     if (p.status !== "wait" && p.decidedBy) b.appendChild(el("p","muted cl-by",ST_LABEL[p.status] + " par " + p.decidedBy + " le " + fmtD(p.decidedAt)));
     if (canDecide(p)){
-      const open = S.modOpen === p.id, kind = S.modKind || "mod";
+      const open = S.modOpen === p.id, kind = "mod";
       const a = el("div","cl-acts");
       a.append(btn("Valider","lemon", () => decide(p, "ok")),
-        btn(open && kind === "mod" ? "Fermer" : "Modifier","", () => { if (open && kind === "mod"){ S.modOpen = null; render(); } else openBox(p, "mod"); }),
-        btn(open && kind === "no" ? "Fermer" : "Refuser","danger", () => { if (open && kind === "no"){ S.modOpen = null; render(); } else openBox(p, "no"); }));
+        btn(open ? "Fermer" : "Demander une modification","", () => { if (open){ S.modOpen = null; render(); } else openBox(p, "mod"); }));
       b.appendChild(a);
       if (open){
         const box = el("div","cl-modbox" + (kind === "no" ? " no" : "")); const ta = el("textarea"); ta.id = "mod-" + p.id; ta.rows = 3;
-        ta.placeholder = kind === "mod" ? "Ce qu’il faut changer, par exemple le texte du deuxième visuel ou la musique" : "Pourquoi ce contenu ne vous convient pas (facultatif, mais ça nous aide)";
-        box.append(el("b",null, kind === "mod" ? "Qu’est-ce qu’on change ?" : "Refuser ce contenu"), ta, btn(kind === "mod" ? "Envoyer la demande" : "Confirmer le refus", kind === "mod" ? "lemon" : "danger", () => {
-          if (kind === "mod" && !ta.value.trim()){ toast("Écrivez ce qu’il faut changer."); return; } decide(p, kind, ta.value.trim()); }));
+        ta.placeholder = "Ce qui ne vous convient pas et ce qu’il faut changer, par exemple le texte du deuxième visuel ou la musique";
+        box.append(el("b",null,"Qu’est-ce qui ne vous convient pas ?"), ta, btn("Envoyer à l’agence","lemon", () => {
+          if (!ta.value.trim()){ toast("Expliquez ce qui ne vous convient pas, l’agence en a besoin pour corriger."); ta.focus(); return; } decide(p, "mod", ta.value.trim()); }));
         b.appendChild(box);
       }
     }
