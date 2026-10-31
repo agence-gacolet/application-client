@@ -51,7 +51,7 @@ const forest = (x, z) => sstep(.42, .6, fbm(x * .012 + 40, z * .012 - 10, 4)) * 
 const HM = 512, hmData = new Uint8Array(HM * HM * 4); let hMin = 1e9, hMax = -1e9; const hs = [];
 for (let j = 0; j < HM; j++) for (let i = 0; i < HM; i++) { const x = (i / (HM - 1) - .5) * WORLD, z = (j / (HM - 1) - .5) * WORLD, h = height(x, z); hs.push(h); hMin = Math.min(hMin, h); hMax = Math.max(hMax, h); }
 for (let j = 0; j < HM; j++) for (let i = 0; i < HM; i++) { const k = j * HM + i, x = (i / (HM - 1) - .5) * WORLD, z = (j / (HM - 1) - .5) * WORLD, v = Math.round((hs[k] - hMin) / (hMax - hMin) * 65535);
-  const dens = sstep(1.6, 4.5, pathD(x, z)) * (1 - clearing(x, z) * .3) * (1 - forest(x, z) * .5) * (1 - sstep(3, 0, Math.hypot(x, z))); hmData.set([v >> 8, v & 255, Math.round(dens * 255), 255], k * 4); }
+  const dens = sstep(1.6, 4.5, pathD(x, z)) * (1 - clearing(x, z) * .6) * (1 - forest(x, z) * .5) * (1 - sstep(3, 0, Math.hypot(x, z))); hmData.set([v >> 8, v & 255, Math.round(dens * 255), 255], k * 4); }
 const hmTex = new THREE.DataTexture(hmData, HM, HM, THREE.RGBAFormat, THREE.UnsignedByteType); hmTex.needsUpdate = true;
 
 /* ---------- Chargement Poly Haven ---------- */
@@ -75,7 +75,7 @@ let skyEnv = null;
 async function setSky(k) { say("Chargement du ciel…"); const t = await phHdri(SKIES[k][0]); t.mapping = THREE.EquirectangularReflectionMapping;
   const W = t.image.width, Hh = t.image.height, d = t.image.data, st = d.length / (W * Hh), get = i => t.type === THREE.HalfFloatType ? THREE.DataUtils.fromHalfFloat(d[i]) : d[i];
   let best = -1, bi = 0; for (let y = 0; y < Hh / 2; y += 2) for (let x = 0; x < W; x += 2) { const i = (y * W + x) * st, l = get(i) + get(i + 1) + get(i + 2); if (l > best) { best = l; bi = y * W + x; } }
-  const u = (bi % W) / W, v = Math.floor(bi / W) / Hh, phi = (u - .5) * Math.PI * 2, th = v * Math.PI; SUN.set(Math.sin(th) * Math.cos(phi), Math.cos(th), -Math.sin(th) * Math.sin(phi)).normalize(); // équirectangulaire de three.js
+  const u = (bi % W) / W, v = Math.floor(bi / W) / Hh, phi = (u - .5) * Math.PI * 2, th = v * Math.PI; SUN.set(Math.sin(th) * Math.cos(phi), Math.cos(th), Math.sin(th) * Math.sin(phi)).normalize(); // équirectangulaire de three.js
   const sc = new THREE.Color(get(bi * st), get(bi * st + 1), get(bi * st + 2)); const m = Math.max(sc.r, sc.g, sc.b) || 1; sc.multiplyScalar(1 / m); sun.color.copy(sc).lerp(new THREE.Color(1, 1, 1), .25);
   const elev = Math.asin(SUN.y); sun.intensity = 1.2 + Math.min(1, elev / .5) * 2.6;
   // couleur de la brume : moyenne du ciel juste au-dessus de l'horizon
@@ -116,7 +116,7 @@ async function buildTerrain() { say("Chargement des sols…");
 const GR = LOWQ ? 24 : 30, GN = LOWQ ? 90000 : 170000;
 const grassU = { uTime: { value: 0 }, uCam: { value: new THREE.Vector2() }, uR: { value: GR }, hMap: { value: hmTex }, hMin: { value: hMin }, hRange: { value: hMax - hMin }, hSize: { value: WORLD } };
 { const bg = new THREE.BufferGeometry(), segs = 4, pos = [], uvs = [], idx = [];
-  for (let i = 0; i <= segs; i++) { const t = i / segs, w = .028 * (1 - t * .9); pos.push(-w, t, 0, w, t, 0); uvs.push(0, t, 1, t); if (i < segs) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); } }
+  for (let i = 0; i <= segs; i++) { const t = i / segs, w = .022 * (1 - t * .92); pos.push(-w, t, 0, w, t, 0); uvs.push(0, t, 1, t); if (i < segs) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); } }
   bg.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); bg.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2)); bg.setIndex(idx); bg.computeVertexNormals();
   const ig = new THREE.InstancedBufferGeometry().copy(bg); ig.instanceCount = GN; const off = new Float32Array(GN * 4);
   for (let i = 0; i < GN; i++) { off[i * 4] = (Math.random() * 2 - 1) * GR; off[i * 4 + 1] = (Math.random() * 2 - 1) * GR; off[i * 4 + 2] = Math.random(); off[i * 4 + 3] = Math.random() * Math.PI * 2; }
@@ -132,14 +132,14 @@ const grassU = { uTime: { value: 0 }, uCam: { value: new THREE.Vector2() }, uR: 
       .replace("#include <begin_vertex>", `
       vec2 wp = uCam + mod(aOff.xy - uCam + uR, 2.0 * uR) - uR; vec2 hdv = hd(wp); float dist = length(wp - uCam);
       float keep = step(aOff.z, hdv.y) * (1.0 - smoothstep(uR * .7, uR, dist)); vFade = keep; vT = position.y; vRnd = aOff.z;
-      float hgt = (.25 + aOff.z * .5) * keep; float c = cos(aOff.w), s = sin(aOff.w);
+      float hgt = (.16 + aOff.z * .34 + step(.93, fract(aOff.z * 13.7)) * .25) * keep; float c = cos(aOff.w), s = sin(aOff.w);
       vec3 transformed = vec3(position.x * c, position.y * hgt, position.x * s);
       float wv = sin(uTime * 1.7 + wp.x * .35 + wp.y * .22) * .5 + sin(uTime * 3.1 + wp.x * .9) * .2;
       float lean = (fract(aOff.z * 7.31) - .5) * .9, yy = position.y * position.y * hgt; transformed += vec3(-s, 0.0, c) * lean * yy;
       transformed.x += wv * .16 * yy; transformed.z += wv * .07 * yy + .06 * yy;
       transformed += vec3(wp.x, hdv.x - .03, wp.y);`).replace("#include <beginnormal_vertex>", "vec3 objectNormal = vec3(0.0, 1.0, 0.0);");
     s.fragmentShader = s.fragmentShader.replace("#include <common>", "#include <common>\nvarying float vT; varying float vRnd; varying float vFade;").replace("#include <map_fragment>", `
-      if (vFade < .01) discard; vec3 base = mix(vec3(.04, .07, .015), vec3(.08, .12, .03), vRnd), tip = mix(vec3(.36, .42, .12), vec3(.58, .54, .22), vRnd);
+      if (vFade < .01) discard; vec3 base = mix(vec3(.06, .09, .02), vec3(.11, .14, .04), vRnd), tip = mix(vec3(.42, .5, .16), vec3(.7, .62, .3), vRnd * vRnd);
       diffuseColor.rgb = mix(base, tip, smoothstep(0.0, 1.0, vT)) * (.85 + vRnd * .3) * (.35 + .65 * vT);`); };
   const grass = new THREE.Mesh(ig, gm); grass.frustumCulled = false; grass.receiveShadow = true; scene.add(grass); }
 
