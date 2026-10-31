@@ -1893,6 +1893,7 @@ function cardLabels(root){
   });
 }
 function render(){
+  syncBadge();
   if (vcIsFull()){ vcStage(); vcRender(); return; }
   if (S.view === "focus" && document.getElementById("fo") && $("#app").contains(document.getElementById("fo"))){ renderTabs(); focusFill(); vcRender(); return; }
   if (S.view !== "campagnes") document.documentElement.classList.remove("gs-lock");
@@ -1942,7 +1943,7 @@ function notifyInit(){}
 function notifyNew(){
   if (!NOTIF_SEEN){ NOTIF_SEEN = new Set(S.d.messages.map(m => m.id)); return; }
   const fresh = S.d.messages.filter(m => !NOTIF_SEEN.has(m.id)); fresh.forEach(m => NOTIF_SEEN.add(m.id));
-  if (!notifOn() || S.preview) return;
+  if (!notifOn() || S.preview || pushOn()) return;
   if (!document.hidden && S.view === "messagerie") return;
   fresh.filter(m => m.who !== S.me && Date.now() - Date.parse(m.at || 0) < 120000).slice(-3).forEach(m => {
     try {
@@ -2015,7 +2016,52 @@ function pmCompte(w){
   const c4 = pmCard("Session"); c4.appendChild(btn("Se déconnecter","", () => GC.logout())); w.appendChild(c4);
 }
 
+/* Notifications push : le message arrive en entier sur l’écran verrouillé, même application fermée, et la pastille de l’icône compte les non lus */
+const pushKey = () => "gacolet-push-" + (S.user && S.user.id ? S.user.id : (S.me || ""));
+const pushOn = () => store.get(pushKey()) === true && "Notification" in window && Notification.permission === "granted";
+const pushOk = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
+const standalone = () => window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+let BADGE_N = -1;
+function syncBadge(){
+  if (!S.d || !S.d.messages) return; let n = 0; try { n = unreadRole(); } catch(e){ return; }
+  if (n === BADGE_N) return; BADGE_N = n;
+  try { if (navigator.setAppBadge){ n ? navigator.setAppBadge(n) : navigator.clearAppBadge(); } } catch(e){}
+  try { navigator.serviceWorker && navigator.serviceWorker.controller && navigator.serviceWorker.controller.postMessage({ type: "badge", n }); } catch(e){}
+}
+async function pushEnable(){
+  if (!pushOk()){ toast(isIOS() && !standalone() ? "Sur iPhone : installe d’abord l’application sur l’écran d’accueil, puis ouvre-la depuis l’icône." : "Cet appareil ne gère pas les notifications."); return false; }
+  const p = await Notification.requestPermission();
+  if (p !== "granted"){ toast("Notifications refusées : autorise-les dans les réglages de l’appareil."); return false; }
+  try {
+    const reg = await navigator.serviceWorker.register("/sw.js"); await navigator.serviceWorker.ready;
+    const { key } = await GC.api("GET","/api/g-push/key");
+    const raw = atob(key.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((key.length + 3) % 4)), k = new Uint8Array([...raw].map(c => c.charCodeAt(0)));
+    let sub = await reg.pushManager.getSubscription(); if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: k });
+    await GC.api("POST","/api/g-push", { sub: sub.toJSON() });
+    store.set(pushKey(), true); BADGE_N = -1; syncBadge(); toast("Notifications activées sur cet appareil."); return true;
+  } catch(e){ toast("Activation impossible : " + e.message); return false; }
+}
+async function pushDisable(){
+  try { const reg = await navigator.serviceWorker.getRegistration("/"); const sub = reg && await reg.pushManager.getSubscription(); if (sub){ await GC.api("POST","/api/g-push/off", { endpoint: sub.endpoint }); await sub.unsubscribe(); } } catch(e){}
+  store.set(pushKey(), false); toast("Notifications coupées sur cet appareil.");
+}
+if ("serviceWorker" in navigator){
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
+  navigator.serviceWorker.addEventListener("message", e => { const d = e.data || {}; if (d.type !== "open-chat") return;
+    const shoot = String(d.ch).startsWith("tg:"); S.ui.msgMode = shoot ? "shoot" : "main"; if (d.ch){ if (shoot) S.ui.msgShoot = d.ch; else S.ui.msgCh = d.ch; } remember(); go("messagerie"); });
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden){ BADGE_N = -1; syncBadge(); } });
 function pmNotif(w){
+  const pc = pmCard("Notifications sur ton téléphone et ton ordinateur", "Chaque message arrive en entier sur l’écran, comme sur WhatsApp, même quand l’application est fermée. La pastille sur l’icône compte les messages non lus.");
+  const on = pushOn();
+  const row = el("div","pm-actions");
+  if (on){ row.append(btn("Envoyer une notification de test","", async () => { try { const r = await GC.api("POST","/api/g-push/test"); toast(r.sent ? "Envoyée, elle arrive dans quelques secondes." : "Aucun appareil abonné : désactive puis réactive."); } catch(e){ toast(e.message); } }), btn("Couper sur cet appareil","", async () => { await pushDisable(); render(); })); }
+  else row.appendChild(btn("Activer les notifications","lemon", async () => { if (await pushEnable()) render(); }));
+  pc.appendChild(row);
+  pc.appendChild(el("p","pm-note", on ? "Activées sur cet appareil. À faire sur chaque appareil (téléphone, ordinateur)." : isIOS() && !standalone() ? "Sur iPhone : ouvre l’application depuis son icône sur l’écran d’accueil (Partager, puis Sur l’écran d’accueil), puis reviens ici." : "À activer sur chaque appareil : téléphone et ordinateur."));
+  w.appendChild(pc);
+  if (on) return;
   const c = pmCard("Nouveaux messages", "Une notification quand quelqu’un t’écrit, tant que l’application est ouverte sur cet appareil, même en arrière-plan.");
   const lab = el("label","pm-tg"); const cb = el("input"); cb.type = "checkbox"; cb.checked = notifOn(); lab.append(cb, el("span",null,"Recevoir les notifications sur cet appareil"));
   cb.onchange = () => {
