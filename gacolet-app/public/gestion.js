@@ -634,7 +634,10 @@ const prList = () => FIN().filter(x => x.kind === "prelevement" && x.active !== 
 const pjList = () => FIN().filter(x => x.kind === "projet").sort((a, b) => (a.client || "").localeCompare(b.client || "", "fr"));
 const prDate = (p, mk) => mk + "-" + String(Math.min(28, Number(p.day) || 5)).padStart(2, "0");
 const FIN_START = "2026-11"; // suivi des prélèvements à partir de novembre 2026
-const prRunsIn = (p, mk) => mk >= FIN_START && (!p.start || p.start <= mk);
+const prRunsIn = (p, mk) => mk >= FIN_START && (!p.start || p.start <= mk) && (!p.end || mk <= p.end) && !(p.skip || []).includes(mk);
+// CA estimé d'un mois : abonnements prélevés ce mois-là (montant maximum pour les variables) et échéances de projets prévues
+const nextMonth = () => addMonths(monthKey() + "-01", 1).slice(0, 7);
+function caEstimate(mk){ const subs = prList().filter(p => prRunsIn(p, mk)), s = subs.reduce((a, p) => a + (Number(p.amount) || 0), 0), dues = pjList().reduce((a, j) => a + (j.due || []).filter(x => !x.done && (x.date || "").slice(0, 7) === mk).reduce((b, x) => b + (Number(x.amount) || 0), 0), 0); return { total: s + dues, subs: s, dues, n: subs.length }; }
 const payOf = (p, mk) => { const v = (p.paid || {})[mk]; return v ? (typeof v === "object" ? v : { date: v, amount: Number(p.amount) || 0 }) : null; };
 function finEvents(){ // tout ce qui est arrivé, tous types confondus
   const out = []; prList().forEach(p => Object.keys(p.paid || {}).forEach(mk => { const v = payOf(p, mk); out.push({ date: v.date, client: p.client, label: "Prélèvement " + monthLabel(mk) + (p.label ? ", " + p.label : ""), amount: Number(v.amount) || 0 }); }));
@@ -647,11 +650,11 @@ function finUpcoming(days){ const t0 = today(), t1 = addDays(t0, days), out = []
 function markPaid(p, mk){ openForm({ key:"fpp", title:"Prélèvement encaissé, " + p.client, intro: monthLabel(mk), values:{ date: today(), amount: p.amount || "" },
   fields:[{k:"date",label:"Encaissé le",type:"date",half:true,req:"Indique la date."},{k:"amount",label:"Montant (€ HT)",type:"number",half:true}],
   onSave: o => patch("finance", p.id, { paid: Object.assign({}, p.paid || {}, { [mk]: { date: o.date, amount: Number(o.amount) || 0 } }) }) }); }
-function editPr(p){ openForm({ key:"fpr", title: p.id ? "Prélèvement, " + p.client : "Nouveau prélèvement", values: Object.assign({ day: 5, active: true }, p),
+function editPr(p){ openForm({ key:"fpr", title: p.id ? "Prélèvement, " + p.client : "Nouveau prélèvement", values: Object.assign({ day: 5, active: true }, p, { skipTxt: (p.skip || []).join(", ") }),
   fields:[{k:"client",label:"Client",list:clientNames(),req:"Indique le client."},{k:"label",label:"Formule",half:true},{k:"amount",label:"Montant mensuel (€ HT)",type:"number",half:true},
-    {k:"day",label:"Jour du prélèvement",type:"number",half:true},{k:"start",label:"Premier mois",type:"month",half:true},{k:"variable",label:"Montant variable (au prorata)",type:"check"},{k:"active",label:"Prélèvement actif",type:"check"}],
+    {k:"day",label:"Jour du prélèvement",type:"number",half:true},{k:"start",label:"Premier mois",type:"month",half:true},{k:"end",label:"Dernier mois (vide si sans fin)",type:"month",half:true},{k:"skipTxt",label:"Mois sans prélèvement",ph:"Ex. 2026-11, 2027-01",half:true},{k:"variable",label:"Montant variable (au prorata)",type:"check"},{k:"active",label:"Prélèvement actif",type:"check"}],
   onDelete: p.id ? () => remove("finance", p.id) : null,
-  onSave: o => save("finance", p.id || null, Object.assign(p.id ? strip(p) : { kind: "prelevement", paid: {} }, o, { amount: Number(o.amount) || 0, day: Number(o.day) || 5 })) }); }
+  onSave: o => { const skip = String(o.skipTxt || "").split(/[ ,;]+/).filter(x => /^\d{4}-\d{2}$/.test(x)); delete o.skipTxt; save("finance", p.id || null, Object.assign(p.id ? strip(p) : { kind: "prelevement", paid: {} }, o, { amount: Number(o.amount) || 0, day: Number(o.day) || 5, skip })); } }); }
 function editPj(j){ openForm({ key:"fpj", title: j.id ? (j.title || "Projet") : "Nouveau projet", values: Object.assign({}, j),
   fields:[{k:"client",label:"Client",list:clientNames(),req:"Indique le client."},{k:"title",label:"Projet",ph:"Ex. site internet, film de présentation"},{k:"total",label:"Montant total (€ HT)",type:"number",half:true},{k:"note",label:"Détail",half:true}],
   onDelete: j.id ? () => remove("finance", j.id) : null,
@@ -662,7 +665,8 @@ function vFinance(root){
   const expected = prs.filter(p => prRunsIn(p, mk)).reduce((a, p) => a + (Number(p.amount) || 0), 0), inMonth = ev.filter(e => (e.date || "").slice(0, 7) === mk).reduce((a, e) => a + e.amount, 0);
   const next30 = up.filter(x => x.date <= addDays(today(), 30)).reduce((a, x) => a + x.amount, 0), pjLeft = pjList().reduce((a, j) => a + Math.max(0, (Number(j.total) || 0) - (j.payments || []).reduce((s, x) => s + (Number(x.amount) || 0), 0)), 0);
   root.appendChild(head("Finance", "Prélèvements, encaissements et projets. Visible par Matis et Gabriel seulement.", [addBtn("Nouveau prélèvement", () => editPr({})), addBtn("Nouveau projet", () => editPj({}))]));
-  const k = el("div","fin-kpis"); [[euro(expected), "prélèvements prévus en " + monthLabel(mk)],[euro(inMonth), "encaissés en " + monthLabel(mk)],[euro(next30), "à venir sur 30 jours"],[euro(pjLeft), "reste à encaisser sur les projets"]].forEach(([n, l]) => { const c = el("div","fin-kpi"); c.append(el("b",null,n), el("span",null,l)); k.appendChild(c); }); root.appendChild(k);
+  const nm = nextMonth(), est = caEstimate(nm);
+  const k = el("div","fin-kpis"); [[euro(est.total), "CA estimé en " + monthLabel(nm) + " (" + plural(est.n, "abonnement") + (est.dues ? " et " + euro(est.dues) + " d’échéances" : "") + ")"],[euro(expected), "prélèvements prévus en " + monthLabel(mk)],[euro(inMonth), "encaissés en " + monthLabel(mk)],[euro(next30), "à venir sur 30 jours"],[euro(pjLeft), "reste à encaisser sur les projets"]].forEach(([n, l]) => { const c = el("div","fin-kpi"); c.append(el("b",null,n), el("span",null,l)); k.appendChild(c); }); root.appendChild(k);
   // À venir
   root.appendChild(el("h2","fin-h","Ce qui va arriver"));
   { const {w, tb} = table(["Date","Client","Objet","Montant",""]); if (!up.length) root.appendChild(el("p","empty","Rien de prévu sur les 35 prochains jours."));
@@ -682,7 +686,7 @@ function vFinance(root){
   // Prélèvements
   root.appendChild(el("h2","fin-h","Prélèvements mensuels"));
   { const {w, tb} = table(["Client","Formule","Montant","Jour","~" + monthLabel(mk)]);
-    prs.forEach(p => { const tr = el("tr","row"); tr.onclick = () => editPr(p); const v = payOf(p, mk); td(tr, clientTag(p.client),"nw"); td(tr, el("div","note",(p.label || "") + (p.start && p.start > mk ? ", dès " + monthLabel(p.start) : "")));
+    prs.forEach(p => { const tr = el("tr","row"); tr.onclick = () => editPr(p); const v = payOf(p, mk); td(tr, clientTag(p.client),"nw"); td(tr, el("div","note",(p.label || "") + (p.start && p.start > mk ? ", dès " + monthLabel(p.start) : "") + (p.end ? ", jusqu’à " + monthLabel(p.end) : "") + ((p.skip || []).length ? ", pas en " + p.skip.map(monthLabel).join(", ") : "")));
       td(tr, euro(p.amount) + (p.variable ? " max" : ""),"nw"); td(tr, "le " + (p.day || 5),"nw hm");
       if (!prRunsIn(p, mk)) td(tr, "pas encore","nw hm muted"); else if (v) td(tr, el("span","pill ok","Encaissé le " + fmtFR(v.date)),"nw hm"); else { const b = btn("Encaissé","sm", e => { e.stopPropagation(); markPaid(p, mk); }); td(tr, b, "nw hm"); } tb.appendChild(tr); });
     const tr = el("tr","band"); const c = el("td",null,"TOTAL " + euro(prs.reduce((a, p) => a + (Number(p.amount) || 0), 0)) + " HT PAR MOIS"); c.colSpan = 5; tr.appendChild(c); tb.appendChild(tr); root.appendChild(w); }
@@ -717,7 +721,8 @@ function vChalet(root){
   const doc = id => S.d.ca.find(x => x.id === id) || {}, mk = monthKey(), mi = Math.max(0, P.months.findIndex(m => m.month === mk)), M = P.months[mi] || P.months[0], md = doc("m-" + M.month);
   const days = Math.round((parseISO(P.deadline) - parseISO(today())) / 864e5);
   root.appendChild(head("Objectif chalet", "Acte au plus tard le " + fmtFR(P.deadline) + ". Chalet visé " + euro(P.price) + ", trésorerie à l’acte " + euro(P.cashNeeded) + ". Visible par Matis et Gabriel seulement."));
-  const k = el("div","fin-kpis"); [[String(days), "jours avant l’acte"],[euro(Number(md.real) || 0), "CA de " + monthLabel(M.month) + " sur " + euro(M.caObj)],[euro(Number(doc("m-" + M.month).apport) || 0), "apport disponible, visé " + euro(M.apport)],[euro(P.apportGoal), "apport à 50/50 visé fin septembre 2027"]].forEach(([n, l]) => { const c = el("div","fin-kpi"); c.append(el("b",null,n), el("span",null,l)); k.appendChild(c); }); root.appendChild(k);
+  const nm = nextMonth(), nM = P.months.find(m => m.month === nm), est = caEstimate(nm);
+  const k = el("div","fin-kpis"); [[String(days), "jours avant l’acte"],[euro(est.total), "CA estimé en " + monthLabel(nm) + (nM ? " sur " + euro(nM.caObj) + " visés" + (est.total < nM.caObj ? ", il manque " + euro(nM.caObj - est.total) : "") : "")],[euro(Number(md.real) || 0), "CA de " + monthLabel(M.month) + " sur " + euro(M.caObj)],[euro(Number(doc("m-" + M.month).apport) || 0), "apport disponible, visé " + euro(M.apport)],[euro(P.apportGoal), "apport à 50/50 visé fin septembre 2027"]].forEach(([n, l]) => { const c = el("div","fin-kpi"); c.append(el("b",null,n), el("span",null,l)); k.appendChild(c); }); root.appendChild(k);
   const editMonth = m => { const d = doc("m-" + m.month); openForm({ key:"chm", title: monthLabel(m.month), intro:"Objectif du mois : " + euro(m.caObj) + " (minimum " + euro(m.caMin) + ").", values:{ real: d.real || "", tG: d.tG || "", tP: d.tP || "", apport: d.apport || "", signs: d.signs || "" },
     fields:[{k:"real",label:"CA HT fait ce mois (€)",type:"number",half:true},{k:"signs",label:"Signatures cumulées",type:"number",half:true},{k:"tG",label:"Trésorerie Gacolet fin de mois (€)",type:"number",half:true},{k:"tP",label:"Trésorerie Paul Audio fin de mois (€)",type:"number",half:true},{k:"apport",label:"Apport chalet disponible (€)",type:"number"}],
     onSave: o => save("ca", "m-" + m.month, Object.assign({}, d.id ? strip(d) : {}, { month: m.month, real: Number(o.real) || 0, signs: Number(o.signs) || 0, tG: Number(o.tG) || 0, tP: Number(o.tP) || 0, apport: Number(o.apport) || 0 })) }); };
@@ -730,9 +735,9 @@ function vChalet(root){
     root.appendChild(card); }
   // Les 12 mois
   root.appendChild(el("h2","fin-h","Les 12 mois du plan"));
-  { const {w, tb} = table(["Mois","CA visé","~Minimum","CA fait","Écart","~Trésorerie Gacolet","~Trésorerie Paul Audio","~Apport visé","~Apport réel","~Signatures"]);
+  { const {w, tb} = table(["Mois","CA visé","~Minimum","CA estimé","CA fait","Écart","~Trésorerie Gacolet","~Trésorerie Paul Audio","~Apport visé","~Apport réel","~Signatures"]);
     P.months.forEach(m => { const d = doc("m-" + m.month), real = d.real != null ? Number(d.real) : null, past = m.month < mk; const tr = el("tr","row" + (m.month === mk ? " pub" : "") + (real != null && real < m.caMin && past ? " r2" : "")); tr.onclick = () => editMonth(m);
-      td(tr, monthLabel(m.month),"nw ttl"); td(tr, euro(m.caObj),"nw"); td(tr, euro(m.caMin),"nw hm"); td(tr, real != null ? euro(real) : "","nw"); td(tr, real != null ? (real >= m.caObj ? "+" : "") + euro(real - m.caObj) : "","nw");
+      td(tr, monthLabel(m.month),"nw ttl"); td(tr, euro(m.caObj),"nw"); td(tr, euro(m.caMin),"nw hm"); td(tr, m.month >= mk ? euro(caEstimate(m.month).total) : "","nw hm"); td(tr, real != null ? euro(real) : "","nw"); td(tr, real != null ? (real >= m.caObj ? "+" : "") + euro(real - m.caObj) : "","nw");
       td(tr, (d.tG ? euro(d.tG) : "") + " / " + euro(m.gTreso),"nw hm"); td(tr, (d.tP ? euro(d.tP) : "") + " / " + euro(m.pTreso),"nw hm"); td(tr, euro(m.apport),"nw hm"); td(tr, d.apport ? euro(d.apport) : "","nw hm"); td(tr, (d.signs || "") + " / " + m.signs,"nw hm"); tb.appendChild(tr); });
     root.appendChild(w); }
   // Objectifs de Gab : semaine en cours
