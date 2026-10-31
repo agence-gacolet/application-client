@@ -269,6 +269,21 @@ module.exports = function (app, { db, wrap, root }) {
     res.json({ url: "/?apercu=" + u.token });
   }));
 
+  // Mode test : l’agence utilise l’espace d’un client comme lui, actions comprises, sous le nom « Test Agence ».
+  const TEST_MAIL = "test@agence.interne";
+  app.post("/api/g-test-client", auth, ownerOnly, wrap(async (req, res) => {
+    const c = await db.one("SELECT * FROM clients WHERE id = ? AND active = 1", [Number(req.body && req.body.clientId)]);
+    if (!c) return res.status(404).json({ error: "Client introuvable." });
+    let u = await db.one("SELECT * FROM users WHERE client_id = ? AND email = ?", [c.id, TEST_MAIL]);
+    if (!u) {
+      const token = crypto.randomBytes(24).toString("hex");
+      await db.run("INSERT INTO users (client_id, prenom, nom, entreprise, email, tel, activite, zone, reseaux, objectif, clientele, dispo, token, created_at) VALUES (?,?,?,?,?,'','','','','','','',?,?)",
+        [c.id, "Test", "Agence", c.name, TEST_MAIL, token, stamp()]);
+      u = await db.one("SELECT * FROM users WHERE client_id = ? AND email = ?", [c.id, TEST_MAIL]);
+    }
+    res.json({ url: "/?apercu=" + u.token + "&test=1" });
+  }));
+
   // ---------- Meta : suivi des contacts par client (tables de l’espace client) ----------
   const metaRole = (req, res, next) => req.user && (req.user.role === "owner" || req.user.role === "commercial") ? next() : res.status(403).json({ error: "Réservé aux propriétaires et aux commerciaux." });
   app.get("/api/g-meta", auth, metaRole, wrap(async (req, res) => {
@@ -675,7 +690,7 @@ module.exports = function (app, { db, wrap, root }) {
   // Liste des groupes clients pour la messagerie de l’équipe
   app.get("/api/g-cgroups", auth, wrap(async (req, res) => {
     const cl = await db.all("SELECT id, name FROM clients WHERE active = 1 ORDER BY name");
-    const us = await db.all("SELECT client_id, prenom, nom FROM users WHERE token NOT LIKE 'retire-%' AND email <> ?", [PREVIEW_MAIL]);
+    const us = await db.all("SELECT client_id, prenom, nom FROM users WHERE token NOT LIKE 'retire-%' AND email <> ? AND email <> ?", [PREVIEW_MAIL, "test@agence.interne"]);
     res.json({ groups: cl.map(c => ({ ch: "cg:" + c.id, id: c.id, room: visioRoom(c.id), name: c.name, people: us.filter(u => u.client_id === c.id).map(u => (u.prenom + " " + u.nom).trim()) })) });
   }));
 
