@@ -91,6 +91,7 @@ module.exports = function (app, { db, wrap, root }) {
   function visible(u, col, d) {
     if (!canRead(u, col)) return false;
     if (col === "messages" && String(d.ch || "").startsWith("dm:")) return String(d.ch).slice(3).split("|").includes(u.name);
+    if (col === "messages" && String(d.ch || "").startsWith("cdm:")) return String(d.ch).split("|")[1] === u.name;
     if (u.role === "owner") return true;
     if (col === "tasks") return d.who === u.name;
     if (col === "events") return Array.isArray(d.who) && d.who.includes(u.name);
@@ -103,6 +104,7 @@ module.exports = function (app, { db, wrap, root }) {
       if (after && after.who !== u.name) return "Message refusé.";
       if (after && String(after.ch || "").startsWith("dm:") && !String(after.ch).slice(3).split("|").includes(u.name)) return "Conversation privée.";
       if (before && !after && String(before.ch || "").startsWith("dm:") && before.who !== u.name) return "Conversation privée.";
+      if (after && String(after.ch || "").startsWith("cdm:") && String(after.ch).split("|")[1] !== u.name) return "Conversation privée.";
       return "";
     }
     if (u.role === "owner") return "";
@@ -349,6 +351,17 @@ module.exports = function (app, { db, wrap, root }) {
   const letters = n => Array.from(crypto.randomBytes(n), b => "abcdefghijklmnopqrstuvwxyz"[b % 26]).join("");
   const inviteTok = d => { const p = Buffer.from(JSON.stringify(d)).toString("base64url"); return "g1." + p + "." + sign("g1" + p); };
   const gauth = (req, res, next) => ensure().then(async () => {
+    const ct = String(req.get("authorization") || "").replace(/^Bearer\s+/i, "");
+    if (!req.get("x-gc-guest") && !req.query.i && ct && !ct.startsWith("retire-")) {
+      const u = await db.one("SELECT * FROM users WHERE token = ?", [ct]);
+      const c = u && await db.one("SELECT * FROM clients WHERE id = ? AND active = 1", [u.client_id]);
+      if (!c) return res.status(401).json({ error: "Session expirée. Rouvrez votre espace client." });
+      if (u.email === PREVIEW_MAIL && req.method !== "GET") return res.status(403).json({ error: "Aperçu de l’agence : lecture seule." });
+      const cap = x => { x = String(x || "").trim(); return x.charAt(0).toUpperCase() + x.slice(1); };
+      const room = "visio" + String(c.id).split("").map(x => "abcdefghij"[Number(x)]).join(""), name = (cap(u.prenom) + " " + cap(u.nom)).trim() || c.name;
+      req.inv = { room, label: "Visio mensuelle, " + c.name, by: "l’agence", name };
+      req.user = { id: "c:" + c.id + ":" + u.id, name, guest: true, client: true, room }; return next();
+    }
     const [v, p, sg] = String(req.get("x-gc-guest") || req.query.i || "").split(".");
     if (v !== "g1" || !p || !sg || !eq(sg, sign("g1" + p))) return res.status(401).json({ error: "Lien d’invitation invalide." });
     let d; try { d = JSON.parse(Buffer.from(p, "base64url").toString()); } catch (e) { return res.status(401).json({ error: "Lien d’invitation invalide." }); }
@@ -360,7 +373,7 @@ module.exports = function (app, { db, wrap, root }) {
   const guestRoom = (req, res, next) => { if (req.user.guest) { const r = String((req.body && req.body.room) || req.query.room || ""); if (r !== req.user.room) return res.status(403).json({ error: "Salon non autorisé." }); } next(); };
   const hJoin = (req, res) => {
     const room = String((req.body || {}).room || ""); if (!okRoom(room)) return res.status(400).json({ error: "Salon inconnu." });
-    const name = req.user.guest ? (String((req.body || {}).name || "").replace(/\s+/g, " ").trim().slice(0, 40) || "Invité") + " (invité)" : req.user.name;
+    const name = req.user.client ? req.user.name : req.user.guest ? (String((req.body || {}).name || "").replace(/\s+/g, " ").trim().slice(0, 40) || "Invité") + " (invité)" : req.user.name;
     const m = roomOf(room), pid = newId();
     const peers = [...m.entries()].map(([id, p]) => ({ pid: id, name: p.name }));
     m.forEach(o => deliver(o, { type: "join", pid, name }));
@@ -422,7 +435,7 @@ module.exports = function (app, { db, wrap, root }) {
     res.json({ ok: true });
   }));
   // Côté invité (page /visio, sans compte)
-  app.get("/api/rtc/g/info", gauth, (req, res) => res.json({ room: req.inv.room, label: req.inv.label, by: req.inv.by }));
+  app.get("/api/rtc/g/info", gauth, (req, res) => res.json({ room: req.inv.room, label: req.inv.label, by: req.inv.by, name: req.inv.name || "", client: !!req.user.client }));
   app.post("/api/rtc/g/join", gauth, guestRoom, hJoin);
   app.get("/api/rtc/g/poll", gauth, guestRoom, hPoll);
   app.post("/api/rtc/g/signal", gauth, guestRoom, hSignal);
@@ -557,9 +570,17 @@ module.exports = function (app, { db, wrap, root }) {
     const c = await db.one("SELECT * FROM clients WHERE id = ? AND active = 1", [u.client_id]);
     if (!c) return res.status(401).json({ error: "Compte désactivé. Contactez l’agence." });
     if (u.email === PREVIEW_MAIL && req.method !== "GET") return res.status(403).json({ error: "Aperçu de l’agence : lecture seule, rien n’est envoyé." });
-    req.cu = u; req.cl = c; req.cname = (String(u.prenom || "").trim() + " " + String(u.nom || "").trim()).trim() || c.name; next();
+    req.cu = u; req.cl = c; const cap = x => { x = String(x || "").trim(); return x.charAt(0).toUpperCase() + x.slice(1); };
+    req.cname = (cap(u.prenom) + " " + cap(u.nom)).trim() || c.name; next();
   })().catch(e => { console.error(e); res.status(500).json({ error: "Erreur du serveur." }); });
   const cgOf = c => "cg:" + c.id;
+  const visioRoom = id => "visio" + String(id).split("").map(x => "abcdefghij"[Number(x)]).join("");
+  async function clientChOk(c, ch) {
+    ch = String(ch || "");
+    if (ch === "cg:" + c.id || ch === "tg:cg:" + c.id) return true;
+    const m = ch.match(/^cdm:(\d+)\|(.{1,80})$/);
+    return !!(m && Number(m[1]) === c.id && await db.one("SELECT id FROM gusers WHERE name = ? AND disabled = 0", [m[2]]));
+  }
   const cleanFiles = a => (Array.isArray(a) ? a : []).slice(0, 10).filter(f => f && /^\/f\/[a-f0-9]{32}(\.[a-z0-9]{1,7})?$/.test(String(f.url || "")))
     .map(f => ({ url: String(f.url), name: String(f.name || "").slice(0, 160), type: String(f.type || "").slice(0, 80), size: Number(f.size) || 0 }));
   async function docsLike(col, needle) {
@@ -568,22 +589,27 @@ module.exports = function (app, { db, wrap, root }) {
   }
   app.get("/api/c/feed", cauth, wrap(async (req, res) => {
     const c = req.cl, ch = cgOf(c);
-    const messages = (await docsLike("messages", JSON.stringify(ch))).filter(m => m.ch === ch).sort((a, b) => String(a.at || "").localeCompare(String(b.at || ""))).slice(-400);
+    const mine = m => m.ch === ch || m.ch === "tg:" + ch || String(m.ch || "").startsWith("cdm:" + c.id + "|");
+    const raw = [].concat(await docsLike("messages", '"ch":"' + ch + '"'), await docsLike("messages", '"ch":"tg:' + ch + '"'), await docsLike("messages", '"ch":"cdm:' + c.id + '|'));
+    const messages = raw.filter(mine).filter((m, i, a) => a.findIndex(x => x.id === m.id) === i).sort((a, b) => String(a.at || "").localeCompare(String(b.at || ""))).slice(-1500);
     const idees = (await docsLike("idees", '"cid":' + c.id)).filter(i => Number(i.cid) === c.id).sort((a, b) => String(b.at || "").localeCompare(String(a.at || "")));
-    const team = (await db.all("SELECT name, info FROM gusers WHERE disabled = 0 ORDER BY created_at")).map(r => { const i = infoOf(r); return { name: r.name, avatar: i.avatar || "", poste: i.poste || "" }; });
-    res.json({ me: { name: req.cname, prenom: req.cu.prenom, entreprise: req.cu.entreprise }, client: { name: c.name }, preview: req.cu.email === PREVIEW_MAIL, messages, idees, team });
+    const team = (await db.all("SELECT name, role, info FROM gusers WHERE disabled = 0 ORDER BY created_at")).map(r => { const i = infoOf(r); return { name: r.name, role: r.role, avatar: i.avatar || "", poste: i.poste || "" }; });
+    const vr = visioRoom(c.id), here = RTC.has(vr) ? [...new Set([...RTC.get(vr).values()].map(p => p.name))] : [];
+    res.json({ visio: { room: vr, here }, me: { name: req.cname, prenom: req.cname.split(" ")[0], entreprise: req.cu.entreprise }, client: { name: c.name, id: c.id }, preview: req.cu.email === PREVIEW_MAIL, messages, idees, team });
   }));
   app.post("/api/c/msg", cauth, wrap(async (req, res) => {
     const b = req.body || {}, text = String(b.text || "").trim().slice(0, 4000), files = cleanFiles(b.files);
     if (!text && !files.length) return res.status(400).json({ error: "Message vide." });
+    const ch = b.ch ? String(b.ch) : cgOf(req.cl);
+    if (!await clientChOk(req.cl, ch)) return res.status(403).json({ error: "Conversation inconnue." });
     const id = newId();
-    await put("messages", id, Object.assign({ ch: cgOf(req.cl), text, who: req.cname, ext: 1, at: new Date().toISOString() }, files.length ? { files } : {}));
+    await put("messages", id, Object.assign({ ch, text, who: req.cname, ext: 1, at: new Date().toISOString() }, files.length ? { files } : {}));
     res.json({ ok: true, id });
   }));
   app.delete("/api/c/msg/:id", cauth, wrap(async (req, res) => {
     const id = String(req.params.id); if (!okId(id)) return res.status(400).json({ error: "Demande invalide." });
     const cur = await current("messages", id);
-    if (!cur || cur.ch !== cgOf(req.cl) || cur.who !== req.cname || !cur.ext) return res.status(403).json({ error: "Vous ne pouvez retirer que vos propres messages." });
+    if (!cur || !await clientChOk(req.cl, cur.ch) || cur.who !== req.cname || !cur.ext) return res.status(403).json({ error: "Vous ne pouvez retirer que vos propres messages." });
     await db.run("UPDATE docs SET deleted = 1, data = '{}', updated_at = ? WHERE col = ? AND id = ?", [stamp(), "messages", id]);
     res.json({ ok: true });
   }));
@@ -611,7 +637,7 @@ module.exports = function (app, { db, wrap, root }) {
   app.get("/api/g-cgroups", auth, wrap(async (req, res) => {
     const cl = await db.all("SELECT id, name FROM clients WHERE active = 1 ORDER BY name");
     const us = await db.all("SELECT client_id, prenom, nom FROM users WHERE token NOT LIKE 'retire-%' AND email <> ?", [PREVIEW_MAIL]);
-    res.json({ groups: cl.map(c => ({ ch: "cg:" + c.id, name: c.name, people: us.filter(u => u.client_id === c.id).map(u => (u.prenom + " " + u.nom).trim()) })) });
+    res.json({ groups: cl.map(c => ({ ch: "cg:" + c.id, id: c.id, room: visioRoom(c.id), name: c.name, people: us.filter(u => u.client_id === c.id).map(u => (u.prenom + " " + u.nom).trim()) })) });
   }));
 
   app.get(["/gestion", "/gestion/"], (req, res) => res.sendFile(path.join(root, "public", "gestion.html")));
