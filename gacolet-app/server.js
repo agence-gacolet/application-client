@@ -109,7 +109,7 @@ app.get("/api/me", mw(auth), wrap(async (req, res) => {
 // Valider ou demander une modification
 app.post("/api/decision", mw(auth), wrap(async (req, res) => {
   const { postId, status, note, title, date } = req.body || {};
-  if (!/^mc\d+$/.test(String(postId)) || !["ok", "mod", "no"].includes(status)) return res.status(400).json({ error: "Demande invalide." });
+  if (!/^mc\d+$/.test(String(postId)) || !["ok", "mod"].includes(status)) return res.status(400).json({ error: "Demande invalide." });
   if (status === "mod" && !clean(note)) return res.status(400).json({ error: "Écrivez ce qu'il faut changer." });
   await db.run("INSERT INTO decisions (client_id, post_id, post_title, post_date, status, note, user_id, created_at) VALUES (?,?,?,?,?,?,?,?)",
     [req.client.id, postId, clean(title, 200), clean(date, 30), status, clean(note, 2000), req.user.id, now()]);
