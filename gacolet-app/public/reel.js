@@ -25,7 +25,7 @@ THREE.ShaderChunk.fog_fragment = THREE.ShaderChunk.fog_fragment.replace("float f
 /* ---------- Moteur ---------- */
 const canvas = $("#gl");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance" });
-renderer.setPixelRatio(Math.min(devicePixelRatio, LOWQ ? 1 : 1.5)); renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Q.has("hd") ? Math.min(devicePixelRatio, 1.5) : 1); renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.AgXToneMapping; renderer.toneMappingExposure = 1.0;
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(0xC9B79A, 0.0105);
@@ -66,8 +66,8 @@ async function phModel(id, res) { const f = await phInfo(id), g = f.gltf[res || 
 async function phHdri(id) { const f = await phInfo(id); return new Promise((ok, ko) => new RGBELoader().load(f.hdri["2k"].hdr.url, ok, undefined, ko)); }
 
 /* ---------- Lumière : le soleil est retrouvé dans la photo du ciel ---------- */
-const sun = new THREE.DirectionalLight(0xFFE2B8, 3); sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096);
-Object.assign(sun.shadow.camera, { left: -60, right: 60, top: 60, bottom: -60, near: 1, far: 400 }); sun.shadow.bias = -0.0002; sun.shadow.normalBias = 0.04; scene.add(sun, sun.target);
+const sun = new THREE.DirectionalLight(0xFFE2B8, 3); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -38, right: 38, top: 38, bottom: -38, near: 1, far: 320 }); sun.shadow.bias = -0.0002; sun.shadow.normalBias = 0.04; scene.add(sun, sun.target);
 const SUN = new THREE.Vector3(.4, .5, .3).normalize();
 const pmrem = new THREE.PMREMGenerator(renderer);
 const SKIES = { 1: ["kloofendal_48d_partly_cloudy_puresky", "Midi"], 2: ["belfast_sunset_puresky", "Fin d’après-midi"], 3: ["evening_road_01_puresky", "Crépuscule"] };
@@ -113,7 +113,7 @@ async function buildTerrain() { say("Chargement des sols…");
   terrain.material = mat; }
 
 /* ---------- Herbe : des dizaines de milliers de brins autour du joueur, qui suivent le relief et le vent ---------- */
-const GR = LOWQ ? 28 : 40, GN = LOWQ ? 60000 : 140000;
+const GR = LOWQ ? 26 : 34, GN = LOWQ ? 50000 : 95000;
 const grassU = { uTime: { value: 0 }, uCam: { value: new THREE.Vector2() }, uR: { value: GR }, hMap: { value: hmTex }, hMin: { value: hMin }, hRange: { value: hMax - hMin }, hSize: { value: WORLD } };
 { const bg = new THREE.BufferGeometry(), segs = 4, pos = [], uvs = [], idx = [];
   for (let i = 0; i <= segs; i++) { const t = i / segs, w = .045 * (1 - t * .85); pos.push(-w, t, 0, w, t, 0); uvs.push(0, t, 1, t); if (i < segs) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); } }
@@ -220,7 +220,7 @@ const cine = new CinePass({ uniforms: { tDiffuse: { value: null }, tDepth: { val
         float fall = 1.0 - smoothstep(0.0, 1.3, length((vUv - sunUV) * vec2(res.x / res.y, 1.0))); c.rgb += sunCol * (s / 48.0) * 1.1 * sunOn * fall; }
       gl_FragColor = c; }` });
 composer.addPass(cine);
-let gtao = null; if (!LOWQ) try { gtao = new GTAOPass(scene, camera, innerWidth, innerHeight); gtao.updateGtaoMaterial({ radius: 1.4, distanceExponent: 1.5, thickness: 2, scale: 1.3, samples: 16 }); gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 16 }); gtao.blendIntensity = .9; composer.addPass(gtao); } catch (e) { console.warn("occlusion", e); }
+let gtao = null; if (Q.has("ao")) try { gtao = new GTAOPass(scene, camera, innerWidth, innerHeight); gtao.updateGtaoMaterial({ radius: 1.4, distanceExponent: 1.5, thickness: 2, scale: 1.3, samples: 16 }); gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 16 }); gtao.blendIntensity = .9; composer.addPass(gtao); } catch (e) { console.warn("occlusion", e); }
 composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), .18, .6, .9));
 composer.addPass(new OutputPass());
 // étalonnage façon western : noirs légèrement relevés et chauds, lumières dorées, couleurs un peu éteintes, grain et vignette
@@ -267,6 +267,7 @@ function step() { requestAnimationFrame(step); const dt = Math.min(clock.getDelt
   cine.uniforms.sunUV.value.set(sp.x * .5 + .5, sp.y * .5 + .5); cine.uniforms.sunOn.value = inF ? 1 : 0; cine.uniforms.sunCol.value.copy(sun.color).multiplyScalar(.9);
   grade.uniforms.time.value = t;
   composer.render(); }
+window.__R = { THREE, renderer, scene, composer, camera, sun, cine, grade, P, CAM };
 
 /* ---------- Démarrage ---------- */
 (async () => {
