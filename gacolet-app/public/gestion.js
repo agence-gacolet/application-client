@@ -34,7 +34,7 @@ const ROLE_VIEWS = {
   commercial: ["accueil","agenda","taches","messagerie","vocal","focus","commercial","clients","montage","publications","idees","campagnes","formation","parametres"]
 };
 const canSee = k => !S.role || S.role === "owner" || (Array.isArray(S.views) ? S.views : ["accueil","parametres"].concat(ROLE_VIEWS[S.role] || [])).includes(k);
-const COLLS = ["events","tasks","commercial","campaigns","rushes","publications","clients","cevents","keydates","posts","edtodo","meta","messages","formations","msheets","idees"];
+const COLLS = ["events","tasks","commercial","campaigns","rushes","publications","clients","cevents","keydates","posts","edtodo","meta","messages","formations","msheets","idees","pilotage","ca"];
 
 /* ---------- Outils ---------- */
 const $ = s => document.querySelector(s);
@@ -334,7 +334,7 @@ function editTask(t){
 function openCommercial(c){
   const late = lateDays(c.nextDate);
   openFacts({ title: c.company,
-    facts: [["Type", c.kind],["Étape", c.stage],["Prochaine action", c.nextAction],["Date", c.nextDate ? fmtDL(c.nextDate)+(late ? ", "+late+" j de retard" : "") : ""],["Dernier contact", c.lastContact],["J0", fmtFR(c.j0)],["Relance", c.relance],["Contact", c.contact],["Compte rendu", c.report],["Notes", c.notes]],
+    facts: [["Type", c.kind],["Provenance", c.source],["Étape", c.stage],["Prochaine action", c.nextAction],["Date", c.nextDate ? fmtDL(c.nextDate)+(late ? ", "+late+" j de retard" : "") : ""],["Dernier contact", c.lastContact],["J0", fmtFR(c.j0)],["Relance", c.relance],["Contact", c.contact],["Compte rendu", c.report],["Notes", c.notes]],
     quick: [["Pas de réponse", () => applyCo(c, coNoAnswer(c), "Relance programmée.")],["Devis envoyé", () => applyCo(c, coQuote(c), "Relance 1 dans 3 jours.")],
             ["Date donnée", () => editCoDate(c)],["Pas intéressé", () => applyCo(c, coNotInterested(c), "Reprise de contact dans 6 mois.")],["Signé", () => applyCo(c, coSigned(c), "Signé : démarrage le prochain jour ouvré.")],
             ["Compte rendu", () => editCoReport(c)]],
@@ -357,7 +357,7 @@ function editCommercial(c){
   openForm({ key:"co", title: c.id ? "Modifier, "+c.company : "Nouveau prospect", values: Object.assign({kind:"Prospect", relance:""}, c),
     fields:[{k:"company",label:"Entreprise",req:"Indique l’entreprise."},{k:"kind",label:"Type",type:"select",options:["Prospect","Client"],half:true},{k:"stage",label:"Étape",half:true,list:["à contacter","à rappeler","rendez-vous pris","proposition envoyée","à clore","client actif","signé"]},
       {k:"nextAction",label:"Prochaine action"},{k:"nextDate",label:"Date",type:"date",half:true},{k:"j0",label:"J0 (contact de départ)",type:"date",half:true},
-      {k:"relance",label:"Relance",half:true,list:["0 sur 4","1 sur 4","2 sur 4","3 sur 4","4 sur 4"]},{k:"contact",label:"Contact",half:true},
+      {k:"relance",label:"Relance",half:true,list:["0 sur 4","1 sur 4","2 sur 4","3 sur 4","4 sur 4"]},{k:"contact",label:"Contact",half:true},{k:"source",label:"Provenance",type:"select",options:[["","Non précisée"],"Réseaux sociaux","Recommandation","Prospection directe","Salon ou événement","Autre"]},
       {k:"lastContact",label:"Dernier contact",type:"textarea",rows:2},{k:"notes",label:"Notes",type:"textarea",rows:4}],
     onCancel: () => c.id ? openCommercial(c) : closeModal(),
     onDelete: c.id ? () => remove("commercial", c.id) : null,
@@ -586,9 +586,94 @@ function vAccueil(root){
   const s = el("div","w2-tiles");
   tiles.forEach(([n, l, f], i) => { const t = el("button","w2-tile" + (n ? "" : " zero")); t.style.animationDelay = (0.45 + i*0.08) + "s"; t.append(el("b",null,String(n)), el("span",null,l)); if (!n) t.appendChild(el("i",null,"C’est calé")); t.onclick = f; s.appendChild(t); });
   W.appendChild(s);
+  boardInto(W);
   /* Le Hameau : le jeu de l’agence, sur ordinateur */
   if (matchMedia("(pointer:fine)").matches && innerWidth >= 900){ const g = el("a","w2-game"); g.href = "/jeu"; g.append(el("b",null,"Entrer dans le Hameau"), el("span",null,"Tes tâches deviennent des quêtes")); W.appendChild(g); }
   root.appendChild(W);
+}
+
+/* ---------- Tableau de pilotage (repris du tableau Veleda) ---------- */
+const DUO = ["Matis","Gabriel"];
+const COM_GOAL = { reels: 10, stories: 2 };
+const monthKey = (d) => (d || today()).slice(0, 7);
+const MONTHS_FR = ["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
+const monthLabel = k => MONTHS_FR[Number(k.slice(5, 7)) - 1] + " " + k.slice(0, 4);
+const euro = n => (Math.round(Number(n) || 0)).toLocaleString("fr-FR") + " €";
+const pilot = id => S.d.pilotage.find(x => x.id === id) || {};
+function bump(col, id, key, delta, base){ const cur = (col === "ca" ? S.d.ca : S.d.pilotage).find(x => x.id === id); const v = Math.max(0, (Number(cur && cur[key]) || 0) + delta);
+  return save(col, id, Object.assign({}, cur ? strip(cur) : base || {}, { [key]: v })).catch(() => {}); }
+function counter(label, val, goal, onPlus, onMinus, unit){
+  const c = el("div","pb-count" + (goal && val >= goal ? " done" : ""));
+  const top = el("div","pb-ctop"); const n = el("b",null,String(val)); top.append(n, el("span",null, goal ? "/ " + goal + (unit ? " " + unit : "") : (unit || "")));
+  const bar = el("div","pb-bar"); const fill = el("i"); fill.style.width = (goal ? Math.min(100, val / goal * 100) : 0) + "%"; bar.appendChild(fill);
+  const bs = el("div","pb-btns"); const m = btn("−","sm", onMinus); m.setAttribute("aria-label","Retirer un, " + label); const p = btn("+","sm lemon", onPlus); p.setAttribute("aria-label","Ajouter un, " + label); bs.append(m, p);
+  c.append(el("p","pb-clab", label), top, bar, bs); return c; }
+function boardInto(W){
+  if (S.role && S.role !== "owner" && !DUO.includes(S.me)) return;
+  const B = el("section","pboard"); B.appendChild(el("h2","w2-lab","Tableau de l’agence"));
+  const grid = el("div","pb-grid");
+  // 1. La com de Gabriel : 10 réels et 2 stories par jour
+  { const id = "com-" + today(), d = pilot(id), base = { date: today(), who: "Gabriel" };
+    const card = el("article","pb-card"); card.appendChild(el("h3",null,"La com de Gab, aujourd’hui"));
+    const row = el("div","pb-row");
+    row.append(counter("Réels", Number(d.reels) || 0, COM_GOAL.reels, () => bump("pilotage", id, "reels", 1, base), () => bump("pilotage", id, "reels", -1, base)),
+               counter("Stories", Number(d.stories) || 0, COM_GOAL.stories, () => bump("pilotage", id, "stories", 1, base), () => bump("pilotage", id, "stories", -1, base)));
+    card.appendChild(row);
+    const wk = el("div","pb-week"); for (let i = 6; i >= 0; i--){ const day = addDays(today(), -i), x = pilot("com-" + day), ok = (Number(x.reels) || 0) >= COM_GOAL.reels && (Number(x.stories) || 0) >= COM_GOAL.stories;
+      const dot = el("span", "pb-day" + (ok ? " ok" : (x.reels || x.stories) ? " part" : "")); dot.title = fmtDL(day) + " : " + (Number(x.reels) || 0) + " réels, " + (Number(x.stories) || 0) + " stories"; dot.textContent = dow(day).slice(0, 1).toUpperCase(); wk.appendChild(dot); }
+    card.append(el("p","pb-note","Objectif : " + COM_GOAL.reels + " réels et " + COM_GOAL.stories + " stories par jour. Les 7 derniers jours :"), wk); grid.appendChild(card); }
+  // 2. Objectifs du mois de Gabriel : rendez-vous et ventes
+  { const mk = monthKey(), id = "obj-" + mk, d = pilot(id), base = { month: mk, who: "Gabriel" };
+    const card = el("article","pb-card"); const h = el("div","pb-h"); h.append(el("h3",null,"Objectifs de Gab, " + monthLabel(mk)));
+    const ed = btn("Objectifs","sm", () => openForm({ key:"pbo", title:"Objectifs de " + monthLabel(mk), intro:"Nombre de rendez-vous et de ventes visés par Gabriel ce mois-ci.", values:{ rdvGoal: d.rdvGoal || "", salesGoal: d.salesGoal || "" },
+      fields:[{k:"rdvGoal",label:"Rendez-vous visés",type:"number",half:true},{k:"salesGoal",label:"Ventes visées",type:"number",half:true}],
+      onSave: o => save("pilotage", id, Object.assign({}, d.id ? strip(d) : base, { rdvGoal: Number(o.rdvGoal) || 0, salesGoal: Number(o.salesGoal) || 0 })) })); h.appendChild(ed); card.appendChild(h);
+    const row = el("div","pb-row");
+    row.append(counter("Rendez-vous", Number(d.rdv) || 0, Number(d.rdvGoal) || 0, () => bump("pilotage", id, "rdv", 1, base), () => bump("pilotage", id, "rdv", -1, base)),
+               counter("Ventes", Number(d.sales) || 0, Number(d.salesGoal) || 0, () => bump("pilotage", id, "sales", 1, base), () => bump("pilotage", id, "sales", -1, base)));
+    card.appendChild(row); if (!d.rdvGoal && !d.salesGoal) card.appendChild(el("p","pb-note","Fixe les objectifs du mois avec le bouton Objectifs.")); grid.appendChild(card); }
+  // Encaissements du client Hugo Maître Nageur : ce qui est encaissé et ce qui manque
+  { const id = "enc-hugo", d = pilot(id), pays = (d.payments || []).slice().sort((a, b) => (a.date || "").localeCompare(b.date || "")), got = pays.reduce((a, x) => a + (Number(x.amount) || 0), 0), total = Number(d.total) || 0;
+    const base = { client: "Hugo Maître Nageur" }, keep = () => Object.assign({}, d.id ? strip(d) : base);
+    const card = el("article","pb-card"); const h = el("div","pb-h"); h.append(el("h3",null,"Hugo Maître Nageur, encaissements"));
+    h.appendChild(btn("Montant dû","sm", () => openForm({ key:"pbt", title:"Montant total dû par Hugo Maître Nageur", values:{ total: d.total || "", note: d.note || "" },
+      fields:[{k:"total",label:"Montant total (€)",type:"number"},{k:"note",label:"Détail",ph:"Ex. forfait vidéo, 3 mois"}],
+      onSave: o => save("pilotage", id, Object.assign(keep(), { total: Number(o.total) || 0, note: o.note || "" })) }))); card.appendChild(h);
+    const big = el("div","pb-big"); big.append(el("b",null, euro(got)), el("span",null, total ? "encaissés sur " + euro(total) : "encaissés, montant total à renseigner")); card.appendChild(big);
+    const bar = el("div","pb-bar xl"); const fill = el("i"); fill.style.width = (total ? Math.min(100, got / total * 100) : 0) + "%"; bar.appendChild(fill); card.appendChild(bar);
+    if (total) card.appendChild(el("p","pb-note" + (total - got > 0 ? " pb-due" : ""), total - got > 0 ? "Il manque " + euro(total - got) + "." : "Tout est encaissé."));
+    if (d.note) card.appendChild(el("p","pb-note", d.note));
+    if (pays.length){ const ul = el("ul","pb-pays"); pays.forEach((x, i) => { const li = el("li"); li.append(el("span",null, fmtFR(x.date) + (x.label ? ", " + x.label : "")), el("b",null, euro(x.amount)));
+        const rm = btn("Retirer","sm", () => { if (!confirm("Retirer cet encaissement ?")) return; save("pilotage", id, Object.assign(keep(), { payments: (d.payments || []).filter(y => y !== x) })).catch(() => {}); }); li.appendChild(rm); ul.appendChild(li); }); card.appendChild(ul); }
+    const add = btn("Ajouter un encaissement","sm lemon", () => openForm({ key:"pba", title:"Encaissement, Hugo Maître Nageur", values:{ date: today(), amount: "", label: "" },
+      fields:[{k:"date",label:"Date",type:"date",half:true,req:"Indique la date."},{k:"amount",label:"Montant (€)",type:"number",half:true,req:"Indique le montant."},{k:"label",label:"Objet",ph:"Ex. acompte, facture d’octobre"}],
+      onSave: o => save("pilotage", id, Object.assign(keep(), { payments: (d.payments || []).concat([{ date: o.date, amount: Number(o.amount) || 0, label: o.label || "" }]) })) }));
+    add.style.marginTop = "10px"; card.appendChild(add); grid.appendChild(card); }
+  // 3. Chiffre d'affaires et plan chalet : Matis et Gabriel uniquement
+  if (DUO.includes(S.me)){ const plan = S.d.ca.find(x => x.id === "plan") || {}, mk = monthKey(), m = S.d.ca.find(x => x.id === "m-" + mk) || {};
+    const months = S.d.ca.filter(x => /^m-\d{4}-\d{2}$/.test(x.id)), total = months.reduce((a, x) => a + (Number(x.real) || 0), 0), goal = Number(plan.goal) || 0;
+    const card = el("article","pb-card pb-ca"); const h = el("div","pb-h"); h.append(el("h3",null,"Objectif chalet"), el("span","pb-lock","Visible par Matis et Gabriel seulement"));
+    const ed = btn("Plan","sm", () => openForm({ key:"pbp", title:"Plan de chiffre d’affaires", intro:"Le montant à atteindre pour le chalet et la date visée.", values:{ goal: plan.goal || "", deadline: plan.deadline || "", start: plan.start || mk },
+      fields:[{k:"goal",label:"Chiffre d’affaires visé au total (€)",type:"number"},{k:"start",label:"Début du plan (mois)",type:"month",half:true},{k:"deadline",label:"Date visée",type:"date",half:true}],
+      onSave: o => save("ca", "plan", { goal: Number(o.goal) || 0, start: o.start || mk, deadline: o.deadline || "" }) })); h.appendChild(ed); card.appendChild(h);
+    const big = el("div","pb-big"); big.append(el("b",null, euro(total)), el("span",null, goal ? "sur " + euro(goal) : "objectif à définir avec le bouton Plan"));
+    const bar = el("div","pb-bar xl"); const fill = el("i"); fill.style.width = (goal ? Math.min(100, total / goal * 100) : 0) + "%"; bar.appendChild(fill); card.append(big, bar);
+    if (isISO(plan.deadline)){ const days = Math.round((parseISO(plan.deadline) - parseISO(today())) / 864e5), left = Math.max(0, goal - total), mLeft = Math.max(1, Math.round(days / 30.4));
+      card.appendChild(el("p","pb-note", (days >= 0 ? "Encore " + plural(days, "jour") + " avant le " + fmtFR(plan.deadline) : "Date visée dépassée") + (goal ? ". Reste " + euro(left) + ", soit " + euro(left / mLeft) + " par mois." : "."))); }
+    const mrow = el("div","pb-row");
+    const mc = counter("Chiffre d’affaires de " + monthLabel(mk), Number(m.real) || 0, Number(m.target) || 0, null, null, "€"); mc.querySelector(".pb-btns").remove();
+    const mb = btn("Saisir le mois","sm lemon", () => openForm({ key:"pbm", title:"Chiffre d’affaires, " + monthLabel(mk), values:{ target: m.target || "", real: m.real || "" },
+      fields:[{k:"target",label:"Objectif du mois (€)",type:"number",half:true},{k:"real",label:"Réalisé (€)",type:"number",half:true}],
+      onSave: o => save("ca", "m-" + mk, { month: mk, target: Number(o.target) || 0, real: Number(o.real) || 0 }) })); mc.appendChild(mb); mrow.appendChild(mc); card.appendChild(mrow);
+    // historique des mois
+    const start = plan.start || mk, list = []; for (let k = start; k <= (isISO(plan.deadline) ? plan.deadline.slice(0, 7) : mk) && list.length < 24; k = addMonths(k + "-01", 1).slice(0, 7)) list.push(k);
+    if (list.length > 1){ const hist = el("div","pb-hist"); const mx = Math.max(1, ...list.map(k => { const x = S.d.ca.find(y => y.id === "m-" + k) || {}; return Math.max(Number(x.target) || 0, Number(x.real) || 0); }));
+      list.forEach(k => { const x = S.d.ca.find(y => y.id === "m-" + k) || {}, col = el("button","pb-m" + (k === mk ? " now" : "")); col.type = "button"; col.title = monthLabel(k) + " : " + euro(x.real) + " réalisés sur " + euro(x.target);
+        const t = el("i","t"); t.style.height = ((Number(x.target) || 0) / mx * 100) + "%"; const r = el("i","r"); r.style.height = ((Number(x.real) || 0) / mx * 100) + "%"; const bars = el("span","bars"); bars.append(t, r); col.append(bars, el("small",null, MONTHS_FR[Number(k.slice(5)) - 1].slice(0, 3)));
+        col.onclick = () => openForm({ key:"pbm", title:"Chiffre d’affaires, " + monthLabel(k), values:{ target: x.target || "", real: x.real || "" }, fields:[{k:"target",label:"Objectif du mois (€)",type:"number",half:true},{k:"real",label:"Réalisé (€)",type:"number",half:true}], onSave: o => save("ca", "m-" + k, { month: k, target: Number(o.target) || 0, real: Number(o.real) || 0 }) });
+        hist.appendChild(col); }); card.append(el("p","pb-note","Mois par mois : objectif en gris, réalisé en vert. Clique sur un mois pour le saisir."), hist); }
+    grid.appendChild(card); }
+  B.appendChild(grid); W.appendChild(B);
 }
 
 /* ---------- Tâches ---------- */
@@ -636,8 +721,9 @@ function vCommercial(root){
   const s = el("input","search"); s.id = "co-q"; s.type = "search"; s.placeholder = "Chercher une entreprise"; s.value = S.ui.coQ; s.oninput = () => { S.ui.coQ = s.value; renderSoon(); };
   f.appendChild(s); root.appendChild(f);
   const {w, tb} = table(["Entreprise","~Étape","Prochaine action","Date","~Retard","~Dernier contact","~Relance"]);
-  [["Client","CLIENTS"],["Prospect","PROSPECTS"]].forEach(([k, label]) => {
-    const rows = all.filter(c => c.kind === k).sort((a,b) => (a.nextDate||"9999").localeCompare(b.nextDate||"9999"));
+  const RS = c => c.kind === "Prospect" && c.source === "Réseaux sociaux";
+  [["Client","CLIENTS"],["Réseaux","PROSPECTS RÉSEAUX"],["Prospect","PROSPECTS"]].forEach(([k, label]) => {
+    const rows = all.filter(c => k === "Réseaux" ? RS(c) : c.kind === k && !RS(c)).sort((a,b) => (a.nextDate||"9999").localeCompare(b.nextDate||"9999"));
     if (!rows.length) return; band(tb, label, rows.length, 7);
     rows.forEach(c => { const n = lateDays(c.nextDate); const tr = el("tr","row"+(lateClass(n) ? " r"+lateClass(n) : "")); tr.onclick = () => openCommercial(c);
       mo(td(tr, c.company,"ttl w"), c.stage); td(tr, el("div","note",c.stage),"hm"); td(tr, el("div","note",c.nextAction)); td(tr, fmtD(c.nextDate),"nw"); td(tr, n ? n+" j" : "","nw hm"); td(tr, el("div","note",c.lastContact),"hm"); td(tr, c.relance,"nw hm"); tb.appendChild(tr); });
