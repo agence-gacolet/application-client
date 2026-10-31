@@ -14,7 +14,8 @@ const MSHORT = ["janv.","févr.","mars","avr.","mai","juin","juil.","août","sep
 const DAYS = ["dimanche","lundi","mardi","mercredi","jeudi","vendredi","samedi"];
 const fmtDL = s => { const [y,m,d] = String(s).slice(0,10).split("-").map(Number); const x = new Date(y, m-1, d); return DAYS[x.getDay()]+" "+d+" "+MONTHS[m-1]; };
 const fmtD = s => { const [y,m,d] = String(s).slice(0,10).split("-").map(Number); return d+" "+MSHORT[m-1]; };
-const hm = d => d.getHours()+" h "+pad(d.getMinutes());
+const hm = d => d.getHours() + " h" + (d.getMinutes() ? " " + pad(d.getMinutes()) : "");
+const fmtTime = t => { if (!t) return ""; const [h, mi] = String(t).split(":"); return Number(h) + " h" + (mi && mi !== "00" ? " " + mi : ""); };
 const waTime = at => { const d = new Date(at || 0), k = iso(d); if (k === today()) return hm(d); if (k === addDays(today(), -1)) return "Hier"; return fmtD(k); };
 const fmtSize = n => !n ? "" : n < 1024*1024 ? Math.max(1, Math.round(n/1024))+" ko" : (n/1024/1024).toFixed(1).replace(".",",")+" Mo";
 const isImg = f => /^image\//.test(f.type || "") || /\.(jpe?g|png|gif|webp|heic)$/i.test(f.name || f.url || "");
@@ -76,20 +77,20 @@ function uploadFile(file, onProgress){
 }
 
 /* ---------- État ---------- */
-const S = { view: "accueil", d: null, f: null, pf: "wait", modOpen: null, kind: "Idée", draft: "", idDraft: "", pend: { chat: [], idee: [] } };
+const S = { view: "accueil", d: null, f: null, mmode: "main", mch: "grp", conv: false, pf: "wait", modOpen: null, kind: "Idée", draft: "", idDraft: "", pend: { chat: [], idee: [] } };
 const posts = () => (S.d && S.d.posts) || [];
 const waiting = () => posts().filter(p => p.status === "wait").length;
 const has = m => S.d && S.d.client && (S.d.client.modules || []).includes(m);
 const myName = () => (S.f && S.f.me.name) || "";
-const seenAt = () => ls.get("gc-seen-chat") || "";
-const unread = () => S.f ? S.f.messages.filter(m => !m.ext && (m.at || "") > seenAt()).length : 0;
+const unread = () => S.f ? [...new Set(S.f.messages.map(m => m.ch))].reduce((n, k) => n + unreadIn(k), 0) : 0;
 
 /* ---------- Navigation ---------- */
-const VIEWS = [["accueil","Accueil"],["valider","À valider"],["messagerie","Messagerie"],["idees","Mes idées"]];
+const VIEWS = [["accueil","Accueil"],["valider","À valider"],["messagerie","Messagerie"],["visio","Visio"],["idees","Mes idées"]];
 const ICONS = {
   accueil:'<path d="M4 11.2 12 4.8l8 6.4V20h-5.6v-5.2H9.6V20H4z"/>',
   valider:'<rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8.5 12.3l2.4 2.4 4.6-4.9"/>',
   messagerie:'<path d="M4.5 6.5A2 2 0 0 1 6.5 4.5h11a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H10l-4.5 3.5v-3.5h0a2 2 0 0 1-1-1.7z"/>',
+  visio:'<rect x="3" y="6.5" width="13" height="11" rx="2"/><path d="m16 10.5 5-3v9l-5-3"/>',
   idees:'<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>'
 };
 const ico = k => { const s = document.createElementNS("http://www.w3.org/2000/svg","svg"); s.setAttribute("viewBox","0 0 24 24"); s.setAttribute("aria-hidden","true"); s.classList.add("ico"); s.innerHTML = ICONS[k] || ""; return s; };
@@ -158,7 +159,7 @@ function vValider(root){
     const c = el("article","cl-post");
     if ((p.media || []).length) c.appendChild(mediaStrip(p));
     const b = el("div","cl-pb");
-    const meta = el("div","cl-pmeta"); meta.append(el("span","pill" + (p.status === "wait" ? " l3" : ""), { wait: "À valider", ok: "Validée", mod: "Modification demandée" }[p.status]), el("span",null, fmtDL(p.date) + (p.time ? ", " + p.time.replace(":"," h ") : "")), el("span",null,p.net || ""));
+    const meta = el("div","cl-pmeta"); meta.append(el("span","pill" + (p.status === "wait" ? " l3" : ""), { wait: "À valider", ok: "Validée", mod: "Modification demandée" }[p.status]), el("span",null, fmtDL(p.date) + (p.time ? ", " + fmtTime(p.time) : "")), el("span",null,p.net || ""));
     b.appendChild(meta);
     if (p.title) b.appendChild(el("h3","cl-pt",p.title));
     if (p.text) b.appendChild(el("p","cl-cap",p.text));
@@ -210,17 +211,46 @@ function pendBox(slot){
 const readyFiles = slot => S.pend[slot].filter(f => f.url).map(f => ({ url: f.url, name: f.name, type: f.type, size: f.size }));
 const busy = slot => S.pend[slot].some(f => !f.url);
 
-/* ---------- Messagerie : un seul groupe, le client et l’agence ---------- */
+/* ---------- Messagerie : groupe principal, tournages et messages privés avec chaque membre ---------- */
+function chKey(kind){ const id = S.f.client.id; return kind === "grp" ? (S.mmode === "shoot" ? "tg:cg:" : "cg:") + id : "cdm:" + id + "|" + kind.slice(3); }
+function seenMap(){ try { return JSON.parse(ls.get("gc-seen2") || "{}"); } catch(e){ return {}; } }
+function markSeen(ch){ const m = seenMap(), last = ((S.f && S.f.messages) || []).filter(x => x.ch === ch).map(x => x.at || "").sort().pop() || ""; if (last && last > (m[ch] || "")){ m[ch] = last; ls.set("gc-seen2", JSON.stringify(m)); } }
+function unreadIn(ch){ const s = seenMap()[ch] || ""; return ((S.f && S.f.messages) || []).filter(m => m.ch === ch && !m.ext && (m.at || "") > s).length; }
 function vMessagerie(root){
-  const me = myName(), msgs = (S.f && S.f.messages) || [];
-  if (msgs.length){ const last = msgs[msgs.length - 1].at || ""; if (last > seenAt()) ls.set("gc-seen-chat", last); }
-  const wrap = el("div","wa solo show-conv cl-wa");
+  const me = myName(), id = S.f.client.id, team = S.f.team || [];
+  if (S.mch !== "grp" && !(S.mmode === "main" && team.some(t => "dm:" + t.name === S.mch))) S.mch = "grp";
+  const ch = chKey(S.mch);
+  const phone = window.matchMedia("(max-width:900px)").matches;
+  if (S.conv || !phone) markSeen(ch);
+  const all = (S.f && S.f.messages) || [], msgs = all.filter(m => m.ch === ch);
+  const lastOf = k => all.filter(m => m.ch === k).pop();
+  const wrap = el("div","wa cl-wa " + (S.conv ? "show-conv" : "show-list"));
+  /* Liste */
+  const side = el("nav","wa-list");
+  const top = el("div","wa-top"); const tl = el("div","wa-tl"); tl.appendChild(el("h1",null,"Messagerie"));
+  const sg = segm([["main","Principal"],["shoot","Tournage"]], S.mmode, v => { S.mmode = v; S.mch = "grp"; S.conv = false; render(); });
+  [...sg.querySelectorAll("button")].forEach((b, i) => { const n = i ? unreadIn("tg:cg:" + id) : unreadIn("cg:" + id) + team.reduce((a, t) => a + unreadIn("cdm:" + id + "|" + t.name), 0); if (n) b.appendChild(el("span","cnt",String(n))); });
+  top.append(tl, sg); side.appendChild(top);
+  const row = (kind, label, sub, av) => {
+    const k = chKey(kind), lm = lastOf(k), un = k === ch && (S.conv || !phone) ? 0 : unreadIn(k);
+    const b = el("button","wa-row" + (un ? " unread" : "")); b.type = "button"; b.setAttribute("aria-pressed", String(k === ch));
+    const tx = el("span","wa-rtx"); const t1 = el("span","wa-rtop"); t1.append(el("b",null,label), el("small",null, lm ? waTime(lm.at) : ""));
+    const t2 = el("span","wa-rbot"); t2.append(el("span",null, lm ? (lm.ext && lm.who === me ? "Vous : " : kind === "grp" ? lm.who + " : " : "") + (lm.text || (lm.files ? "Pièce jointe" : lm.audio ? "Message vocal" : "")) : sub)); if (un) t2.appendChild(el("span","cnt",String(un)));
+    tx.append(t1, t2); b.append(av, tx); b.onclick = () => { S.mch = kind; S.conv = true; render(); }; side.appendChild(b);
+  };
+  side.appendChild(el("span","wa-lab", S.mmode === "shoot" ? "Tournages" : "Groupe"));
+  row("grp", S.mmode === "shoot" ? "Tournages avec l’agence" : "Agence Gacolet", S.mmode === "shoot" ? "Dates, lieux, préparation des tournages" : "Toute l’équipe", avatarEl("Agence Gacolet", 44, { logo: true }));
+  if (S.mmode === "main" && team.length){ side.appendChild(el("span","wa-lab","Privé")); team.forEach(t => row("dm:" + t.name, t.name, t.poste || "Message privé", avatarEl(t.name, 44))); }
+  /* Conversation */
   const main = el("section","wa-conv");
-  const hd = el("header","wa-head"); const ht = el("div","wa-htx");
-  ht.append(el("b",null,"Agence Gacolet"), el("small",null,"Votre groupe avec l’équipe : " + ((S.f && S.f.team) || []).map(t => t.name).join(", ")));
-  hd.append(avatarEl("Agence Gacolet", 40, { logo: true }), ht); main.appendChild(hd);
+  const hd = el("header","wa-head");
+  const back = el("button","wa-back"); back.type = "button"; back.setAttribute("aria-label","Retour aux conversations"); back.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>'; back.onclick = () => { S.conv = false; render(); };
+  const ht = el("div","wa-htx"); const isDm = S.mch !== "grp", other = isDm ? S.mch.slice(3) : "";
+  const tm = team.find(t => t.name === other);
+  ht.append(el("b",null, isDm ? other : S.mmode === "shoot" ? "Tournages avec l’agence" : "Agence Gacolet"), el("small",null, isDm ? (tm && tm.poste ? tm.poste + ", " : "") + "conversation privée" : (S.mmode === "shoot" ? "Organisation des tournages avec " : "Votre groupe avec ") + team.map(t => t.name).join(", ")));
+  hd.append(back, isDm ? avatarEl(other, 40) : avatarEl("Agence Gacolet", 40, { logo: true }), ht); main.appendChild(hd);
   const list = el("div","wa-msgs"); list.id = "chat-list";
-  if (!msgs.length) list.appendChild(el("p","wa-empty","Écrivez à l’agence : une question, une précision, un retour. L’équipe répond ici."));
+  if (!msgs.length) list.appendChild(el("p","wa-empty", isDm ? "Écrivez à " + other + " : seul " + other + " verra ces messages." : S.mmode === "shoot" ? "Tout ce qui concerne les tournages : dates, lieux, matériel, personnes à filmer." : "Écrivez à l’agence : une question, une précision, un retour. L’équipe répond ici."));
   let prev = null;
   msgs.forEach(m => {
     const md = new Date(m.at || 0), d = iso(md);
@@ -229,7 +259,7 @@ function vMessagerie(root){
     const line = el("div","wa-line" + (mine ? " mine" : "") + (grouped ? " cont" : ""));
     if (!mine) line.appendChild(grouped ? el("span","av-sp") : avatarEl(m.who, 30));
     const bub = el("div","wa-bub");
-    if (!mine && !grouped){ const nm = el("b","wa-name",m.who || ""); const t = ((S.f && S.f.team) || []).find(x => x.name === m.who); nm.style.color = avColor(m.who); bub.appendChild(nm); if (t && t.poste) nm.appendChild(el("span","cl-poste"," " + t.poste)); }
+    if (!mine && !grouped && !isDm){ const nm = el("b","wa-name",m.who || ""); const t = team.find(x => x.name === m.who); nm.style.color = avColor(m.who); bub.appendChild(nm); if (t && t.poste) nm.appendChild(el("span","cl-poste"," " + t.poste)); }
     (m.files || []).forEach(f => bub.appendChild(attachEl(f)));
     if (m.audio) { const au = document.createElement("audio"); au.controls = true; au.src = m.audio; au.preload = "none"; bub.appendChild(au); }
     if (m.text) bub.appendChild(el("div","wa-txt",m.text));
@@ -248,7 +278,7 @@ function vMessagerie(root){
   const fi = el("input"); fi.type = "file"; fi.multiple = true; fi.hidden = true; fi.accept = "image/*,video/*,.pdf"; fi.onchange = () => { addFiles("chat", fi.files); fi.value = ""; };
   const clip = el("button","wa-ic"); clip.type = "button"; clip.title = "Joindre une photo, une vidéo ou un fichier"; clip.setAttribute("aria-label", clip.title);
   clip.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5 12.4 19a5 5 0 0 1-7.1-7.1l8-8a3.4 3.4 0 0 1 4.8 4.8l-8 8a1.7 1.7 0 0 1-2.4-2.4l7.3-7.3"/></svg>'; clip.onclick = () => fi.click();
-  const ta = el("textarea"); ta.id = "chat-input"; ta.rows = 1; ta.placeholder = "Écrire à l’agence"; ta.value = S.draft;
+  const ta = el("textarea"); ta.id = "chat-input"; ta.rows = 1; ta.placeholder = isDm ? "Écrire à " + other : "Écrire à l’agence"; ta.value = S.draft;
   const go2 = el("button","wa-send"); go2.type = "submit"; go2.setAttribute("aria-label","Envoyer"); go2.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12 20 4l-4 16-4-6.5z"/><path d="M12 13.5 20 4"/></svg>';
   ta.oninput = () => { S.draft = ta.value; ta.style.height = "auto"; ta.style.height = Math.min(140, ta.scrollHeight) + "px"; };
   const send = async () => {
@@ -256,7 +286,7 @@ function vMessagerie(root){
     if (busy("chat")){ toast("Attendez la fin de l’envoi des fichiers."); return; }
     const t = ta.value.trim(), files = readyFiles("chat"); if (!t && !files.length) return;
     S.draft = ""; S.pend.chat = []; go2.disabled = true;
-    try { await api("/api/c/msg", { body: { text: t, files } }); await loadFeed(); } catch(e){ S.draft = t; toast(e.message); render(); }
+    try { await api("/api/c/msg", { body: { ch, text: t, files } }); await loadFeed(); } catch(e){ S.draft = t; toast(e.message); render(); }
   };
   ta.onkeydown = e => { if (e.key === "Enter" && !e.shiftKey && !window.matchMedia("(max-width:640px)").matches){ e.preventDefault(); send(); } };
   form.onsubmit = e => { e.preventDefault(); send(); };
@@ -264,9 +294,26 @@ function vMessagerie(root){
   main.ondragover = e => { e.preventDefault(); main.classList.add("drop"); };
   main.ondragleave = () => main.classList.remove("drop");
   main.ondrop = e => { e.preventDefault(); main.classList.remove("drop"); if (e.dataTransfer.files.length) addFiles("chat", e.dataTransfer.files); };
-  main.appendChild(form); wrap.appendChild(main); root.appendChild(wrap);
+  main.appendChild(form); wrap.append(side, main); root.appendChild(wrap);
   list.querySelectorAll("img,video").forEach(x => x.addEventListener(x.tagName === "IMG" ? "load" : "loadedmetadata", () => { list.scrollTop = list.scrollHeight; }, { once: true }));
   requestAnimationFrame(() => { list.scrollTop = list.scrollHeight; if (ta.value){ ta.style.height = "auto"; ta.style.height = Math.min(140, ta.scrollHeight) + "px"; } });
+}
+
+/* ---------- Visio mensuelle avec l’agence ---------- */
+function vVisio(root){
+  const v0 = S.f.visio || { here: [] }, v = { here: (v0.here || []).filter(n => n !== myName()) }, owner = (S.f.team || []).find(t => t.role === "owner") || { name: "l’agence" };
+  root.appendChild(head(["Visio", "mensuelle"], "Votre point du mois avec " + owner.name + " : résultats, prochains contenus, vos questions."));
+  const c = el("section","cl-visio" + (v.here.length ? " live" : ""));
+  const ic = el("span","cl-vic"); ic.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6.5" width="13" height="11" rx="2"/><path d="m16 10.5 5-3v9l-5-3"/></svg>'; c.appendChild(ic);
+  const tx = el("div","cl-vtx");
+  tx.append(el("h2",null, v.here.length ? v.here.join(", ") + (v.here.length > 1 ? " vous attendent" : " vous attend") : "Votre salle de visio"),
+    el("p","muted", v.here.length ? "La visio a commencé, rejoignez la salle." : "Le jour du rendez-vous, entrez dans la salle : micro, caméra et partage d’écran, sans rien installer."));
+  const ev = ((S.d && S.d.events) || [])[0];
+  if (ev) tx.appendChild(el("p","cl-next","Prochain rendez-vous : " + fmtDL(ev.date) + (ev.title ? ", " + ev.title : "")));
+  c.appendChild(tx);
+  const b = btn("Rejoindre la visio","lemon", () => { location.href = "/visio"; }); c.appendChild(b);
+  root.appendChild(c);
+  root.appendChild(el("p","status","Le navigateur demande l’accès au micro la première fois. La caméra reste coupée tant que vous ne l’activez pas."));
 }
 
 /* ---------- Mes idées : idées, photos, vidéos pour les prochains contenus ---------- */
@@ -315,7 +362,7 @@ function vIdees(root){
 }
 
 /* ---------- Rendu ---------- */
-const R = { accueil: vAccueil, valider: vValider, messagerie: vMessagerie, idees: vIdees };
+const R = { accueil: vAccueil, valider: vValider, messagerie: vMessagerie, visio: vVisio, idees: vIdees };
 function fromHash(){ const h = location.hash.replace("#",""); S.view = R[h] ? h : "accueil"; }
 function render(){
   if (!S.d || !S.f) return;
@@ -328,8 +375,8 @@ function render(){
 }
 window.addEventListener("hashchange", () => { fromHash(); S.modOpen = null; render(); window.scrollTo(0,0); });
 
-async function loadFeed(){ const f = await api("/api/c/feed"); const before = S.f ? JSON.stringify([S.f.messages.map(m => m.id + m.at), S.f.idees.map(i => i.id + (i.seen || []).length)]) : ""; S.f = f;
-  const after = JSON.stringify([f.messages.map(m => m.id + m.at), f.idees.map(i => i.id + (i.seen || []).length)]);
+async function loadFeed(){ const f = await api("/api/c/feed"); const before = S.f ? JSON.stringify([S.f.messages.map(m => m.id + m.at), S.f.idees.map(i => i.id + (i.seen || []).length), (S.f.visio || {}).here]) : ""; S.f = f;
+  const after = JSON.stringify([f.messages.map(m => m.id + m.at), f.idees.map(i => i.id + (i.seen || []).length), (f.visio || {}).here]);
   const typing = document.activeElement && /^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName) && S.view !== "messagerie";
   if (before !== after && !typing) render(); }
 async function load(){
