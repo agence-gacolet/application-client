@@ -332,7 +332,30 @@ function animChar(g, dt, moving, speed, emote, air) {
   u.mixer.update(dt);
   // Arbre droit : le héros se retourne sur les mains
   const flipW = !moving && !air && emote === "arbre" ? 1 : 0; u.flip = (u.flip || 0) + (flipW - (u.flip || 0)) * Math.min(1, dt * 6);
-  if (u.flip > 0.001) { g.rotation.order = "YXZ"; g.rotation.z = Math.PI * u.flip; g.position.y += 4.1 * u.flip; u.tag.position.y = (u.tagY0 = u.tagY0 || u.tag.position.y) * (1 - 2 * u.flip) - 0.8 * u.flip; }
+  if (u.flip > 0.001) {
+    g.rotation.order = "YXZ"; g.rotation.z = Math.PI * u.flip; const baseY = g.position.y; g.position.y += 4.6 * u.flip;
+    u.tag.position.y = (u.tagY0 = u.tagY0 || u.tag.position.y) * (1 - 2 * u.flip) - 1.6 * u.flip;
+    // bras tendus au-dessus de la tête, mains posées au sol
+    if (u.flip > 0.3) {
+      const B = u.bones || (u.bones = { ul: u.body.getObjectByName("upperarm_l"), ur: u.body.getObjectByName("upperarm_r"), ll: u.body.getObjectByName("lowerarm_l"), lr: u.body.getObjectByName("lowerarm_r"), hl: u.body.getObjectByName("hand_l"), hr: u.body.getObjectByName("hand_r"), head: u.body.getObjectByName("Head") });
+      if (B.ul && B.ur && B.hl && B.hr) {
+        g.updateMatrixWorld(true);
+        const up = new THREE.Vector3(0, 1, 0).applyQuaternion(g.getWorldQuaternion(new THREE.Quaternion()));
+        [[B.ul, B.ll, B.hl, 0.12], [B.ur, B.lr, B.hr, -0.12]].forEach(([ua, la, hd, side]) => {
+          if (la) la.quaternion.identity();
+          ua.updateMatrixWorld(true);
+          const a = ua.getWorldPosition(new THREE.Vector3()), h = hd.getWorldPosition(new THREE.Vector3());
+          const cur = h.sub(a).normalize(), tgt = up.clone().add(new THREE.Vector3(0, 0, 0)).normalize();
+          const qw = new THREE.Quaternion().setFromUnitVectors(cur, tgt);
+          const pw = ua.parent.getWorldQuaternion(new THREE.Quaternion()), uw = ua.getWorldQuaternion(new THREE.Quaternion());
+          ua.quaternion.copy(pw.invert().multiply(qw.multiply(uw)));
+        });
+        g.updateMatrixWorld(true);
+        const yl = B.hl.getWorldPosition(new THREE.Vector3()).y, yr = B.hr.getWorldPosition(new THREE.Vector3()).y;
+        g.position.y -= (Math.min(yl, yr) - baseY - 0.15) * Math.min(1, (u.flip - 0.3) / 0.4);
+      }
+    }
+  }
   else if (u.tagY0) { g.rotation.z = 0; u.tag.position.y = u.tagY0; }
 }
 
@@ -665,13 +688,14 @@ function bubble(model, text) {
   const s = label([{ t, font: "500 34px Inter", color: "#111" }], { w: 768, h: 96, bg: "rgba(255,255,255,.92)", stroke: null }, 1.1); s.position.y = 6.3; s.scale.set(7, 0.9, 1);
   model.add(s); model.userData.bub = s; setTimeout(() => { if (model.userData.bub === s) { model.remove(s); model.userData.bub = null; } }, 7000);
 }
-let syncing = false;
+let syncing = false; G.ss = Date.now();
 async function sync() {
   if (syncing) return; syncing = true;
   try {
     const say = G.sayQ; G.sayQ = "";
     const t0 = Date.now();
-    const r = await api("POST", "/api/g-game/pos", { x: +P.x.toFixed(2), z: +P.z.toFixed(2), y: +P.y.toFixed(2), ry: +P.ry.toFixed(3), mv: P.moving ? 1 : 0, emo: G.emote, cls: P.model ? P.model.userData.cls : "", lvl: G.me ? G.me.lvl : 1, say, since: G.sid });
+    const r = await api("POST", "/api/g-game/pos", { x: +P.x.toFixed(2), z: +P.z.toFixed(2), y: +P.y.toFixed(2), ry: +P.ry.toFixed(3), mv: P.moving ? 1 : 0, emo: G.emote, cls: P.model ? P.model.userData.cls : "", lvl: G.me ? G.me.lvl : 1, say, since: G.sid, ss: G.ss });
+    if (r.kicked) { G.kicked = true; return gate("Tu joues déjà dans un autre onglet ou sur un autre appareil. Ferme celui-ci pour éviter les bugs de position."); }
     const t1 = Date.now(); if (r.now) { const off = r.now - (t0 + t1) / 2, rtt = t1 - t0; if (G.off == null || rtt < (G.rtt || 1e9) * 1.5) { G.off = G.off == null ? off : G.off * 0.8 + off * 0.2; G.rtt = G.rtt == null ? rtt : G.rtt * 0.8 + rtt * 0.2; } }
     (r.players || []).forEach(upsertOther);
     const live = new Set((r.players || []).map(p => p.name));
@@ -751,7 +775,7 @@ function step() {
   const nn = nearestNpc(9); if (nn !== hintN) { hintN = nn; const h = $("#hint"); if (nn) { h.innerHTML = ""; h.append(document.createTextNode("Clic droit ou "), el("kbd", null, "F"), document.createTextNode(" : " + (nn.kind === "mail" ? "ouvrir la boîte aux lettres" : nn.kind === "board" ? "lire le tableau" : nn.kind === "chalet" ? "entrer dans le chalet" : "parler à " + nn.name))); h.classList.add("on"); } else h.classList.remove("on"); }
   // Minuteries
   if (G.hearthCd > 0) { const before = Math.ceil(G.hearthCd); G.hearthCd -= dt; if (Math.ceil(G.hearthCd) !== before) renderBar(); }
-  syncT += dt; if (syncT > 0.1) { syncT = 0; sync(); }
+  syncT += dt; if (syncT > 0.1 && !G.kicked) { syncT = 0; sync(); }
   loadT += dt; if (loadT > 30) { loadT = 0; loadGame().catch(() => {}); }
   saveT += dt; if (saveT > 3) { saveT = 0; try { localStorage.setItem("hg-pos", JSON.stringify({ x: P.x, z: P.z, ry: P.ry })); } catch (e) {} }
   drawMap(mm, 180, P.x, P.z, 1.1, false);

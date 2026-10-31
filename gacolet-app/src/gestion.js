@@ -815,6 +815,10 @@ module.exports = function (app, { db, wrap, root }) {
     await gEnsure();
     const b = req.body || {}, n = req.user.name, now = Date.now(), num = v => Math.max(-500, Math.min(500, Number(v) || 0));
     const me = { name: n, x: num(b.x), z: num(b.z), y: Math.max(-20, Math.min(250, Number(b.y) || 0)), ry: Number(b.ry) || 0, mv: b.mv ? 1 : 0, emo: String(b.emo || "").slice(0, 12), cls: String(b.cls || "").replace(/[^\w]/g, "").slice(0, 20), lvl: Number(b.lvl) || 1, t: now };
+    // Une seule partie par personne : si le jeu est ouvert dans deux onglets, le plus récent prend la main
+    me.ss = Number(b.ss) || 0;
+    const prev = await db.one("SELECT data, t FROM game_pos WHERE name = ?", [n]);
+    if (prev) { let pd = {}; try { pd = JSON.parse(prev.data); } catch (e) {} if ((pd.ss || 0) > me.ss && now - Number(prev.t) < 5000) return res.json({ kicked: true }); }
     const js = JSON.stringify(me);
     const u = await db.run("UPDATE game_pos SET data = ?, t = ? WHERE name = ?", [js, now, n]);
     if (!u.changes) await db.run("INSERT INTO game_pos (name, data, t) VALUES (?,?,?)", [n, js, now]).catch(() => db.run("UPDATE game_pos SET data = ?, t = ? WHERE name = ?", [js, now, n]));
