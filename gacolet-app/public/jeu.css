@@ -180,3 +180,4 @@ html,body,#gl,#ui button,.win,.win *{cursor:url("/hameau/ui/cursor.svg") 2 2,def
 .bag .bag-it{display:grid;place-items:center;border-color:#B8912E;background:radial-gradient(circle,#3A2A12,#120C05);cursor:pointer}
 .bag .bag-it svg{width:70%;height:70%;fill:none;stroke:#E8E2D6;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 .bag .bag-it.used{box-shadow:0 0 0 2px #C6FF33 inset}
+.vol{display:flex;align-items:center;gap:10px;margin:6px 0}.vol span{min-width:80px;color:#E9D7AE}.vol input{flex:1;accent-color:#C6FF33}
