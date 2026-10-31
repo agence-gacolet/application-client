@@ -145,6 +145,7 @@ function vAccueil(root){
 /* ---------- À valider ---------- */
 const ST_LABEL = { wait: "À valider", ok: "Validée", mod: "Modification demandée", no: "Refusée" };
 async function decide(p, status, note){
+  if (S.f && S.f.preview){ toast("Aperçu en lecture seule : rien n’est envoyé. Pour agir vraiment, ouvrez le mode test depuis Paramètres, bouton « Tester pour de vrai »."); return; }
   try { await api("/api/decision", { body: { postId: p.id, status, note, title: p.title, date: p.date + " " + (p.time || "") } });
     p.status = status; p.note = note || ""; p.decidedBy = myName(); p.decidedAt = new Date().toISOString(); S.modOpen = null;
     if (status !== "ok"){ const t = (status === "mod" ? "Modification demandée sur « " : "Publication refusée : « ") + (p.title || "Publication") + " » (" + fmtDL(p.date) + (p.time ? ", " + fmtTime(p.time) : "") + ")" + (note ? "\n" + (status === "mod" ? "À changer : " : "Raison : ") + note : "");
@@ -200,7 +201,7 @@ function openViewer(p, start){
   document.body.appendChild(ov); document.body.classList.add("cl-noscroll");
   const strip = sl.querySelector(".cl-strip"); setTimeout(() => { strip.scrollTo({ left: (start || 0) * strip.clientWidth }); strip.focus({ preventScroll: true }); }, 30);
 }
-const canDecide = p => p.status !== "ok" && !p.published && !(S.f && S.f.preview);
+const canDecide = p => p.status !== "ok" && !p.published;
 function openBox(p, kind){ S.modOpen = p.id; S.modKind = kind; render(); setTimeout(() => { const t = document.getElementById("mod-" + p.id); if (t){ t.scrollIntoView({ block: "center", behavior: "smooth" }); t.focus(); } }, 0); }
 function vValider(root){
   const cnt = s => posts().filter(p => p.status === s).length;
