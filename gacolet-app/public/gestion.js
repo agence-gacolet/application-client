@@ -810,6 +810,9 @@ function vMeta(root){
   { const gs = cs.map(x => x.link).concat(sheetsOf(cur).map(x => x.url)).find(u => /^https:\/\/docs\.google\.com\/spreadsheets\/d\//.test(u || ""));
     if (gs){ const id = gs.match(/\/d\/([\w-]+)/)[1], src = "https://docs.google.com/spreadsheets/d/" + id + "/edit?rm=minimal";
       const box = el("div","gs-box"); const fr = document.createElement("iframe"); fr.src = src; fr.title = "Tableau de suivi " + cur; fr.loading = "lazy"; fr.allow = "clipboard-read; clipboard-write"; box.appendChild(fr); root.appendChild(box);
+      /* Souris sur le tableau : seule la feuille défile ; souris à côté : la page défile. */
+      const lock = on => document.documentElement.classList.toggle("gs-lock", on);
+      box.onmouseenter = () => lock(true); box.onmouseleave = () => lock(false); fr.onmouseleave = () => lock(false);
       const st = el("p","status","Le vrai tableau Google Sheets, modifiable ici. Il faut être connecté au compte Google de l’agence dans ce navigateur. "); const a = el("a",null,"Ouvrir dans Google Sheets"); a.href = "https://docs.google.com/spreadsheets/d/" + id + "/edit"; a.target = "_blank"; a.rel = "noopener"; st.appendChild(a); root.appendChild(st); return; } }
   if (msSection(root, cur)) return;
   if (!c){ root.appendChild(el("p","empty","Ce client n’a pas le module Meta dans l’espace client : le suivi passe par le lien de la campagne.")); return; }
@@ -1918,6 +1921,7 @@ function cardLabels(root){
 function render(){
   if (vcIsFull()){ vcStage(); vcRender(); return; }
   if (document.fullscreenElement && document.fullscreenElement.id === "fo"){ focusPeople(); return; }
+  if (S.view !== "campagnes") document.documentElement.classList.remove("gs-lock");
   renderTabs();
   const root = $("#app");
   const focusId = document.activeElement && document.activeElement.id; const caret = focusId && document.activeElement.selectionStart;
