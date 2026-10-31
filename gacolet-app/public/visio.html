@@ -58,7 +58,7 @@ button{font:inherit;cursor:pointer}
 (() => {
   const TOK = new URLSearchParams(location.search).get("i") || "";
   /* Espace client : la visio mensuelle s’ouvre avec la session du client, sans lien d’invitation */
-  const CTOK = TOK ? "" : (() => { try { return localStorage.getItem("gc-token") || ""; } catch(e){ return ""; } })();
+  const CTOK = TOK ? "" : (new URLSearchParams(location.search).get("c") || (() => { try { return localStorage.getItem("gc-token") || ""; } catch(e){ return ""; } })());
   const HDR = () => Object.assign({ "Content-Type": "application/json" }, TOK ? { "X-GC-Guest": TOK } : { "Authorization": "Bearer " + CTOK });
   const $ = s => document.querySelector(s);
   const el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; };
@@ -169,7 +169,7 @@ button{font:inherit;cursor:pointer}
     catch(e){ $("#sub").textContent = e.message || "Lien d’invitation invalide."; return; }
     $("#title").textContent = INFO.label; $("#sub").textContent = "Visio avec " + (INFO.by || "l’agence") + ". Le micro est demandé à l’entrée, la caméra reste coupée tant que vous ne l’activez pas.";
     const c = el("form","card"); const l = el("label",null,"Votre nom"); const i = el("input"); i.required = true; i.maxLength = 40; i.autocomplete = "name"; i.placeholder = "Prénom et nom"; i.value = INFO.name || ""; l.appendChild(i);
-    if (INFO.client){ const bk = el("a","back","Retour à mon espace"); bk.href = "/#visio"; document.body.appendChild(bk); }
+    if (INFO.client){ const bk = el("a","back","Retour à mon espace"); const cq = new URLSearchParams(location.search).get("c"); bk.href = cq ? "/?apercu=" + encodeURIComponent(cq) + "&test=1#visio" : "/#visio"; document.body.appendChild(bk); }
     const b = el("button","go","Rejoindre la visio"); const er = el("p","err"); er.id = "err"; c.append(l, b, er);
     c.onsubmit = e => { e.preventDefault(); if (!i.value.trim()) { i.focus(); return; } b.disabled = true; join(i.value.trim()).finally(() => { b.disabled = false; }); };
     $("#app").appendChild(c); i.focus();
