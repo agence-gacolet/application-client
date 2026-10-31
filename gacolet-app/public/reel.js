@@ -148,11 +148,15 @@ let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 21474836
 function scatter(count, test, fn) { let n = 0, tries = 0; while (n < count && tries < count * 40) { tries++; const x = (rnd() - .5) * (WORLD - 40), z = (rnd() - .5) * (WORLD - 40); if (!test(x, z)) continue; fn(x, z, height(x, z)); n++; } }
 const farFromSolid = (x, z, r) => !SOLID.some(s => Math.hypot(s.x - x, s.z - z) < s.r + r);
 // pose les maillages d'un modèle en instances (un appel de dessin par maillage)
-function instanceModel(gltf, list, shadow) { gltf.scene.updateMatrixWorld(true); const meshes = []; gltf.scene.traverse(o => { if (o.isMesh) meshes.push(o); });
-  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
-  meshes.forEach(mesh => { const im = new THREE.InstancedMesh(mesh.geometry, mesh.material, list.length);
-    list.forEach((p, i) => { e.set(p.tx || 0, p.ry, p.tz || 0); q.setFromEuler(e); m4.compose(new THREE.Vector3(p.x, p.y, p.z), q, new THREE.Vector3(p.s, p.s, p.s)); im.setMatrixAt(i, m4.multiply(mesh.matrixWorld)); });
-    im.castShadow = shadow !== false; im.receiveShadow = true; scene.add(im); }); }
+// découpé en carrés de 48 m : seuls les carrés visibles et assez proches sont dessinés
+const CHUNKS = [];
+function instanceModel(gltf, list, shadow, far) { gltf.scene.updateMatrixWorld(true); const meshes = []; gltf.scene.traverse(o => { if (o.isMesh) meshes.push(o); });
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), cells = {};
+  list.forEach(p => { const k = Math.floor(p.x / 48) + "," + Math.floor(p.z / 48); (cells[k] = cells[k] || []).push(p); });
+  Object.values(cells).forEach(cl => { const cx = cl.reduce((a, p) => a + p.x, 0) / cl.length, cz = cl.reduce((a, p) => a + p.z, 0) / cl.length;
+    meshes.forEach(mesh => { const im = new THREE.InstancedMesh(mesh.geometry, mesh.material, cl.length);
+      cl.forEach((p, i) => { e.set(p.tx || 0, p.ry, p.tz || 0); q.setFromEuler(e); m4.compose(new THREE.Vector3(p.x, p.y, p.z), q, new THREE.Vector3(p.s, p.s, p.s)); im.setMatrixAt(i, m4.multiply(mesh.matrixWorld)); });
+      im.computeBoundingSphere(); im.castShadow = shadow !== false; im.receiveShadow = true; scene.add(im); CHUNKS.push({ o: im, x: cx, z: cz, far: far || 260 }); }); }); }
 
 /* ---------- Arbres ---------- */
 const TREES = [];
@@ -162,7 +166,7 @@ async function buildTrees() { say("Pousse des arbres…");
     t.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } }); protos.push({ t, k, pine: /Pine/.test(p) }); TREES.push(t); await new Promise(r => setTimeout(r, 0)); }
   scatter(LOWQ ? 160 : 300, (x, z) => forest(x, z) > .35 + rnd() * .4 && farFromSolid(x, z, 2.2) && pathD(x, z) > 6 && Math.hypot(x, z) > 24, (x, z, y) => {
     const pine = height(x, z) > H0 + 10 ? rnd() < .8 : rnd() < .3, cand = protos.filter(p => p.pine === pine), P = cand[Math.floor(rnd() * cand.length)] || protos[0];
-    const c = P.t.clone(); const s = P.k * (.8 + rnd() * .45); c.scale.setScalar(s); c.position.set(x, y - .2, z); c.rotation.y = rnd() * 6.28; scene.add(c); SOLID.push({ x, z, r: .55 * s / P.k }); });
+    const c = P.t.clone(); const s = P.k * (.8 + rnd() * .45); c.scale.setScalar(s); c.position.set(x, y - .2, z); c.rotation.y = rnd() * 6.28; scene.add(c); CHUNKS.push({ o: c, x, z, far: 280 }); SOLID.push({ x, z, r: .55 * s / P.k }); });
   // quelques arbres isolés dans les prairies
   scatter(28, (x, z) => forest(x, z) < .1 && pathD(x, z) > 8 && Math.hypot(x, z) > 30 && farFromSolid(x, z, 8), (x, z, y) => { const P = protos[Math.floor(rnd() * 3)], c = P.t.clone(), s = P.k * (1 + rnd() * .3); c.scale.setScalar(s); c.position.set(x, y - .2, z); c.rotation.y = rnd() * 6.28; scene.add(c); SOLID.push({ x, z, r: .7 }); }); }
 
@@ -182,11 +186,11 @@ async function buildProps() { say("Pose des rochers et des plantes…");
   [[3.2, 1.6, .4], [-2.6, 2.4, 2.1], [.4, -3.1, 1.2]].forEach(([x, z, r]) => { add("tree_stump_01", x, z, .7, r, .05); SOLID.push({ x, z, r: .45 }); });
   add("dead_tree_trunk", -3.6, -1.5, .7, .8, .05);
   add("WoodenTable_01", 6.5, -4, 1, .5, 0); SOLID.push({ x: 6.5, z: -4, r: 1 }); add("Barrel_01", 8, -2.4, 1, 0, 0); add("Barrel_01", 8.6, -3.4, 1, 1, 0); SOLID.push({ x: 8.3, z: -2.9, r: .8 });
-  Object.keys(L).forEach(id => { if (M[id]) instanceModel(M[id], L[id], !/fern|nettle|shrub/.test(id)); });
+  Object.keys(L).forEach(id => { if (M[id]) instanceModel(M[id], L[id], /boulder|rock|trunk|stump|pit|Table|Barrel/.test(id), /fern|nettle/.test(id) ? 70 : /shrub/.test(id) ? 110 : /stump|moss/.test(id) ? 160 : 300); });
   if (M.Lantern_01) { const l = M.Lantern_01.scene; l.position.set(6.3, height(6.5, -4) + .78, -4.2); scene.add(l); const pl = new THREE.PointLight(0xFFB566, 4, 9, 2); pl.position.set(6.3, height(6.5, -4) + 1.05, -4.2); scene.add(pl); } }
 
 /* ---------- Feu de camp ---------- */
-const fireY = H0 + .35, fireL = new THREE.PointLight(0xFF8A3C, 30, 22, 1.8); fireL.position.set(0, fireY + .8, 0); fireL.castShadow = true; fireL.shadow.mapSize.set(512, 512); scene.add(fireL);
+const fireY = H0 + .35, fireL = new THREE.PointLight(0xFF8A3C, 30, 22, 1.8); fireL.position.set(0, fireY + .8, 0); scene.add(fireL);
 const flameTex = (() => { const c = document.createElement("canvas"); c.width = c.height = 64; const x = c.getContext("2d"), g = x.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, "rgba(255,240,200,1)"); g.addColorStop(.3, "rgba(255,160,60,.8)"); g.addColorStop(1, "rgba(255,80,0,0)"); x.fillStyle = g; x.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
 const FLAMES = []; for (let i = 0; i < 26; i++) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: flameTex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, fog: false })); s.userData = { t: Math.random() }; scene.add(s); FLAMES.push(s); }
 const smokeTex = (() => { const c = document.createElement("canvas"); c.width = c.height = 64; const x = c.getContext("2d"), g = x.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, "rgba(200,200,200,.5)"); g.addColorStop(1, "rgba(200,200,200,0)"); x.fillStyle = g; x.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
@@ -240,7 +244,7 @@ addEventListener("wheel", e => { CAM.dist = Math.max(1.8, Math.min(9, CAM.dist +
 addEventListener("resize", () => { renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); if (gtao) gtao.setSize(innerWidth, innerHeight); });
 
 /* ---------- Boucle ---------- */
-const clock = new THREE.Clock(), tmp = new THREE.Vector3(), tgt = new THREE.Vector3();
+const clock = new THREE.Clock(), tmp = new THREE.Vector3(), tgt = new THREE.Vector3(), G = {};
 function step() { requestAnimationFrame(step); const dt = Math.min(clock.getDelta(), .05), t = clock.elapsedTime;
   if (P.model) { const f = (K.KeyW || K.ArrowUp ? 1 : 0) - (K.KeyS || K.ArrowDown ? 1 : 0), s = (K.KeyD || K.ArrowRight ? 1 : 0) - (K.KeyA || K.ArrowLeft ? 1 : 0), mv = f || s, run = K.ShiftLeft || K.ShiftRight;
     if (mv) { const a = Math.atan2(s, f), dir = CAM.yaw - a, sp = run ? 5.2 : 1.6;
@@ -255,6 +259,7 @@ function step() { requestAnimationFrame(step); const dt = Math.min(clock.getDelt
   camera.lookAt(head.x + right.x * .8, head.y, head.z + right.z * .8);
   // soleil et ombres qui suivent le joueur
   sun.position.copy(SUN).multiplyScalar(150).add(tgt.set(P.x, P.y, P.z)); sun.target.position.set(P.x, P.y, P.z);
+  if ((G.cullT = (G.cullT || 0) + dt) > .4) { G.cullT = 0; CHUNKS.forEach(c => c.o.visible = Math.hypot(c.x - P.x, c.z - P.z) < c.far); }
   grassU.uTime.value = t; grassU.uCam.value.set(P.x, P.z); TREES.forEach(tr => tr.update(t));
   // feu
   const fl = .8 + Math.sin(t * 13) * .1 + Math.sin(t * 7.7) * .08 + Math.random() * .06; fireL.intensity = 26 * fl;
