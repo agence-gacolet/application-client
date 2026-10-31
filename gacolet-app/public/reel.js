@@ -26,7 +26,7 @@ THREE.ShaderChunk.fog_fragment = THREE.ShaderChunk.fog_fragment.replace("float f
 const canvas = $("#gl");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance" });
 renderer.setPixelRatio(Q.has("hd") ? Math.min(devicePixelRatio, 1.5) : 1); renderer.setSize(innerWidth, innerHeight);
-renderer.toneMapping = THREE.AgXToneMapping; renderer.toneMappingExposure = 1.0;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = .82;
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(0xC9B79A, 0.0105);
 const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 1200);
@@ -70,7 +70,7 @@ const sun = new THREE.DirectionalLight(0xFFE2B8, 3); sun.castShadow = true; sun.
 Object.assign(sun.shadow.camera, { left: -38, right: 38, top: 38, bottom: -38, near: 1, far: 320 }); sun.shadow.bias = -0.0002; sun.shadow.normalBias = 0.04; scene.add(sun, sun.target);
 const SUN = new THREE.Vector3(.4, .5, .3).normalize();
 const pmrem = new THREE.PMREMGenerator(renderer);
-const SKIES = { 1: ["kloofendal_48d_partly_cloudy_puresky", "Midi"], 2: ["belfast_sunset_puresky", "Fin d’après-midi"], 3: ["evening_road_01_puresky", "Crépuscule"] };
+const SKIES = { 1: ["kloofendal_43d_clear_puresky", "Midi"], 2: ["qwantani_puresky", "Fin d’après-midi"], 3: ["qwantani_sunset_puresky", "Coucher du soleil"] };
 let skyEnv = null;
 async function setSky(k) { say("Chargement du ciel…"); const t = await phHdri(SKIES[k][0]); t.mapping = THREE.EquirectangularReflectionMapping;
   const W = t.image.width, Hh = t.image.height, d = t.image.data, st = d.length / (W * Hh), get = i => t.type === THREE.HalfFloatType ? THREE.DataUtils.fromHalfFloat(d[i]) : d[i];
@@ -80,7 +80,7 @@ async function setSky(k) { say("Chargement du ciel…"); const t = await phHdri(
   const elev = Math.asin(SUN.y); sun.intensity = 1.2 + Math.min(1, elev / .5) * 2.6;
   // couleur de la brume : moyenne du ciel juste au-dessus de l'horizon
   const fy = Math.floor(Hh * .47), fc = new THREE.Color(0, 0, 0); let n = 0; for (let x = 0; x < W; x += 8) { const i = (fy * W + x) * st; fc.r += get(i); fc.g += get(i + 1); fc.b += get(i + 2); n++; } fc.multiplyScalar(1 / n);
-  scene.fog.color.copy(fc).multiplyScalar(.7); scene.fog.density = elev < .25 ? .0042 : .003;
+  scene.fog.color.copy(fc).multiplyScalar(.55); scene.fog.density = elev < .25 ? .0042 : .003;
   if (skyEnv) skyEnv.dispose(); skyEnv = pmrem.fromEquirectangular(t).texture; scene.environment = skyEnv; scene.environmentIntensity = .75; scene.background = t; scene.backgroundIntensity = 1;
   $("#tod").textContent = SKIES[k][1]; say(""); }
 
@@ -121,7 +121,7 @@ const grassU = { uTime: { value: 0 }, uCam: { value: new THREE.Vector2() }, uR: 
   const ig = new THREE.InstancedBufferGeometry().copy(bg); ig.instanceCount = GN; const off = new Float32Array(GN * 4);
   for (let i = 0; i < GN; i++) { off[i * 4] = (Math.random() * 2 - 1) * GR; off[i * 4 + 1] = (Math.random() * 2 - 1) * GR; off[i * 4 + 2] = Math.random(); off[i * 4 + 3] = Math.random() * Math.PI * 2; }
   ig.setAttribute("aOff", new THREE.InstancedBufferAttribute(off, 4));
-  const gm = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .85, side: THREE.DoubleSide });
+  const gm = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, side: THREE.DoubleSide, envMapIntensity: .45 });
   gm.onBeforeCompile = s => { Object.assign(s.uniforms, grassU);
     s.vertexShader = s.vertexShader.replace("#include <common>", `#include <common>
       attribute vec4 aOff; uniform float uTime; uniform vec2 uCam; uniform float uR; uniform sampler2D hMap; uniform float hMin; uniform float hRange; uniform float hSize; varying float vT; varying float vRnd; varying float vFade;
@@ -135,11 +135,12 @@ const grassU = { uTime: { value: 0 }, uCam: { value: new THREE.Vector2() }, uR: 
       float hgt = (.25 + aOff.z * .5) * keep; float c = cos(aOff.w), s = sin(aOff.w);
       vec3 transformed = vec3(position.x * c, position.y * hgt, position.x * s);
       float wv = sin(uTime * 1.7 + wp.x * .35 + wp.y * .22) * .5 + sin(uTime * 3.1 + wp.x * .9) * .2;
-      transformed.x += wv * .16 * position.y * position.y * hgt; transformed.z += wv * .07 * position.y * position.y * hgt + .08 * position.y * position.y * hgt;
+      float lean = (fract(aOff.z * 7.31) - .5) * .9, yy = position.y * position.y * hgt; transformed += vec3(-s, 0.0, c) * lean * yy;
+      transformed.x += wv * .16 * yy; transformed.z += wv * .07 * yy + .06 * yy;
       transformed += vec3(wp.x, hdv.x - .03, wp.y);`).replace("#include <beginnormal_vertex>", "vec3 objectNormal = vec3(0.0, 1.0, 0.0);");
     s.fragmentShader = s.fragmentShader.replace("#include <common>", "#include <common>\nvarying float vT; varying float vRnd; varying float vFade;").replace("#include <map_fragment>", `
       if (vFade < .01) discard; vec3 base = mix(vec3(.04, .07, .015), vec3(.08, .12, .03), vRnd), tip = mix(vec3(.36, .42, .12), vec3(.58, .54, .22), vRnd);
-      diffuseColor.rgb = mix(base, tip, smoothstep(0.0, 1.0, vT)) * (.85 + vRnd * .3);`); };
+      diffuseColor.rgb = mix(base, tip, smoothstep(0.0, 1.0, vT)) * (.85 + vRnd * .3) * (.35 + .65 * vT);`); };
   const grass = new THREE.Mesh(ig, gm); grass.frustumCulled = false; grass.receiveShadow = true; scene.add(grass); }
 
 /* ---------- Placement ---------- */
@@ -231,7 +232,7 @@ composer.addPass(new OutputPass());
 const grade = new ShaderPass({ uniforms: { tDiffuse: { value: null }, time: { value: 0 } }, vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
   fragmentShader: `uniform sampler2D tDiffuse; uniform float time; varying vec2 vUv;
     void main(){ vec3 c = texture2D(tDiffuse, vUv).rgb; float l = dot(c, vec3(.299, .587, .114));
-      c = mix(vec3(l), c, .88); c = c * c * (3.0 - 2.0 * c) * .35 + c * .65; c = mix(c, c * vec3(1.06, 1.0, .88), smoothstep(.45, 1.0, l)); c = mix(vec3(.035, .03, .022) + c * .96, c, smoothstep(0.0, .25, l));
+      c = mix(vec3(l), c, .96); c = c * c * (3.0 - 2.0 * c) * .35 + c * .65; c = mix(c, c * vec3(1.06, 1.0, .88), smoothstep(.45, 1.0, l)); c = mix(vec3(.035, .03, .022) + c * .96, c, smoothstep(0.0, .25, l));
       vec2 q = vUv - .5; c *= 1.0 - dot(q, q) * .75; c += (fract(sin(dot(vUv * 1.7 + fract(time * 1.3), vec2(12.9898, 78.233))) * 43758.5453) - .5) * .028; gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0); }` });
 composer.addPass(grade);
 
