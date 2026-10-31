@@ -544,9 +544,11 @@ module.exports = function (app, { db, wrap, root }) {
     const { col, id } = req.params;
     if (!okCol(col) || !okId(id)) return res.status(400).json({ error: "Demande invalide." });
     const data = (req.body && req.body.data) || {};
-    const no = allowed(req.user, col, await current(col, id), data, null); if (no) return refuse(res, no);
+    const before = await current(col, id);
+    const no = allowed(req.user, col, before, data, null); if (no) return refuse(res, no);
     await put(col, id, data);
     res.json({ ok: true, id });
+    if (col === "messages" && !before) pushMsg(data).catch(() => {});
   }));
   app.post("/api/g/:col", auth, wrap(async (req, res) => {
     const col = req.params.col;
@@ -556,6 +558,7 @@ module.exports = function (app, { db, wrap, root }) {
     const id = newId();
     await put(col, id, data);
     res.json({ ok: true, id });
+    if (col === "messages") pushMsg(data).catch(() => {});
   }));
   // Modifier quelques champs
   app.patch("/api/g/:col/:id", auth, wrap(async (req, res) => {
@@ -652,6 +655,29 @@ module.exports = function (app, { db, wrap, root }) {
     const bill = await current("billing", "c" + c.id), billing = bill ? { plan: bill.plan || null, docs: bill.docs || [] } : { plan: null, docs: [] };
     res.json({ visio: { room: vr, here }, me: { name: req.cname, prenom: req.cname.split(" ")[0], entreprise: req.cu.entreprise }, client: { name: c.name, id: c.id }, preview: req.cu.email === PREVIEW_MAIL, messages, idees, team, billing });
   }));
+  // ---------- Notifications push de l’équipe : le message s’affiche en entier, comme sur WhatsApp ----------
+  const PUSH = require("./push")(db);
+  app.get("/api/g-push/key", auth, wrap(async (req, res) => res.json({ key: await PUSH.key() })));
+  app.post("/api/g-push", auth, wrap(async (req, res) => { if (req.user.preview) return res.status(403).json({ error: "Aperçu." }); await PUSH.save("g", req.user.name, (req.body || {}).sub); res.json({ ok: true }); }));
+  app.post("/api/g-push/off", auth, wrap(async (req, res) => { await PUSH.remove((req.body || {}).endpoint || ""); res.json({ ok: true }); }));
+  app.post("/api/g-push/test", auth, wrap(async (req, res) => res.json({ sent: await PUSH.send("g", [req.user.name], { title: "Agence Gacolet", body: "Les notifications marchent sur cet appareil.", url: "/gestion#parametres", tag: "test" }) })));
+  async function pushMsg(d, cl) {
+    const ch = String(d.ch || ""), who = String(d.who || "Quelqu’un");
+    const team = (await db.all("SELECT name FROM gusers WHERE disabled = 0")).map(r => r.name);
+    const cname = async id => { const c = await db.one("SELECT name FROM clients WHERE id = ?", [Number(id)]); return c ? c.name : "Client"; };
+    let to = team.filter(n => n !== who), title = "", dm = false;
+    const base = ch.replace(/^tg:/, ""), shoot = ch.startsWith("tg:");
+    if (ch.startsWith("dm:")) { to = ch.slice(3).split("|").filter(n => n !== who); title = who; dm = true; }
+    else if (ch.startsWith("cdm:")) { const [x, name] = ch.slice(4).split("|"); to = [name].filter(n => n !== who); title = (cl ? cl.name : await cname(x)) + ", privé"; }
+    else if (base.startsWith("cg:")) title = (cl ? cl.name : await cname(base.slice(3))) + (shoot ? ", tournage" : "");
+    else if (base.startsWith("c:")) title = base.slice(2) + (shoot ? ", tournage" : ", interne");
+    else title = shoot ? "Tournages" : "Équipe";
+    const f = Array.isArray(d.files) ? d.files : [];
+    const what = d.audio ? "Message vocal" : String(d.text || "").trim() || (f.length > 1 ? f.length + " fichiers" : f.length ? (/^image\//.test(f[0].type || "") ? "Photo" : /^video\//.test(f[0].type || "") ? "Vidéo" : "Fichier") : "Nouveau message");
+    const body = (dm ? "" : who + " : ") + what.slice(0, 300);
+    await PUSH.send("g", to, { title, body, url: "/gestion#messagerie", ch, tag: "ch-" + ch });
+  }
+
   // ---------- Prélèvements, contrats et factures : le propriétaire saisit, le client consulte ----------
   const cleanBill = b => {
     const s = (v, n) => String(v == null ? "" : v).trim().slice(0, n);
@@ -679,8 +705,10 @@ module.exports = function (app, { db, wrap, root }) {
     const ch = b.ch ? String(b.ch) : cgOf(req.cl);
     if (!await clientChOk(req.cl, ch)) return res.status(403).json({ error: "Conversation inconnue." });
     const id = newId();
-    await put("messages", id, Object.assign({ ch, text, who: req.cname, ext: 1, at: new Date().toISOString() }, files.length ? { files } : {}));
+    const msg = Object.assign({ ch, text, who: req.cname, ext: 1, at: new Date().toISOString() }, files.length ? { files } : {});
+    await put("messages", id, msg);
     res.json({ ok: true, id });
+    pushMsg(msg, req.cl).catch(() => {});
   }));
   app.delete("/api/c/msg/:id", cauth, wrap(async (req, res) => {
     const id = String(req.params.id); if (!okId(id)) return res.status(400).json({ error: "Demande invalide." });
