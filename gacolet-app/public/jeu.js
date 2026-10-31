@@ -357,7 +357,6 @@ function fPlant() { const g = new THREE.Group(); const p = new THREE.Mesh(new TH
   [-8, 8].forEach(x => { const b = fbox(4, .35, 1, FM.wood, x, 1, 1.6, g); fbox(.3, 1, .8, FM.dark, x - 1.7, .5, 1.6, g); fbox(.3, 1, .8, FM.dark, x + 1.7, .5, 1.6, g); });
   [[-4, -1], [4, -1]].forEach(([x, z]) => { const br = new THREE.Group(); fbox(.3, 2.6, .3, FM.iron, 0, 1.3, 0, br); const bowl = new THREE.Mesh(new THREE.CylinderGeometry(.8, .4, .6, 10), FM.iron); bowl.position.y = 2.8; br.add(bowl); for (let i = 0; i < 3; i++) { const f = new THREE.Mesh(new THREE.ConeGeometry(.3, 1, 6), FM.flame); f.position.set(Math.cos(i * 2) * .25, 3.4, Math.sin(i * 2) * .25); br.add(f); TORCHES.push(f); } br.position.set(x, 0, z); g.add(br); });
   const acc = fTable(4.2, 1.6); acc.position.set(16, 0, -1); g.add(acc); const accP = fPlaque("Accueil", 2.4); accP.scale.set(.8, .7, 1); accP.position.set(16, 2.4, -.15); g.add(accP); fCandle(acc, -1.6, 1.82, -.4);
-  [[-26, 2.6], [26, 2.6], [-11, 2.6], [11, 2.6]].forEach(([x, z]) => { const p = fPlant(); p.position.set(x, 0, z); g.add(p); });
   [-16, 0, 16].forEach(x => { const c = fChandelier(); c.position.set(x, 7.6, -2.2); g.add(c); });
   [["Bureau de Clara", -18], ["Salle de réunion", 0], ["Matis et Gabriel", 18]].forEach(([t, x]) => { const p = fPlaque(t, 4.8); p.scale.set(.9, .9, 1); p.position.set(x, 7.6, PZ + .53); g.add(p); });
   // Salle de réunion
@@ -373,7 +372,7 @@ function fPlant() { const g = new THREE.Group(); const p = new THREE.Mesh(new TH
   // Bureau de Clara
   const dC = fDesk("Clara"); dC.position.set(-18.5, 0, -23.5); g.add(dC); const cC = fChair(0); cC.position.set(-18.5, 0, -25.4); g.add(cC);
   [-24, -19.5, -15].forEach(z => { const s = fShelf(); s.position.set(-26.9, 0, z); s.rotation.y = Math.PI / 2; g.add(s); });
-  const rC = fRug(8, 8, "#23407A", "#C9A13B"); rC.position.set(-18.5, .06, -19); g.add(rC); const pC = fPlant(); pC.position.set(-11, 0, -28); g.add(pC); const kC = fChest(); kC.position.set(-25, 0, -10.6); g.add(kC);
+  const rC = fRug(8, 8, "#23407A", "#C9A13B"); rC.position.set(-18.5, .06, -19); g.add(rC); const kC = fChest(); kC.position.set(-25, 0, -10.6); g.add(kC);
   const fC = fPainting(3.6, 2.4); fC.position.set(-18.5, 4.8, KZ0 + 1.1); g.add(fC); const cl = fChandelier(); cl.position.set(-18.5, 7.4, -19); g.add(cl);
   const sofa = new THREE.Group(); fbox(5, 1, 1.8, FM.wood, 0, .5, 0, sofa); fbox(4.6, .4, 1.5, FM.red, 0, 1.15, .1, sofa); fbox(5, 1.6, .4, FM.wood, 0, 1.6, -.75, sofa); sofa.position.set(-14, 0, -12); sofa.rotation.y = Math.PI; g.add(sofa);
   const lt = fTable(2.6, 1.6); lt.scale.set(1, .6, 1); lt.position.set(-14, 0, -14.6); g.add(lt);
@@ -381,7 +380,7 @@ function fPlant() { const g = new THREE.Group(); const p = new THREE.Mesh(new TH
   [["Matis", 14.5], ["Gabriel", 22.5]].forEach(([n, x]) => { const d = fDesk(n); d.position.set(x, 0, -23.5); g.add(d); const c = fChair(0); c.position.set(x, 0, -25.4); g.add(c); });
   [-22, -15].forEach(z => { const s = fShelf(); s.position.set(26.9, 0, z); s.rotation.y = -Math.PI / 2; g.add(s); });
   const rk = fRack(); rk.position.set(26.9, 0, -11.5); rk.rotation.y = -Math.PI / 2; g.add(rk);
-  const rM = fRug(12, 8, "#7A1717", "#C9A13B"); rM.position.set(18.5, .06, -19); g.add(rM); [[11, -28], [11, -10.4]].forEach(([x, z]) => { const p = fPlant(); p.position.set(x, 0, z); g.add(p); });
+  const rM = fRug(12, 8, "#7A1717", "#C9A13B"); rM.position.set(18.5, .06, -19); g.add(rM);
   const ptg = fPainting(5.2, 3.2); ptg.position.set(18.5, 5, KZ0 + 1.1); g.add(ptg); const ptl = fPlaque("Objectif : le chalet", 3.6); ptl.scale.set(.8, .55, 1); ptl.position.set(18.5, 2.95, KZ0 + 1.08); g.add(ptl);
   const cm = fChandelier(); cm.position.set(18.5, 7.4, -19); g.add(cm); const mt = fTable(3, 3); mt.position.set(18.5, 0, -13.5); g.add(mt); fCandle(mt, 0, 1.82, 0);
   // Toit du donjon et tours
@@ -857,23 +856,26 @@ function driveCar(c, dt, up, down, left, right) {
   const lim = 300; c.x = Math.max(-lim, Math.min(lim, c.x)); c.z = Math.max(-lim, Math.min(lim, c.z));
   // hauteur et inclinaison selon le sol sous les 4 roues
   const fwdX = Math.sin(c.yaw), fwdZ = Math.cos(c.yaw), rX = Math.cos(c.yaw), rZ = -Math.sin(c.yaw);
-  const hF = groundAt(c.x + fwdX * 4, c.z + fwdZ * 4), hB = groundAt(c.x - fwdX * 4, c.z - fwdZ * 4), hL = groundAt(c.x - rX * 2, c.z - rZ * 2), hR = groundAt(c.x + rX * 2, c.z + rZ * 2);
-  const gh = Math.max((hF + hB) / 2, groundAt(c.x, c.z)), prevG = c.lastG == null ? gh : c.lastG; c.lastG = gh;
+  const WL = (c.obj.userData.wheels || {}).list || [], wpos = WL.length === 4 ? WL.map(w => [w.c.x, w.c.z]) : [[-2, 4], [2, 4], [-2, -4], [2, -4]];
+  const wh4 = wpos.map(([lx, lz]) => groundAt(c.x + rX * lx + fwdX * lz, c.z + rZ * lx + fwdZ * lz)), isF = wpos.map(p => p[1] > 0), isR = wpos.map(p => p[0] > 0), avg = f => { let a = 0, n = 0; wh4.forEach((h, i) => { if (f(i)) { a += h; n++; } }); return n ? a / n : 0; };
+  const hF = avg(i => isF[i]), hB = avg(i => !isF[i]), hL = avg(i => !isR[i]), hR = avg(i => isR[i]), wbz = Math.max(4, Math.abs(wpos[0][1] - wpos[wpos.length - 1][1]) || 8), trk = Math.max(2, Math.abs(wpos[0][0] - wpos[1][0]) || 4);
+  WL.forEach((w, i) => { const plane = (hF + hB) / 2 + (isF[i] ? 1 : -1) * (hF - hB) / 2 + (isR[i] ? 1 : -1) * (hR - hL) / 2, r = Math.max(-.6, Math.min(.6, wh4[i] - plane)); w.off = (w.off || 0) + (r - (w.off || 0)) * Math.min(1, dt * 14); if (w.y0 == null) w.y0 = w.steer.position.y; w.steer.position.y = w.y0 + w.off; });
+  const gh = Math.max((hF + hB) / 2, Math.max(...wh4) - .5), prevG = c.lastG == null ? gh : c.lastG; c.lastG = gh;
   c.vy -= 42 * dt; c.y += c.vy * dt;
   if (c.y <= gh) {
     if (air || STUNT.air > 0.4) { const badR = Math.abs(Math.atan2(Math.sin(c.roll), Math.cos(c.roll))) > 1.0, badP = Math.abs(Math.atan2(Math.sin(c.pitch), Math.cos(c.pitch))) > 1.1;
       if (STUNT.air > 0.5) { if (badR || badP) { float("Crash !"); c.speed *= 0.2; c.vx *= 0.2; c.vz *= 0.2; }
         else { const t = []; if (STUNT.rolls) t.push(STUNT.rolls + (STUNT.rolls > 1 ? " tonneaux" : " tonneau")); if (STUNT.flips) t.push(STUNT.flips + (STUNT.flips > 1 ? " saltos" : " salto")); float((t.length ? t.join(" + ") + " ! " : "Saut ! ") + STUNT.air.toFixed(1) + " s", "gold"); if (t.length) tone(990, .3); } }
-      STUNT.air = 0; STUNT.rolls = 0; STUNT.flips = 0; c.sp = 0; c.sr = 0; c.roll = 0; c.pitch = Math.atan2(hB - hF, 8); }
+      STUNT.air = 0; STUNT.rolls = 0; STUNT.flips = 0; c.sp = 0; c.sr = 0; c.roll = 0; c.pitch = Math.atan2(hF - hB, wbz); }
     c.y = gh; c.vy = Math.max(0, (gh - prevG) / Math.max(dt, 0.001)) * 0.35;
-    c.pitch += (Math.atan2(hB - hF, 8) - c.pitch) * Math.min(1, dt * 7); c.roll += (Math.atan2(hL - hR, 4) - c.roll) * Math.min(1, dt * 7);
+    c.pitch += (Math.atan2(hF - hB, wbz) - c.pitch) * Math.min(1, dt * 7); c.roll += (Math.atan2(hR - hL, trk) - c.roll) * Math.min(1, dt * 7);
   } else { STUNT.air += dt; const pr = c.roll, pp = c.pitch; c.roll += c.sr * dt; c.pitch += c.sp * dt; c.sr *= (1 - .4 * dt); c.sp *= (1 - .4 * dt);
     if (Math.floor(Math.abs(c.roll) / (Math.PI * 2) + .25) > Math.floor(Math.abs(pr) / (Math.PI * 2) + .25)) STUNT.rolls++;
     if (Math.floor(Math.abs(c.pitch) / (Math.PI * 2) + .25) > Math.floor(Math.abs(pp) / (Math.PI * 2) + .25)) STUNT.flips++; }
   c.obj.position.set(c.x, c.y, c.z); c.obj.rotation.order = "YXZ"; c.obj.rotation.set(-c.pitch, c.yaw, c.roll);
   // Suspension : la caisse penche dans les virages, plonge au freinage, se cabre à l'accélération et rebondit sur les bosses
   { const lng = (c.speed - (c.lastSp == null ? c.speed : c.lastSp)) / Math.max(dt, 1e-3); c.lastSp = c.speed; const dG = gh - prevG;
-    const tR = Math.max(-.11, Math.min(.11, -(c.latA || 0) * 0.0045)), tP = Math.max(-.07, Math.min(.07, lng * 0.004));
+    const tR = Math.max(-.13, Math.min(.13, (c.latA || 0) * 0.006)), tP = Math.max(-.08, Math.min(.08, -lng * 0.0045));
     c.bR = c.bR || 0; c.bRv = c.bRv || 0; c.bP = c.bP || 0; c.bPv = c.bPv || 0; c.bH = c.bH || 0; c.bHv = c.bHv || 0;
     c.bRv += (55 * (tR - c.bR) - 7 * c.bRv) * dt; c.bR += c.bRv * dt; c.bPv += (60 * (tP - c.bP) - 8 * c.bPv) * dt; c.bP += c.bPv * dt;
     c.bHv += (70 * (0 - c.bH) - 9 * c.bHv) * dt - Math.max(-3, Math.min(3, dG / Math.max(dt, 1e-3))) * dt * 9; c.bH += c.bHv * dt; c.bH = Math.max(-.45, Math.min(.45, c.bH));
@@ -913,37 +915,61 @@ const float = (t, cls) => { const f = el("div", "float " + (cls || ""), t); $("#
 const banner = (h, p) => { const b = el("div", "banner"); b.append(el("h2", null, h)); if (p) b.append(el("p", null, p)); $("#fx").appendChild(b); setTimeout(() => b.remove(), 3500); };
 let AC; const tone = (f, d, t0) => { try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); const o = AC.createOscillator(), g = AC.createGain(); o.type = "triangle"; o.frequency.value = f; g.gain.setValueAtTime(0.0001, AC.currentTime + (t0 || 0)); g.gain.exponentialRampToValueAtTime(0.18, AC.currentTime + (t0 || 0) + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime + (t0 || 0) + d); o.connect(g).connect(AC.destination); o.start(AC.currentTime + (t0 || 0)); o.stop(AC.currentTime + (t0 || 0) + d + 0.05); } catch (e) {} };
 const chime = () => { tone(784, .25); tone(988, .25, .1); tone(1319, .5, .2); };
-/* ---------- Son : musique médiévale jouée en direct (luth, vielle, tambour) et bruitages synthétisés ---------- */
+/* ---------- Son : musique symphonique douce jouée en direct (cordes, harpe, flûte, cor, timbales) et bruitages synthétisés ---------- */
 const SND = (() => {
   let ctx = null, master, mus, sfx, noiseBuf, lute = {}, started = false;
   const pref = k => { try { const v = localStorage.getItem(k); return v == null ? 1 : +v; } catch (e) { return 1; } };
   const vol = { mus: pref("hg-vm"), sfx: pref("hg-vs") };
   function init() { if (ctx) { if (ctx.state === "suspended") ctx.resume(); return; } try { ctx = AC = AC || new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
     master = ctx.createGain(); master.gain.value = 0.9; const comp = ctx.createDynamicsCompressor(); master.connect(comp).connect(ctx.destination);
-    mus = ctx.createGain(); mus.gain.value = 0.32 * vol.mus; sfx = ctx.createGain(); sfx.gain.value = 0.8 * vol.sfx;
+    mus = ctx.createGain(); mus.gain.value = 0.2 * vol.mus; sfx = ctx.createGain(); sfx.gain.value = 0.8 * vol.sfx;
     // petite réverbération de salle pour la musique
-    const rv = ctx.createConvolver(), L = ctx.sampleRate * 1.8, ir = ctx.createBuffer(2, L, ctx.sampleRate); for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); for (let i = 0; i < L; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / L, 3); } rv.buffer = ir;
-    const wet = ctx.createGain(); wet.gain.value = .35; mus.connect(master); mus.connect(rv).connect(wet).connect(master); sfx.connect(master);
+    const rv = ctx.createConvolver(), L = ctx.sampleRate * 2.8, ir = ctx.createBuffer(2, L, ctx.sampleRate); for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); for (let i = 0; i < L; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / L, 3); } rv.buffer = ir;
+    const wet = ctx.createGain(); wet.gain.value = .55; mus.connect(master); mus.connect(rv).connect(wet).connect(master); sfx.connect(master);
     noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate); const nd = noiseBuf.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
     startMusic(); startAmbience(); }
-  // corde pincée (Karplus-Strong) : timbre de luth
-  function pluckBuf(f) { if (lute[f]) return lute[f]; const sr = ctx.sampleRate, n = Math.floor(sr * 2.2), b = ctx.createBuffer(1, n, sr), d = b.getChannelData(0), p = Math.max(2, Math.round(sr / f)), ring = new Float32Array(p);
-    for (let i = 0; i < p; i++) ring[i] = Math.random() * 2 - 1; let k = 0; for (let i = 0; i < n; i++) { const a = ring[k], b2 = ring[(k + 1) % p]; d[i] = a; ring[k] = (a + b2) * .5 * .996; k = (k + 1) % p; } return lute[f] = b; }
+  // corde pincée (Karplus-Strong) : timbre de harpe
+  function pluckBuf(f) { if (lute[f]) return lute[f]; const sr = ctx.sampleRate, n = Math.floor(sr * 3), b = ctx.createBuffer(1, n, sr), d = b.getChannelData(0), p = Math.max(2, Math.round(sr / f)), ring = new Float32Array(p);
+    for (let i = 0; i < p; i++) ring[i] = (Math.random() * 2 - 1) * .7 + Math.sin(i / p * Math.PI * 2) * .3; let k = 0; for (let i = 0; i < n; i++) { const a = ring[k], b2 = ring[(k + 1) % p]; d[i] = a; ring[k] = (a + b2) * .5 * .9975; k = (k + 1) % p; } return lute[f] = b; }
   const hz = m => 440 * Math.pow(2, (m - 69) / 12);
-  function pluck(m, t, g) { const s = ctx.createBufferSource(); s.buffer = pluckBuf(hz(m)); const v = ctx.createGain(); v.gain.setValueAtTime(g, t); v.gain.exponentialRampToValueAtTime(.001, t + 2); const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 2600; s.connect(lp).connect(v).connect(mus); s.start(t); s.stop(t + 2.1); }
-  function drum(t, g, f) { const o = ctx.createOscillator(), v = ctx.createGain(); o.frequency.setValueAtTime(f || 110, t); o.frequency.exponentialRampToValueAtTime(45, t + .25); v.gain.setValueAtTime(g, t); v.gain.exponentialRampToValueAtTime(.001, t + .35); o.connect(v).connect(mus); o.start(t); o.stop(t + .4);
-    const n = ctx.createBufferSource(); n.buffer = noiseBuf; const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 900; const nv = ctx.createGain(); nv.gain.setValueAtTime(g * .25, t); nv.gain.exponentialRampToValueAtTime(.001, t + .08); n.connect(bp).connect(nv).connect(mus); n.start(t, Math.random()); n.stop(t + .1); }
-  function drone(m, t, d) { [0, 7].forEach((iv, j) => { const o = ctx.createOscillator(); o.type = "sawtooth"; o.frequency.value = hz(m + iv); o.detune.value = j ? 4 : -4; const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 700; const v = ctx.createGain();
-      v.gain.setValueAtTime(0, t); v.gain.linearRampToValueAtTime(.035, t + 1.2); v.gain.setValueAtTime(.035, t + d - 1.2); v.gain.linearRampToValueAtTime(0, t + d); o.connect(lp).connect(v).connect(mus); o.start(t); o.stop(t + d + .1); }); }
-  // compositeur : mode dorien en ré, phrases de 8 temps, accords tenus à la vielle
-  const SCALE = [0, 2, 3, 5, 7, 9, 10], ROOTS = [0, 0, 5, 3, 0, 7, 5, 0]; let bar = 0, nextT = 0, deg = 4;
-  function schedule() { if (!ctx) return; const bpm = 76, beat = 60 / bpm; while (nextT < ctx.currentTime + 1.5) { const root = 50 + ROOTS[bar % ROOTS.length];
-      if (bar % 2 === 0) drone(root - 12, nextT, beat * 8);
-      for (let i = 0; i < 4; i++) { const t = nextT + i * beat; drum(t, i === 0 ? .55 : .22, i === 0 ? 95 : 140);
-        deg += [-2, -1, -1, 1, 1, 2, 0][(Math.random() * 7) | 0]; deg = Math.max(0, Math.min(11, deg)); const note = 62 + SCALE[deg % 7] + 12 * Math.floor(deg / 7) - 12;
-        pluck(note, t, .5); if (Math.random() < .55) pluck(note + (Math.random() < .5 ? 2 : -2), t + beat / 2, .32); if (i === 0) pluck(root, t, .35); }
+  function harp(m, t, g) { const s = ctx.createBufferSource(); s.buffer = pluckBuf(hz(m)); const v = ctx.createGain(); v.gain.setValueAtTime(g, t); v.gain.exponentialRampToValueAtTime(.001, t + 2.8); const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 1700; s.connect(lp).connect(v).connect(mus); s.start(t); s.stop(t + 3); }
+  // cordes : trois scies désaccordées, attaque lente, filtre doux et léger vibrato
+  function strings(notes, t, d, g) { notes.forEach(m => { const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 900 + Math.random() * 300; lp.Q.value = .4; const v = ctx.createGain(); const a = Math.min(1.8, d * .35);
+      v.gain.setValueAtTime(0, t); v.gain.linearRampToValueAtTime(g, t + a); v.gain.setValueAtTime(g, t + d - .2); v.gain.linearRampToValueAtTime(0, t + d + 1.6); lp.connect(v).connect(mus);
+      const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 4.6 + Math.random(); lg.gain.value = 3; lfo.connect(lg);
+      [-7, 0, 6].forEach(dt => { const o = ctx.createOscillator(); o.type = "sawtooth"; o.frequency.value = hz(m); o.detune.value = dt; lg.connect(o.detune); o.connect(lp); o.start(t); o.stop(t + d + 1.8); }); lfo.start(t); lfo.stop(t + d + 1.8); }); }
+  // flûte et cor : voix solistes
+  function lead(m, t, d, g, kind) { const o = ctx.createOscillator(), o2 = ctx.createOscillator(), lp = ctx.createBiquadFilter(), v = ctx.createGain(), lfo = ctx.createOscillator(), lg = ctx.createGain();
+    o.type = kind === "cor" ? "sawtooth" : "sine"; o2.type = "triangle"; o.frequency.value = hz(m); o2.frequency.value = hz(m) * (kind === "cor" ? .5 : 2); const g2 = ctx.createGain(); g2.gain.value = kind === "cor" ? .4 : .12;
+    lp.type = "lowpass"; lp.frequency.value = kind === "cor" ? 650 : 2800; lfo.frequency.value = 5.2; lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(kind === "cor" ? 3 : 9, t + Math.min(.6, d * .6)); lfo.connect(lg); lg.connect(o.detune); lg.connect(o2.detune);
+    const at = kind === "cor" ? .25 : .12; v.gain.setValueAtTime(0, t); v.gain.linearRampToValueAtTime(g, t + at); v.gain.setValueAtTime(g * .85, t + Math.max(at, d - .1)); v.gain.linearRampToValueAtTime(0, t + d + (kind === "cor" ? .5 : .3));
+    o.connect(lp); o2.connect(g2).connect(lp); lp.connect(v).connect(mus); [o, o2, lfo].forEach(x => { x.start(t); x.stop(t + d + .7); }); }
+  function timp(t, g) { const o = ctx.createOscillator(), v = ctx.createGain(); o.frequency.setValueAtTime(82, t); o.frequency.exponentialRampToValueAtTime(70, t + 1); v.gain.setValueAtTime(g, t); v.gain.exponentialRampToValueAtTime(.001, t + 1.6); const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 300; o.connect(lp).connect(v).connect(mus); o.start(t); o.stop(t + 1.7); }
+  // morceaux : chacun a sa tonalité, sa grille d'accords, son tempo et ses solistes ; on en change à chaque fin de morceau
+  const MAJ = [0, 2, 4, 5, 7, 9, 11], MIN = [0, 2, 3, 5, 7, 8, 10], DOR = [0, 2, 3, 5, 7, 9, 10];
+  const PIECES = [
+    { name: "Clairière", key: 62, sc: MAJ, prog: [0, 5, 3, 4], bpm: 66, lead: "flute", harp: true, timp: false },
+    { name: "Veillée", key: 57, sc: MIN, prog: [0, 5, 2, 6], bpm: 56, lead: "cor", harp: false, timp: false },
+    { name: "Remparts", key: 65, sc: MAJ, prog: [0, 3, 5, 4], bpm: 70, lead: "cor", harp: true, timp: true },
+    { name: "Pâturages", key: 67, sc: MAJ, prog: [0, 4, 5, 3], bpm: 78, lead: "flute", harp: true, timp: false },
+    { name: "Brumes", key: 64, sc: DOR, prog: [0, 3, 0, 6], bpm: 58, lead: "flute", harp: false, timp: true },
+    { name: "Chalet", key: 60, sc: MAJ, prog: [0, 5, 1, 4], bpm: 62, lead: "flute", harp: true, timp: false } ];
+  let piece = null, pIdx = -1, bar = 0, nextT = 0, mdeg = 7, rest = 0;
+  const chordOf = (p, i) => { const r = p.prog[i % p.prog.length]; return [0, 2, 4].map(k => { const dg = r + k; return p.key + p.sc[dg % 7] + 12 * Math.floor(dg / 7); }); };
+  function schedule() { if (!ctx) return;
+    while (nextT < ctx.currentTime + 2) {
+      if (!piece || bar >= 32) { if (piece && !rest) { rest = 1; nextT += 7; continue; } rest = 0; let k; do { k = (Math.random() * PIECES.length) | 0; } while (k === pIdx); pIdx = k; piece = PIECES[k]; bar = 0; mdeg = 7; }
+      const p = piece, beat = 60 / p.bpm, ch = chordOf(p, Math.floor(bar / 2)), t = nextT, cyc = Math.floor(bar / 8), soft = bar < 2 || bar >= 30;
+      if (bar % 2 === 0) { strings(ch.map(m => m - 12), t, beat * 8, soft ? .012 : .018); strings([ch[0] - 24], t, beat * 8, .02); if (p.timp && bar % 8 === 0 && bar) timp(t, .22); }
+      if (p.harp && cyc !== 0) { const arp = [ch[0], ch[1], ch[2], ch[0] + 12, ch[2], ch[1], ch[0] + 12, ch[2] + 12]; arp.forEach((m, i) => harp(m, t + i * beat / 2, .11 + (i % 4 === 0 ? .04 : 0))); }
+      if (cyc === 1 || cyc === 2 || (cyc === 3 && bar < 30)) { // mélodie : notes de l'accord sur les temps forts, mouvement conjoint ensuite
+        const rh = [[2, 1, 1], [1, 1, 2], [3, 1], [1.5, .5, 2], [4]][(Math.random() * 5) | 0]; let tt = 0;
+        rh.forEach((dur, i) => { if (i === 0) { const tones = ch.map(m => m - p.key); let best = mdeg, bd = 99; for (let dg = 3; dg < 14; dg++) { const v = p.sc[dg % 7] + 12 * Math.floor(dg / 7); if (tones.some(x => (v - x) % 12 === 0) && Math.abs(dg - mdeg) < bd) { bd = Math.abs(dg - mdeg); best = dg; } } mdeg = best; }
+          else mdeg = Math.max(3, Math.min(13, mdeg + [-1, -1, 1, 1, -2, 2, 0][(Math.random() * 7) | 0]));
+          const m = p.key + p.sc[mdeg % 7] + 12 * Math.floor(mdeg / 7) + (p.lead === "cor" ? -12 : 0);
+          if (!(bar % 4 === 3 && i === rh.length - 1)) lead(m, t + tt * beat, dur * beat * .95, p.lead === "cor" ? .05 : .045, p.lead); tt += dur; }); }
       nextT += beat * 4; bar++; } }
-  function startMusic() { if (started) return; started = true; nextT = ctx.currentTime + .3; setInterval(schedule, 400); schedule(); }
+  function startMusic() { if (started) return; started = true; nextT = ctx.currentTime + .5; setInterval(schedule, 500); schedule(); }
   // ambiance : vent léger et oiseaux dehors, fontaine près de la place
   let wind, windG, water, waterG;
   function startAmbience() { wind = ctx.createBufferSource(); wind.buffer = noiseBuf; wind.loop = true; const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 380; windG = ctx.createGain(); windG.gain.value = .05; wind.connect(lp).connect(windG).connect(sfx); wind.start();
@@ -976,7 +1002,7 @@ const SND = (() => {
     const gear = Math.abs(speed) % 14 / 14, rpm = 28 + Math.min(1, Math.abs(speed) / 46) * 30 + gear * 26 + (throttle ? 8 : 0);
     eng.o1.frequency.setTargetAtTime(rpm, t, .08); eng.o2.frequency.setTargetAtTime(rpm / 2, t, .08); eng.lp.frequency.setTargetAtTime(300 + rpm * 9 + (throttle ? 600 : 0), t, .1); eng.v.gain.setTargetAtTime(throttle ? .16 : .1, t, .15); eng.sg.gain.setTargetAtTime(skid ? .08 : 0, t, .08); }
   function amb(outside, waterD) { if (!ctx) return; const t = ctx.currentTime; windG.gain.setTargetAtTime(outside ? .05 : .01, t, .5); waterG.gain.setTargetAtTime(Math.max(0, 1 - waterD / 28) * .09, t, .3); if (outside && Math.random() < .004) E.bird(); }
-  function setVol(k, v) { vol[k] = v; try { localStorage.setItem(k === "mus" ? "hg-vm" : "hg-vs", String(v)); } catch (e) {} if (mus) mus.gain.value = .32 * vol.mus; if (sfx) sfx.gain.value = .8 * vol.sfx; }
+  function setVol(k, v) { vol[k] = v; try { localStorage.setItem(k === "mus" ? "hg-vm" : "hg-vs", String(v)); } catch (e) {} if (mus) mus.gain.value = .2 * vol.mus; if (sfx) sfx.gain.value = .8 * vol.sfx; }
   const play = (n, a) => { if (ctx && E[n]) try { E[n](a); } catch (e) {} };
   return { init, play, engine, amb, setVol, vol };
 })();
