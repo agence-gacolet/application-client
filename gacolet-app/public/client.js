@@ -143,24 +143,70 @@ function vAccueil(root){
 }
 
 /* ---------- À valider ---------- */
+const ST_LABEL = { wait: "À valider", ok: "Validée", mod: "Modification demandée", no: "Refusée" };
 async function decide(p, status, note){
   try { await api("/api/decision", { body: { postId: p.id, status, note, title: p.title, date: p.date + " " + (p.time || "") } });
     p.status = status; p.note = note || ""; p.decidedBy = myName(); p.decidedAt = new Date().toISOString(); S.modOpen = null;
-    toast(status === "ok" ? "Validée. L’agence la programme." : "Demande envoyée à l’agence."); render();
+    if (status !== "ok"){ const t = (status === "mod" ? "Modification demandée sur « " : "Publication refusée : « ") + (p.title || "Publication") + " » (" + fmtDL(p.date) + (p.time ? ", " + fmtTime(p.time) : "") + ")" + (note ? "\n" + (status === "mod" ? "À changer : " : "Raison : ") + note : "");
+      api("/api/c/msg", { body: { text: t } }).catch(() => {}); }
+    toast(status === "ok" ? "Validée. L’agence la programme." : status === "mod" ? "Demande envoyée à l’agence." : "Refus envoyé à l’agence."); render();
   } catch(e){ toast(e.message); }
 }
-function mediaStrip(p){
-  const box = el("div","cl-media"); const strip = el("div","cl-strip");
+const isTall = p => /story|réel/i.test(p.type || "");
+function typeLabel(p){ const n = (p.media || []).length; if (/story/i.test(p.type || "")) return n > 1 ? "Story, " + n + " écrans" : "Story"; if (/réel/i.test(p.type || "")) return p.type; return n > 1 ? "Carrousel, " + n + " visuels" : p.type || "Publication"; }
+/* Défilement : flèches, points, glisser au doigt, flèches du clavier */
+function slider(p, opts){
+  opts = opts || {};
+  const box = el("div","cl-media" + (isTall(p) ? " tall" : "") + (opts.full ? " full" : "")); const strip = el("div","cl-strip"); strip.tabIndex = 0; strip.setAttribute("aria-label", typeLabel(p));
   p.media.forEach((m, i) => { let n; if (m.video){ n = document.createElement("video"); n.src = m.url; n.controls = true; n.playsInline = true; n.preload = i === 0 ? "metadata" : "none"; }
-    else { n = document.createElement("img"); n.src = m.url; n.alt = (p.type || "Visuel") + " " + (i + 1); n.loading = "lazy"; } strip.appendChild(n); });
+    else { n = document.createElement("img"); n.src = m.url; n.alt = (p.type || "Visuel") + " " + (i + 1); n.loading = "lazy"; if (opts.onOpen){ n.onclick = () => opts.onOpen(cur()); n.classList.add("zoomable"); } } strip.appendChild(n); });
   box.appendChild(strip);
-  if (p.media.length > 1){ const c = el("span","cl-count","1 / " + p.media.length); box.appendChild(c); strip.addEventListener("scroll", () => { c.textContent = (Math.round(strip.scrollLeft / strip.clientWidth) + 1) + " / " + p.media.length; }, { passive: true }); }
+  if (!opts.full) box.appendChild(el("span","cl-type",typeLabel(p)));
+  const cur = () => Math.round(strip.scrollLeft / Math.max(1, strip.clientWidth));
+  const total = p.media.length;
+  const goTo = i => { i = Math.max(0, Math.min(total - 1, i)); strip.scrollTo({ left: i * strip.clientWidth, behavior: "smooth" }); };
+  if (total > 1){
+    const c = el("span","cl-count","1 / " + total); box.appendChild(c);
+    const prev = el("button","cl-nav prev"); prev.type = "button"; prev.setAttribute("aria-label","Visuel précédent"); prev.innerHTML = '<svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></svg>';
+    const next = el("button","cl-nav next"); next.type = "button"; next.setAttribute("aria-label","Visuel suivant"); next.innerHTML = '<svg viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></svg>';
+    prev.onclick = e => { e.stopPropagation(); goTo(cur() - 1); }; next.onclick = e => { e.stopPropagation(); goTo(cur() + 1); };
+    const dots = el("div","cl-dots"); const ds = p.media.map((_, i) => { const d = el("button"); d.type = "button"; d.setAttribute("aria-label","Visuel " + (i + 1)); d.onclick = e => { e.stopPropagation(); goTo(i); }; dots.appendChild(d); return d; });
+    const upd = () => { const i = cur(); c.textContent = (i + 1) + " / " + total; prev.disabled = i === 0; next.disabled = i === total - 1; ds.forEach((d, k) => d.setAttribute("aria-current", String(k === i))); };
+    strip.addEventListener("scroll", () => { upd(); if (!opts.full) (S.sl = S.sl || {})[p.id] = cur(); }, { passive: true });
+    const keep = !opts.full && S.sl && S.sl[p.id]; if (keep) requestAnimationFrame(() => { strip.scrollLeft = keep * strip.clientWidth; });
+    strip.addEventListener("keydown", e => { if (e.key === "ArrowRight"){ e.preventDefault(); goTo(cur() + 1); } if (e.key === "ArrowLeft"){ e.preventDefault(); goTo(cur() - 1); } });
+    box.append(prev, next, dots); upd(); box._goTo = goTo;
+  }
+  if (opts.onOpen){ const z = el("button","cl-zoom"); z.type = "button"; z.setAttribute("aria-label","Voir en grand"); z.innerHTML = '<svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>'; z.onclick = () => opts.onOpen(cur()); box.appendChild(z); }
   return box;
 }
+/* Plein écran, comme sur le téléphone : on fait défiler, puis on décide */
+function openViewer(p, start){
+  const ov = el("div","cl-view"); ov.setAttribute("role","dialog"); ov.setAttribute("aria-modal","true"); ov.setAttribute("aria-label", p.title || "Publication");
+  const top = el("div","cl-vtop"); const tt = el("div"); tt.append(el("b",null,typeLabel(p)), el("span",null, fmtDL(p.date) + (p.time ? ", " + fmtTime(p.time) : "") + (p.net ? ", " + p.net : "")));
+  const x = el("button","cl-vx"); x.type = "button"; x.setAttribute("aria-label","Fermer"); x.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+  top.append(tt, x); ov.appendChild(top);
+  const sl = slider(p, { full: true }); ov.appendChild(sl);
+  const bot = el("div","cl-vbot");
+  if (p.text){ const cap = el("p","cl-vcap",p.text); bot.appendChild(cap); }
+  if (canDecide(p)){ const a = el("div","cl-acts");
+    a.append(btn("Valider","lemon", () => { close(); decide(p, "ok"); }), btn("Demander une modification","", () => { close(); openBox(p, "mod"); }), btn("Refuser","danger", () => { close(); openBox(p, "no"); }));
+    bot.appendChild(a); }
+  else bot.appendChild(el("p","cl-vst", ST_LABEL[p.status] + (p.decidedBy ? " par " + p.decidedBy : "")));
+  ov.appendChild(bot);
+  const key = e => { if (e.key === "Escape") close(); };
+  function close(){ document.removeEventListener("keydown", key); ov.remove(); document.body.classList.remove("cl-noscroll"); }
+  x.onclick = close; document.addEventListener("keydown", key);
+  document.body.appendChild(ov); document.body.classList.add("cl-noscroll");
+  const strip = sl.querySelector(".cl-strip"); setTimeout(() => { strip.scrollTo({ left: (start || 0) * strip.clientWidth }); strip.focus({ preventScroll: true }); }, 30);
+}
+const canDecide = p => p.status !== "ok" && !p.published && !(S.f && S.f.preview);
+function openBox(p, kind){ S.modOpen = p.id; S.modKind = kind; render(); setTimeout(() => { const t = document.getElementById("mod-" + p.id); if (t){ t.scrollIntoView({ block: "center", behavior: "smooth" }); t.focus(); } }, 0); }
 function vValider(root){
-  const n = { wait: waiting(), mod: posts().filter(p => p.status === "mod").length, ok: posts().filter(p => p.status === "ok").length };
-  root.appendChild(head(["À", "valider"], "Validez ou demandez une modification. Rien n’est publié sans votre accord.",
-    [segm([["wait","À valider" + (n.wait ? " " + n.wait : "")],["mod","Modifications"],["ok","Validées"]], S.pf, v => { S.pf = v; render(); })]));
+  const cnt = s => posts().filter(p => p.status === s).length;
+  const n = { wait: waiting(), mod: cnt("mod"), no: cnt("no") };
+  root.appendChild(head(["À", "valider"], "Faites défiler chaque contenu, puis validez, demandez une modification ou refusez. Rien n’est publié sans votre accord.",
+    [segm([["wait","À valider" + (n.wait ? " " + n.wait : "")],["mod","Modifications" + (n.mod ? " " + n.mod : "")],["no","Refusées" + (n.no ? " " + n.no : "")],["ok","Validées"]], S.pf, v => { S.pf = v; render(); })]));
   if (!has("com")){ locked(root, "com", valPreview); return; }
   if (S.d.postsError) root.appendChild(el("p","status",S.d.postsError));
   const list = posts().filter(p => p.status === S.pf);
@@ -168,21 +214,26 @@ function vValider(root){
   const g = el("div","cl-posts");
   list.forEach(p => {
     const c = el("article","cl-post");
-    if ((p.media || []).length) c.appendChild(mediaStrip(p));
+    if ((p.media || []).length) c.appendChild(slider(p, { onOpen: i => openViewer(p, i) }));
     const b = el("div","cl-pb");
-    const meta = el("div","cl-pmeta"); meta.append(el("span","pill" + (p.status === "wait" ? " l3" : ""), { wait: "À valider", ok: "Validée", mod: "Modification demandée" }[p.status]), el("span",null, fmtDL(p.date) + (p.time ? ", " + fmtTime(p.time) : "")), el("span",null,p.net || ""));
+    const meta = el("div","cl-pmeta"); meta.append(el("span","pill" + (p.status === "wait" ? " l3" : p.status === "no" ? " no" : ""), ST_LABEL[p.status] || ""), el("span",null, fmtDL(p.date) + (p.time ? ", " + fmtTime(p.time) : "")), el("span",null,p.net || ""));
     b.appendChild(meta);
     if (p.title) b.appendChild(el("h3","cl-pt",p.title));
     if (p.text) b.appendChild(el("p","cl-cap",p.text));
-    if (p.note) b.appendChild(el("p","cl-note","Votre demande : " + p.note));
-    if (p.status !== "wait" && p.decidedBy) b.appendChild(el("p","muted cl-by",(p.status === "ok" ? "Validée" : "Modification demandée") + " par " + p.decidedBy + " le " + fmtD(p.decidedAt)));
-    if (p.status !== "ok" && !p.published && !(S.f && S.f.preview)){
+    if (p.note) b.appendChild(el("p","cl-note" + (p.status === "no" ? " no" : ""), (p.status === "no" ? "Votre raison : " : "Votre demande : ") + p.note));
+    if (p.status !== "wait" && p.decidedBy) b.appendChild(el("p","muted cl-by",ST_LABEL[p.status] + " par " + p.decidedBy + " le " + fmtD(p.decidedAt)));
+    if (canDecide(p)){
+      const open = S.modOpen === p.id, kind = S.modKind || "mod";
       const a = el("div","cl-acts");
-      a.append(btn("Valider","lemon", () => decide(p, "ok")), btn(S.modOpen === p.id ? "Fermer" : "Demander une modification","", () => { S.modOpen = S.modOpen === p.id ? null : p.id; render(); setTimeout(() => { const t = document.getElementById("mod-" + p.id); if (t) t.focus(); }, 0); }));
+      a.append(btn("Valider","lemon", () => decide(p, "ok")),
+        btn(open && kind === "mod" ? "Fermer" : "Modifier","", () => { if (open && kind === "mod"){ S.modOpen = null; render(); } else openBox(p, "mod"); }),
+        btn(open && kind === "no" ? "Fermer" : "Refuser","danger", () => { if (open && kind === "no"){ S.modOpen = null; render(); } else openBox(p, "no"); }));
       b.appendChild(a);
-      if (S.modOpen === p.id){
-        const box = el("div","cl-modbox"); const ta = el("textarea"); ta.id = "mod-" + p.id; ta.rows = 3; ta.placeholder = "Ce qu’il faut changer, par exemple la fin du texte ou la photo de couverture";
-        box.append(ta, btn("Envoyer à l’agence","lemon", () => { if (!ta.value.trim()){ toast("Écrivez ce qu’il faut changer."); return; } decide(p, "mod", ta.value.trim()); }));
+      if (open){
+        const box = el("div","cl-modbox" + (kind === "no" ? " no" : "")); const ta = el("textarea"); ta.id = "mod-" + p.id; ta.rows = 3;
+        ta.placeholder = kind === "mod" ? "Ce qu’il faut changer, par exemple le texte du deuxième visuel ou la musique" : "Pourquoi ce contenu ne vous convient pas (facultatif, mais ça nous aide)";
+        box.append(el("b",null, kind === "mod" ? "Qu’est-ce qu’on change ?" : "Refuser ce contenu"), ta, btn(kind === "mod" ? "Envoyer la demande" : "Confirmer le refus", kind === "mod" ? "lemon" : "danger", () => {
+          if (kind === "mod" && !ta.value.trim()){ toast("Écrivez ce qu’il faut changer."); return; } decide(p, kind, ta.value.trim()); }));
         b.appendChild(box);
       }
     }
