@@ -85,20 +85,31 @@ const myName = () => (S.f && S.f.me.name) || "";
 const unread = () => S.f ? [...new Set(S.f.messages.map(m => m.ch))].reduce((n, k) => n + unreadIn(k), 0) : 0;
 
 /* ---------- Navigation ---------- */
-const VIEWS = [["accueil","Accueil"],["valider","À valider"],["messagerie","Messagerie"],["visio","Visio"],["idees","Mes idées"]];
+const VIEWS = [["accueil","Accueil"],["valider","À valider"],["stats","Statistiques"],["meta","Meta"],["messagerie","Messagerie"],["visio","Visio"],["idees","Mes idées"]];
+const MOBILE = ["accueil","valider","messagerie","stats"];
 const ICONS = {
   accueil:'<path d="M4 11.2 12 4.8l8 6.4V20h-5.6v-5.2H9.6V20H4z"/>',
   valider:'<rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8.5 12.3l2.4 2.4 4.6-4.9"/>',
   messagerie:'<path d="M4.5 6.5A2 2 0 0 1 6.5 4.5h11a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H10l-4.5 3.5v-3.5h0a2 2 0 0 1-1-1.7z"/>',
   visio:'<rect x="3" y="6.5" width="13" height="11" rx="2"/><path d="m16 10.5 5-3v9l-5-3"/>',
+  stats:'<path d="M4 20V11M10 20V5M16 20v-6M22 20H2"/>',
+  meta:'<path d="M4 10v4l3 .4L15 19V5L7 9.6z"/><path d="M18.2 9.4a3.6 3.6 0 0 1 0 5.2"/>',
+  plus:'<path d="M5 7h14M5 12h14M5 17h14"/>',
   idees:'<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>'
 };
 const ico = k => { const s = document.createElementNS("http://www.w3.org/2000/svg","svg"); s.setAttribute("viewBox","0 0 24 24"); s.setAttribute("aria-hidden","true"); s.classList.add("ico"); s.innerHTML = ICONS[k] || ""; return s; };
 function renderTabs(){
   const badge = { valider: waiting(), messagerie: S.view === "messagerie" ? 0 : unread() };
   const link = ([k, l]) => { const a = el("a"); a.href = "#"+k; a.appendChild(ico(k)); a.appendChild(el("span","lb",l)); if (k === S.view) a.setAttribute("aria-current","page"); if (badge[k]) a.appendChild(el("span","n",String(badge[k]))); return a; };
-  const n = $("#tabs"); n.textContent = ""; n.appendChild(el("span","navlab","Mon espace")); VIEWS.forEach(v => n.appendChild(link(v)));
-  const m = $("#mtabs"); m.textContent = ""; VIEWS.forEach(v => m.appendChild(link(v)));
+  const lockMark = a => { a.appendChild(el("span","lk-dot","Découvrir")); return a; };
+  const link2 = v => { const a = link(v); if ((v[0] === "meta" && !has("meta")) || ((v[0] === "stats" || v[0] === "valider") && !has("com"))) { a.classList.add("lk-nav"); lockMark(a); } return a; };
+  const n = $("#tabs"); n.textContent = ""; n.appendChild(el("span","navlab","Mon espace")); VIEWS.forEach(v => n.appendChild(link2(v)));
+  const m = $("#mtabs"); m.textContent = ""; VIEWS.filter(v => MOBILE.includes(v[0])).forEach(v => m.appendChild(link2(v)));
+  const more = el("button","morebtn"); more.type = "button"; more.appendChild(ico("plus")); more.appendChild(el("span","lb","Plus")); if (!MOBILE.includes(S.view)) more.setAttribute("aria-current","page");
+  more.onclick = () => openModal(md => { md.classList.add("sheet"); const t = el("h3",null,"Menu"); t.id = "mtitle"; md.appendChild(t); const l = el("nav","morelist");
+    VIEWS.filter(v => !MOBILE.includes(v[0])).forEach(v => { const a = link2(v); a.onclick = () => closeModal(); l.appendChild(a); }); md.appendChild(l);
+    const o = el("div","actions"); o.appendChild(btn("Se déconnecter","sm", () => { closeModal(); $("#logout").click(); })); md.appendChild(o); });
+  m.appendChild(more);
   $("#mbar-title").textContent = (VIEWS.find(v => v[0] === S.view) || ["",""])[1];
   $("#acct-name").textContent = myName(); $("#acct-role").textContent = (S.f && S.f.client.name) || "";
   const tot = badge.valider + unread(); try { if (navigator.setAppBadge) { tot ? navigator.setAppBadge(tot) : navigator.clearAppBadge(); } } catch(e){}
@@ -150,7 +161,7 @@ function vValider(root){
   const n = { wait: waiting(), mod: posts().filter(p => p.status === "mod").length, ok: posts().filter(p => p.status === "ok").length };
   root.appendChild(head(["À", "valider"], "Validez ou demandez une modification. Rien n’est publié sans votre accord.",
     [segm([["wait","À valider" + (n.wait ? " " + n.wait : "")],["mod","Modifications"],["ok","Validées"]], S.pf, v => { S.pf = v; render(); })]));
-  if (!has("com")){ root.appendChild(el("p","empty","Vos contenus à valider apparaîtront ici. L’agence vous prévient dès qu’un contenu est prêt.")); return; }
+  if (!has("com")){ locked(root, "com", valPreview); return; }
   if (S.d.postsError) root.appendChild(el("p","status",S.d.postsError));
   const list = posts().filter(p => p.status === S.pf);
   if (!list.length){ root.appendChild(el("p","empty", S.pf === "wait" ? "Rien en attente. On vous prévient dès que la suite est prête." : "Rien ici pour l’instant.")); return; }
@@ -361,8 +372,99 @@ function vIdees(root){
   root.appendChild(g);
 }
 
+/* ---------- Offres : ce que le client a, et ce qu’il peut découvrir ---------- */
+const OFFERS = {
+  com: { name: "Gestion des réseaux sociaux", pitch: "L’agence filme, monte et publie pour vous chaque mois. Vous validez ici chaque contenu avant sa sortie, et vous suivez vos vues, vos abonnés et les demandes reçues.", ask: "Bonjour Gabriel, je voudrais en savoir plus sur la gestion des réseaux sociaux." },
+  meta: { name: "Publicité Meta", pitch: "Des publicités Facebook et Instagram qui vous amènent des contacts. Chaque demande arrive ici, vous la triez en un clic, et vous voyez combien coûte chaque contact.", ask: "Bonjour Gabriel, je voudrais en savoir plus sur la publicité Meta." }
+};
+const PITCH_VIDEO = ""; /* lien YouTube de la vidéo de présentation de Gabriel, à coller quand elle sera tournée */
+function askGabriel(mod){
+  const owner = ((S.f && S.f.team) || []).find(t => t.role === "owner" && /gab/i.test(t.name)) || ((S.f && S.f.team) || []).find(t => t.role === "owner");
+  S.mmode = "main"; S.mch = owner ? "dm:" + owner.name : "grp"; S.conv = true; S.draft = OFFERS[mod].ask; go("messagerie");
+}
+/* Aperçu flouté d’un service non souscrit, avec l’invitation à découvrir */
+function locked(root, mod, preview){
+  const o = OFFERS[mod], w = el("section","lk");
+  const pv = el("div","lk-pv"); pv.setAttribute("aria-hidden","true"); preview(pv); w.appendChild(pv);
+  const card = el("div","lk-card");
+  card.appendChild(el("span","lk-tag","À découvrir"));
+  card.appendChild(el("h2",null,o.name));
+  card.appendChild(el("p",null,o.pitch));
+  if (PITCH_VIDEO){ const v = el("div","lk-vid"); const i = document.createElement("iframe"); i.src = PITCH_VIDEO; i.allow = "encrypted-media; fullscreen"; i.allowFullscreen = true; i.title = "Présentation par Gabriel"; v.appendChild(i); card.appendChild(v); }
+  else card.appendChild(el("p","lk-soon","Une vidéo de présentation par Gabriel arrive bientôt ici."));
+  const a = el("div","lk-acts"); a.append(btn("J’en parle à Gabriel","lemon", () => askGabriel(mod))); card.appendChild(a);
+  w.appendChild(card); root.appendChild(w);
+}
+const fmtN = n => Number(n || 0).toLocaleString("fr-FR");
+const perL = p => { const [y, m] = String(p).split("-").map(Number); return MONTHS[m - 1] + " " + y; };
+const perS = p => { const [y, m] = String(p).split("-").map(Number); return MSHORT[m - 1]; };
+function kpis(list){ const k = el("div","st-kpis"); list.filter(x => x[0] !== "" && x[0] != null).forEach(([n, l, e]) => { const x = el("div","st-kpi"); x.append(el("b",null,String(n)), el("span",null,l)); if (e) x.appendChild(el("em",null,e)); k.appendChild(x); }); return k; }
+function barChart(data, label){
+  const box = el("div","st-chart"); box.appendChild(el("h3",null,label));
+  if (data.length < 2){ box.appendChild(el("p","muted","Le graphique apparaît dès le deuxième mois.")); return box; }
+  const W = 560, H = 200, pb = 24, pt = 22, max = Math.max(1, ...data.map(d => d[1])) * 1.15, bw = Math.min(56, W / data.length - 14), gap = (W - bw * data.length) / Math.max(1, data.length - 1);
+  let s = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + label + '">';
+  data.forEach(([m, v], i) => { const x = i * (bw + gap), h = Math.max(2, (v / max) * (H - pb - pt)), y = H - pb - h, last = i === data.length - 1;
+    s += '<rect x="' + x + '" y="' + y + '" width="' + bw + '" height="' + h + '" rx="6" fill="' + (last ? "#C6FF33" : "#33332F") + '"/>';
+    s += '<text x="' + (x + bw / 2) + '" y="' + (y - 7) + '" text-anchor="middle" font-size="12" font-weight="700" fill="' + (last ? "#C6FF33" : "#A9A79F") + '">' + fmtN(v) + '</text>';
+    s += '<text x="' + (x + bw / 2) + '" y="' + (H - 6) + '" text-anchor="middle" font-size="12" fill="#77756E">' + m + '</text>'; });
+  box.insertAdjacentHTML("beforeend", s + '</svg>'); return box;
+}
+const SAMPLE_COM = [["2026-05",{vues:8200,abonnes:64,publications:8,prevues:8,demandes:5}],["2026-06",{vues:11900,abonnes:91,publications:8,prevues:8,demandes:7}],["2026-07",{vues:15400,abonnes:120,publications:9,prevues:8,demandes:11}],["2026-08",{vues:21800,abonnes:168,publications:8,prevues:8,demandes:14}]];
+function comStats(root, sample){
+  const st = sample ? SAMPLE_COM.map(([period, data]) => ({ period, data })) : ((S.d && S.d.stats) || []).filter(s => s.module === "com");
+  const s = st[st.length - 1];
+  if (!s){ root.appendChild(el("p","empty","Vos premiers chiffres arrivent avec le bilan du mois.")); return; }
+  const d = s.data, p = st[st.length - 2], dv = p && p.data.vues ? Math.round(((d.vues || 0) - p.data.vues) / p.data.vues * 100) : null;
+  const hero = el("div","st-hero"); hero.append(el("span",null,"Demandes reçues grâce à vos réseaux"), el("b",null,fmtN(d.demandes)), el("em",null,"messages et appels, " + perL(s.period))); root.appendChild(hero);
+  root.appendChild(kpis([[d.vues != null ? fmtN(d.vues) : "", "vues des vidéos", dv != null ? (dv >= 0 ? "+" : "") + dv + " % sur un mois" : ""],[d.abonnes != null ? "+" + fmtN(d.abonnes) : "", "nouveaux abonnés"],[d.publications != null ? d.publications : "", "publications", d.prevues ? "sur " + d.prevues + " prévues" : ""]]));
+  root.appendChild(barChart(st.slice(-6).map(x => [perS(x.period), x.data.vues || 0]), "Vues des vidéos par mois"));
+  if (!sample) root.appendChild(el("p","st-src","Source : " + (s.source || "Metricool") + ", " + perL(s.period) + "."));
+}
+function vStats(root){
+  root.appendChild(head("Statistiques", "Ce que vos réseaux vous rapportent, mois après mois."));
+  if (!has("com")){ locked(root, "com", pv => comStats(pv, true)); return; }
+  comStats(root, false);
+}
+const SAMPLE_LEADS = [["2026-10-28","Demande de devis rénovation","Maison 120 m², Nîmes"],["2026-10-27","Rappel souhaité","Disponible après 18 h"],["2026-10-25","Devis salle de bain","Budget 8 000 €"],["2026-10-24","Question tarif","Uzès"]];
+function metaBody(root, sample){
+  const month = (S.d && S.d.month) || today().slice(0, 7);
+  const leads = sample ? SAMPLE_LEADS.map(([date, title, detail], i) => ({ id: i, date, title, detail, qualified: i < 2 ? 1 : null })) : ((S.d && S.d.leads) || []).filter(l => String(l.date).slice(0, 7) === month);
+  const q = leads.filter(l => l.qualified === 1).length, goal = sample ? 20 : (S.d.client.contactsGoal || 0);
+  const hero = el("div","st-hero"); const top = el("div","st-row"); top.append(el("span",null,"Contacts qualifiés"), el("span",null, goal ? "Objectif : " + goal : ""));
+  hero.append(top, el("b",null, String(sample ? 14 : q)), el("em",null,"selon la définition de votre contrat, " + perL(month)));
+  if (goal){ const g = el("div","st-gauge"); const i = el("i"); i.style.width = Math.min(100, Math.round((sample ? 14 : q) / goal * 100)) + "%"; g.appendChild(i); hero.appendChild(g); }
+  root.appendChild(hero);
+  const st = sample ? { data: { depense: 420, budget: 450, touchees: 18300, annonces: 3 } } : ((S.d && S.d.stats) || []).filter(s => s.module === "meta" && s.period === month)[0];
+  if (st){ const d = st.data; root.appendChild(kpis([[d.depense != null ? fmtN(d.depense) + " €" : "", "dépensés chez Meta", d.budget ? "sur " + fmtN(d.budget) + " € prévus" : ""],[d.depense && (sample ? 14 : q) ? (d.depense / (sample ? 14 : q)).toLocaleString("fr-FR", { maximumFractionDigits: 2 }) + " €" : "", "par contact qualifié"],[d.touchees != null ? fmtN(d.touchees) : "", "personnes touchées"],[d.annonces, "annonces actives"]])); }
+  root.appendChild(el("h2","cl-h2","Vos contacts"));
+  const list = el("div","st-leads");
+  if (!leads.length) list.appendChild(el("p","empty","Aucun contact ce mois-ci pour l’instant."));
+  leads.forEach(c => { const r = el("div","st-lead"); const tx = el("div"); tx.append(el("b",null,c.title), el("small",null, fmtD(c.date) + (c.detail ? ", " + c.detail : "")));
+    const a = el("div","st-la");
+    [[true,"Qualifié"],[false,"Pas qualifié"]].forEach(([v, lab]) => { const b = el("button","st-q" + (v ? " yes" : " no"), lab); b.type = "button"; b.setAttribute("aria-pressed", String(c.qualified === (v ? 1 : 0)));
+      if (!sample) b.onclick = async () => { if (S.f && S.f.preview){ toast("Aperçu de l’agence : rien n’est envoyé."); return; } const nv = c.qualified === (v ? 1 : 0) ? null : v; try { await api("/api/lead/" + c.id, { body: { qualified: nv } }); c.qualified = nv == null ? null : nv ? 1 : 0; render(); } catch(e){ toast(e.message); } };
+      a.appendChild(b); });
+    r.append(tx, a); list.appendChild(r); });
+  root.appendChild(list);
+  if (!sample){
+    if (S.d.client.qualifiedDefinition) root.appendChild(el("p","st-src","Contact qualifié : " + S.d.client.qualifiedDefinition));
+    root.appendChild(el("p","st-src","Le budget publicitaire est payé par vous, directement à Meta. Contacts reçus via vos publicités, " + perL(month) + "."));
+  }
+}
+function vMeta(root){
+  root.appendChild(head(["Publicité", "Meta"], "Vos contacts reçus grâce à la publicité Facebook et Instagram."));
+  if (!has("meta")){ locked(root, "meta", pv => metaBody(pv, true)); return; }
+  metaBody(root, false);
+}
+function valPreview(pv){
+  const g = el("div","cl-posts");
+  for (let i = 0; i < 3; i++){ const c = el("article","cl-post"); const m = el("div","lk-media"); c.appendChild(m); const b = el("div","cl-pb"); b.append(el("span","pill l3","À valider"), el("h3","cl-pt",["Le chantier de la semaine","Avant, après","Trois conseils d’entretien"][i]), el("p","cl-cap","Texte de la publication, prêt à être validé.")); c.appendChild(b); g.appendChild(c); }
+  pv.appendChild(g);
+}
+
 /* ---------- Rendu ---------- */
-const R = { accueil: vAccueil, valider: vValider, messagerie: vMessagerie, visio: vVisio, idees: vIdees };
+const R = { accueil: vAccueil, valider: vValider, stats: vStats, meta: vMeta, messagerie: vMessagerie, visio: vVisio, idees: vIdees };
 function fromHash(){ const h = location.hash.replace("#",""); S.view = R[h] ? h : "accueil"; }
 function render(){
   if (!S.d || !S.f) return;
@@ -443,7 +545,7 @@ function start(){
   load(); startPoll();
 }
 const TEST = (() => { try { return new URLSearchParams(location.search).get("test") === "1"; } catch(e){ return false; } })();
-if (APERCU){ const b = el("div","cl-apercu", TEST ? "Mode test : tout fonctionne vraiment, les actions sont signées Test Agence." : "Aperçu de l’agence : vous voyez l’espace de ce client, en lecture seule."); document.body.appendChild(b); }
+if (APERCU){ const b = el("div","cl-apercu", TEST ? "Mode test : tout fonctionne vraiment, les actions sont signées Test Agence." : "Aperçu de l’agence : vous voyez l’espace de ce client, en lecture seule."); document.body.appendChild(b); document.body.classList.add("has-apercu"); }
 if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
 start();
 })();
