@@ -2175,25 +2175,21 @@ function rolesCard(){
       td(tr, swEl(list.includes(k), on => { const set = new Set(S.access.roles[role] || []); on ? set.add(k) : set.delete(k); S.access.roles[role] = [...set]; saveAccess((ROLE_LABEL[role] || role) + (on ? " : " + l + " ajouté." : " : " + l + " retiré.")); }, l + ", " + (ROLE_LABEL[role] || role).toLowerCase())); });
     tb.appendChild(tr); });
   r.appendChild(tw);
-  r.appendChild(el("p","pm-note","Accueil et Paramètres restent toujours visibles. Le propriétaire voit tout. Pour un besoin ponctuel, utilise le bouton Pages d’une personne dans le tableau des sièges : accès pour une heure, la journée ou toujours."));
+  r.appendChild(el("p","pm-note","Accueil et Paramètres restent toujours visibles. Le propriétaire voit tout. Pour donner une page à une seule personne, utilise son bouton Pages dans le tableau des sièges, et retire-la quand elle n’en a plus besoin."));
   return r;
 }
 function pagesForm(u){
   if (!S.access){ loadAccess().then(() => pagesForm(u)); return; }
   const role = S.access.roles[u.role] || [], mine = Object.assign({}, (S.access.people || {})[u.name] || {}), now = Date.now();
-  let dur = "0";
   openModal(m => {
     const t = el("h3",null,"Pages de " + u.name); t.id = "mtitle"; m.appendChild(t);
-    m.appendChild(el("p","muted","En plus de son rôle (" + (ROLE_LABEL[u.role] || u.role).toLowerCase() + "). Choisis la durée, puis active les pages."));
-    const sg = segm([["0","Toujours"],["3600000","1 heure"],["day","Aujourd’hui"]], dur, v => { dur = v; [...sg.querySelectorAll("button")].forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === dur))); });
-    [...sg.querySelectorAll("button")].forEach((b, i) => { b.dataset.v = ["0","3600000","day"][i]; }); m.appendChild(sg);
+    m.appendChild(el("p","muted","En plus de son rôle (" + (ROLE_LABEL[u.role] || u.role).toLowerCase() + "). Active une page pour lui donner l’accès, désactive pour le retirer."));
     const list = el("div","ax-list");
     PAGE_LIST.forEach(([k, l]) => { const inRole = role.includes(k), until = mine[k], active = until !== undefined && (!until || until > now);
       const row = el("div","ax-row"); const tx = el("div"); tx.appendChild(el("b",null,l));
-      tx.appendChild(el("small",null, inRole ? "Inclus dans son rôle" : active ? (until ? "Jusqu’à " + hhmm(new Date(until)) + (iso(new Date(until)) !== today() ? ", le " + fmtD(iso(new Date(until))) : "") : "Donné pour toujours") : "Pas d’accès"));
+      tx.appendChild(el("small",null, inRole ? "Inclus dans son rôle" : active ? "Accès donné" : "Pas d’accès"));
       row.append(tx, swEl(inRole || active, on => {
-        if (on){ const end = dur === "0" ? 0 : dur === "day" ? new Date(new Date().setHours(23, 59, 0, 0)).getTime() : Date.now() + Number(dur); mine[k] = end; }
-        else delete mine[k];
+        if (on) mine[k] = 0; else delete mine[k];
         S.access.people = Object.assign({}, S.access.people, { [u.name]: mine }); if (!Object.keys(mine).length) delete S.access.people[u.name];
         saveAccess(l + (on ? " ouvert à " : " retiré à ") + u.name + "."); closeModal(); pagesForm(u);
       }, l, inRole));
