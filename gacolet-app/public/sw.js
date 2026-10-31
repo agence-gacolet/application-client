@@ -1,7 +1,7 @@
 // Service worker : garde l'interface en cache pour un démarrage instantané.
 // Les données (/api) et les médias Metricool passent toujours par le réseau.
-const CACHE = "gacolet-v1";
-const SHELL = ["/", "/style.css", "/app.js", "/manifest.webmanifest", "/icon-192.png"];
+const CACHE = "gacolet-v2";
+const SHELL = ["/", "/gestion.css?v=5", "/client.js?v=1", "/manifest.webmanifest", "/icon-192.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL))); self.skipWaiting(); });
 self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k))))); self.clients.claim(); });
 self.addEventListener("fetch", e => {
