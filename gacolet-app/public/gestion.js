@@ -53,6 +53,7 @@ const MSHORT = ["janv.","févr.","mars","avr.","mai","juin","juil.","août","sep
 const fmtD = s => { if (!isISO(s)) return s || ""; const d = parseISO(s); return d.getDate()+" "+MSHORT[d.getMonth()]; };
 const fmtDL = s => { if (!isISO(s)) return s || ""; const d = parseISO(s); return dow(s)+" "+d.getDate()+" "+MONTHS[d.getMonth()]; };
 const fmtFR = s => { if (!isISO(s)) return s || ""; const [y,m,d] = s.split("-"); return d+"/"+m+"/"+y; };
+const hhmm = d => d.getHours() + " h" + (d.getMinutes() ? " " + String(d.getMinutes()).padStart(2,"0") : "");
 const fmtTime = t => { if (!t) return ""; const [h,mi] = t.split(":"); return String(Number(h))+" h"+(mi && mi !== "00" ? " "+mi : ""); };
 const fgOn = hex => { const h = String(hex||"#888888").replace("#",""); const r=parseInt(h.slice(0,2),16), g=parseInt(h.slice(2,4),16), b=parseInt(h.slice(4,6),16); return (0.299*r+0.587*g+0.114*b) > 150 ? "#1D1D1B" : "#FFFFFF"; };
 const shortName = c => (c||"").replace("SOS Pare-Brise ","SOS ").replace("La Vie La Construction","LVLC").replace("Paillotte Bassamoise","Paillotte").replace("Delta Sud Formation","Delta Sud").replace("Hugo Maître Nageur","Hugo").replace("The New Me Montpellier","The New Me").replace("KR Thermolaquage","KR").replace("France Étanchéité","France Étanch.");
@@ -428,10 +429,44 @@ function editClient(c){
   const svFields = []; SERVICES.forEach(([k, l]) => { svFields.push({k:"sv"+k, label:l, type:"check", half:true}); svFields.push({k:"sd"+k, label:"Depuis le", type:"date", half:true}); });
   openForm({ key:"cf", title: c.id ? "Fiche, "+c.name : "Nouveau client", values:vals,
     fields:(c.id ? [] : [{k:"name",label:"Nom du client",req:"Indique le nom du client."}]).concat([{k:"since",label:"Client depuis le",type:"date"}]).concat(svFields).concat([{k:"formula",label:"Formule"},{k:"perMonth",label:"Publications / mois"},{k:"shoot",label:"Tournage",half:true},{k:"networks",label:"Réseaux",half:true},
+      {k:"tel",label:"Téléphone",type:"tel",half:true},{k:"email",label:"Courriel",type:"email",half:true},{k:"site",label:"Site internet",half:true,ph:"https://"},{k:"instagram",label:"Instagram",half:true,ph:"@compte ou lien"},{k:"facebook",label:"Facebook",half:true,ph:"Lien de la page"},{k:"tiktok",label:"TikTok",half:true,ph:"@compte ou lien"},{k:"linkedin",label:"LinkedIn",half:true,ph:"Lien de la page"},{k:"youtube",label:"YouTube",half:true,ph:"Lien de la chaîne"},{k:"google",label:"Fiche Google",ph:"Lien de la fiche"},
       {k:"remember",label:"À retenir",type:"textarea"},{k:"ask",label:"À demander au client",type:"textarea"},{k:"leadWeeks",label:"Préparer combien de semaines avant",type:"number",half:true},{k:"color",label:"Couleur dans l’agenda",type:"color",half:true}]),
     onSave: out => { const services = {}; SERVICES.forEach(([k]) => { if (out["sv"+k]) services[k] = out["sd"+k] || ""; delete out["sv"+k]; delete out["sd"+k]; }); out.services = services;
       if (!c.id){ const n = String(out.name || "").trim(); if (S.d.clients.some(x => x.name.toLowerCase() === n.toLowerCase())){ toast("Ce client existe déjà."); return Promise.reject(new Error("doublon")); } out.name = n; out.calendar = true; }
       return save("clients", c.id || null, Object.assign(c.id ? strip(c) : {}, out)); } });
+}
+/* Coordonnées et réseaux d’un client : pastilles cliquables */
+const NET_ICO = {
+  tel:'<path d="M6.6 3.5h3l1.4 4.2-2 1.3a12 12 0 0 0 6 6l1.3-2 4.2 1.4v3a2 2 0 0 1-2.1 2A17 17 0 0 1 4.6 5.6a2 2 0 0 1 2-2.1z"/>',
+  email:'<rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="m4 7 8 6 8-6"/>',
+  site:'<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.6 2.6 2.6 14.4 0 17M12 3.5c-2.6 2.6-2.6 14.4 0 17"/>',
+  instagram:'<rect x="4" y="4" width="16" height="16" rx="4.5"/><circle cx="12" cy="12" r="3.6"/><circle cx="16.8" cy="7.2" r=".6" fill="currentColor"/>',
+  facebook:'<path d="M14.5 20v-7h2.4l.4-2.8h-2.8V8.5c0-.8.3-1.4 1.4-1.4h1.5V4.6a19 19 0 0 0-2.2-.1c-2.2 0-3.6 1.3-3.6 3.7v2H9.2V13h2.4v7"/>',
+  tiktok:'<path d="M14 4v10.5a3.5 3.5 0 1 1-3.5-3.5M14 4c.4 2.4 2 4 4.5 4.2"/>',
+  linkedin:'<rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M8 10.5V16M8 7.8v.1M11.5 16v-5.5M11.5 13c0-1.6 1-2.5 2.2-2.5s2.1.8 2.1 2.5V16"/>',
+  youtube:'<rect x="3.5" y="6" width="17" height="12" rx="3.5"/><path d="m10.5 9.5 4 2.5-4 2.5z"/>',
+  google:'<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/>'
+};
+const NET_LAB = { tel:"Appeler", email:"Écrire", site:"Site internet", instagram:"Instagram", facebook:"Facebook", tiktok:"TikTok", linkedin:"LinkedIn", youtube:"YouTube", google:"Fiche Google" };
+function netUrl(k, v){
+  v = String(v || "").trim(); if (!v) return "";
+  if (k === "tel") return "tel:" + v.replace(/[^\d+]/g, "");
+  if (k === "email") return "mailto:" + v;
+  if (/^https?:\/\//i.test(v)) return v;
+  const h = v.replace(/^@/, "");
+  if (k === "instagram") return "https://www.instagram.com/" + h;
+  if (k === "tiktok") return "https://www.tiktok.com/@" + h;
+  if (/^[\w.-]+\.[a-z]{2,}(\/|$)/i.test(v)) return "https://" + v;
+  if (k === "facebook") return "https://www.facebook.com/" + h;
+  return "";
+}
+function netLinks(c, big){
+  const box = el("div","net" + (big ? " big" : ""));
+  Object.keys(NET_ICO).forEach(k => { const u = netUrl(k, c[k]); if (!u) return;
+    const a = el("a","net-a net-" + k); a.href = u; if (!/^(tel|mailto):/.test(u)){ a.target = "_blank"; a.rel = "noopener"; }
+    a.title = NET_LAB[k] + " : " + c[k]; a.setAttribute("aria-label", a.title); a.onclick = e => e.stopPropagation();
+    a.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + NET_ICO[k] + '</svg>'; box.appendChild(a); });
+  return box;
 }
 function vFiches(root){
   root.appendChild(head("Tableau clients", "Réservé aux propriétaires : depuis quand, quels services, la formule et ce qu’il faut penser.", [addBtn("Nouveau client", () => editClient({}))]));
@@ -439,14 +474,14 @@ function vFiches(root){
   [["","Tous les services"],["com","Réseaux sociaux"],["meta","Publicité Meta"],["both","Réseaux sociaux et Meta"]].forEach(([v,l]) => { const o = el("option",null,l); o.value = v; sel.appendChild(o); }); sel.value = S.ui.fiSv || ""; sel.onchange = () => { S.ui.fiSv = sel.value; remember(); render(); };
   g.append(lb, sel); f.appendChild(g); root.appendChild(f);
   const list = S.d.clients.filter(c => c.name !== AGENCE && (!S.ui.fiSv || (S.ui.fiSv === "both" ? ("com" in svOf(c) && "meta" in svOf(c)) : S.ui.fiSv in svOf(c)))).sort((a,b) => (a.since || "9999").localeCompare(b.since || "9999") || a.name.localeCompare(b.name,"fr"));
-  const {w, tb} = table(["Client","Depuis","Services","~Formule","~Publications / mois","~À penser"]);
+  const {w, tb} = table(["Client","Depuis","Services","Contact et réseaux","~Formule","~Publications / mois","~À penser"]);
   const line = (tr, txt, cls) => { const c = td(tr, txt ? el("span","fi-1", txt) : el("span","muted","—"), cls); if (txt) c.title = txt; return c; };
   list.forEach(c => { const tr = el("tr","row fi-row"); tr.onclick = () => editClient(c);
     td(tr, clientTag(c.name),"nw"); td(tr, c.since ? fmtFR(c.since) : "—","nw");
     const so = svOf(c), ks = SERVICES.map(x => x[0]).filter(k => k in so), sv = el("div","fi-sv");
     ks.forEach(k => { const s = SERVICES.find(x => x[0] === k); const p = el("b","fi-code",s[2]); p.title = s[1] + (so[k] ? ", depuis " + fmtFR(so[k]) : ""); sv.appendChild(p); });
     if (!ks.length) sv.appendChild(el("span","muted","À renseigner"));
-    td(tr, sv,"nw"); line(tr, c.formula, "hm"); line(tr, c.perMonth, "hm"); line(tr, [c.remember, c.ask ? "À demander : " + c.ask : ""].filter(Boolean).join(" "), "hm");
+    td(tr, sv,"nw"); const nl = netLinks(c); if (!nl.childNodes.length) nl.appendChild(el("span","muted","À renseigner")); td(tr, nl,"nw"); line(tr, c.formula, "hm"); line(tr, c.perMonth, "hm"); line(tr, [c.remember, c.ask ? "À demander : " + c.ask : ""].filter(Boolean).join(" "), "hm");
     tb.appendChild(tr); });
   w.classList.add("fi-tw");
   root.appendChild(list.length ? w : el("p","empty","Aucun client pour ce service."));
@@ -539,7 +574,7 @@ function vAccueil(root){
     tiles.push([S.d.campaigns.filter(c => c.status === "À lancer").length, "campagnes à lancer", () => go("campagnes")]);
   }
   ["main","shoot"].forEach(md => { const pre = md === "shoot" ? "tg:" : "", chs = msgChannels(md);
-    const isC = k => k.startsWith(pre + "c:") || k.startsWith("cg:");
+    const isC = k => k.startsWith(pre + "c:") || k.replace(/^tg:/, "").startsWith("cg:") || k.startsWith("cdm:");
     const team = chs.filter(k => !isC(k)), cli = chs.filter(isC);
     const nt = team.reduce((n, k) => n + unreadIn(k), 0), nc = cli.reduce((n, k) => n + unreadIn(k), 0), fc = cli.find(k => unreadIn(k));
     const open = k => () => { S.ui.msgMode = md; if (md === "shoot") S.ui.msgShoot = k; else S.ui.msgCh = k; remember(); go("messagerie"); };
@@ -699,7 +734,7 @@ function msSection(root, name){
       for (let i = 0; i < n; i++){ const c = el(ri === hi ? "th" : "td"); c.appendChild(msCell(r[i] || "")); tr.appendChild(c); } body.appendChild(tr); });
     tb.appendChild(body); w.appendChild(tb); root.appendChild(w);
   }
-  const st = el("p","status","Copie du tableau Google Sheets, mise à jour automatiquement" + (cur.syncedAt ? " (dernière mise à jour le " + fmtFR(cur.syncedAt.slice(0, 10)) + " à " + cur.syncedAt.slice(11, 16).replace(":", " h ") + ", heure UTC)" : "") + ". Le client et l’agence continuent de remplir le Sheets. ");
+  const st = el("p","status","Copie du tableau Google Sheets, mise à jour automatiquement" + (cur.syncedAt ? " (dernière mise à jour le " + fmtFR(cur.syncedAt.slice(0, 10)) + " à " + fmtTime(cur.syncedAt.slice(11, 16)) + ", heure UTC)" : "") + ". Le client et l’agence continuent de remplir le Sheets. ");
   if (cur.url){ const a = el("a",null,"Ouvrir le Sheets"); a.href = cur.url; a.target = "_blank"; a.rel = "noopener"; st.appendChild(a); }
   root.appendChild(st);
   return true;
@@ -1039,15 +1074,18 @@ function dmKey(a, b){ return "dm:" + [a, b].sort().join("|"); }
 function dmOther(k){ const me = S.me || "Gabriel"; return String(k).slice(3).split("|").find(n => n !== me) || me; }
 function dmChannels(){ const me = S.me || "Gabriel"; const set = new Set((S.ui.dmOpen || []).filter(k => k.startsWith("dm:") && k.slice(3).split("|").includes(me))); S.d.messages.forEach(m => { if (String(m.ch).startsWith("dm:") && m.ch.slice(3).split("|").includes(me)) set.add(m.ch); }); return [...set]; }
 function cgChannels(){ return (S.cgroups || []).map(g => g.ch); }
+/* Conversations privées ouvertes par un client avec moi : « cdm:<id client>|<mon nom> » */
+function cdmChannels(){ const me = S.me || "Gabriel"; const set = new Set((S.ui.cdmOpen || []).filter(k => k.endsWith("|" + me))); S.d.messages.forEach(m => { const k = String(m.ch || ""); if (k.startsWith("cdm:") && k.split("|")[1] === me) set.add(k); }); return [...set]; }
+function cdmClient(k){ const g = (S.cgroups || []).find(x => x.id === Number(String(k).slice(4).split("|")[0])); return g ? g.name : "Client"; }
 function cgOf(k){ return (S.cgroups || []).find(g => g.ch === k); }
 async function loadCgroups(){ try { const r = await GC.api("GET","/api/g-cgroups"); S.cgroups = r.groups || []; renderSoon(); } catch(e){} }
-function msgChannels(mode){ const pre = mode === "shoot" ? "tg:" : ""; return CHANNELS.map(c => pre + c[0]).concat(mode === "shoot" ? [] : dmChannels()).concat(mode === "shoot" ? [] : cgChannels()).concat(clientNames().filter(n => n !== AGENCE).map(n => pre + "c:" + n)); }
+function msgChannels(mode){ const pre = mode === "shoot" ? "tg:" : ""; return CHANNELS.map(c => pre + c[0]).concat(mode === "shoot" ? [] : dmChannels()).concat(mode === "shoot" ? cgChannels().map(k => "tg:" + k) : cgChannels().concat(cdmChannels())).concat(clientNames().filter(n => n !== AGENCE).map(n => pre + "c:" + n)); }
 function seenKey(k){ return "seen_" + (S.me || "Gabriel") + "_" + k; }
 function unreadIn(k){ const me = S.me || "Gabriel", s = S.ui[seenKey(k)] || ""; return S.d.messages.filter(m => m.ch === k && m.who !== me && (m.at || "") > s).length; }
 function unreadMode(mode){ return msgChannels(mode).reduce((n, k) => n + unreadIn(k), 0); }
 function unreadRole(){ return ["main","shoot"].reduce((n, m) => n + unreadMode(m), 0); }
 function shootLabel(e){ return fmtD(e.date) + ", " + e.client; }
-function chName(k){ if (String(k).startsWith("dm:")) return dmOther(k); if (String(k).startsWith("cg:")){ const g = cgOf(k); return g ? g.name : "Groupe client"; } k = k.replace(/^tg:/, ""); const c = CHANNELS.find(x => x[0] === k); return c ? c[1] : k.replace(/^c:/, ""); }
+function chName(k){ if (String(k).startsWith("dm:")) return dmOther(k); if (String(k).startsWith("cdm:")) return cdmClient(k); if (String(k).replace(/^tg:/, "").startsWith("cg:")){ const g = cgOf(String(k).replace(/^tg:/, "")); return g ? g.name : "Groupe client"; } k = k.replace(/^tg:/, ""); const c = CHANNELS.find(x => x[0] === k); return c ? c[1] : k.replace(/^c:/, ""); }
 /* ---------- Messages vocaux ---------- */
 let REC = null;
 const AUDIO_EL = new Map();
@@ -1117,7 +1155,7 @@ function avatarEl(name, size, opts){
   else a.style.background = c;
   return a;
 }
-function chAvatar(k, size){ if (String(k).startsWith("dm:")) return avatarEl(dmOther(k), size); if (String(k).startsWith("cg:")){ const n = chName(k); return avatarEl(n, size, { src: "", color: colorOf(n) }); } const base = String(k).replace(/^tg:/, ""); if (base.startsWith("c:")){ const n = base.slice(2); return avatarEl(n, size, { src: "", color: colorOf(n), soft: true }); } return avatarEl("Équipe", size, { logo: true }); }
+function chAvatar(k, size){ if (String(k).startsWith("dm:")) return avatarEl(dmOther(k), size); if (String(k).startsWith("cdm:") || String(k).replace(/^tg:/, "").startsWith("cg:")){ const n = chName(k); return avatarEl(n, size, { src: "", color: colorOf(n) }); } const base = String(k).replace(/^tg:/, ""); if (base.startsWith("c:")){ const n = base.slice(2); return avatarEl(n, size, { src: "", color: colorOf(n), soft: true }); } return avatarEl("Équipe", size, { logo: true }); }
 
 /* ---------- Pièces jointes ---------- */
 
@@ -1243,7 +1281,7 @@ function gifPicker(ch, me){
     load(); setTimeout(() => q.focus(), 50);
   });
 }
-function waTime(at){ const d = new Date(at || 0), k = iso(d); if (k === today()) return d.getHours() + " h " + String(d.getMinutes()).padStart(2,"0"); if (k === addDays(today(), -1)) return "Hier"; return fmtD(k); }
+function waTime(at){ const d = new Date(at || 0), k = iso(d); if (k === today()) return hhmm(d); if (k === addDays(today(), -1)) return "Hier"; return fmtD(k); }
 /* Salons vocaux intégrés : son, caméra et partage d’écran de pair à pair (WebRTC). Le serveur ne relaie que la mise en relation. */
 const VOICE = [["equipe","Salon équipe","Discussions au fil de la journée"],["tournage","Salon tournage","Préparer et suivre les tournages"],["reunion","Réunion","Points d’équipe, réunions avec un client"]];
 const HEADSET = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3.5" y="13.5" width="4" height="6.5" rx="1.5"/><rect x="16.5" y="13.5" width="4" height="6.5" rx="1.5"/></svg>';
@@ -1439,6 +1477,16 @@ function vVocal(root){
     const a = el("div","vx-act"); a.appendChild(mine ? btn("Quitter","", () => vcLeave()) : btn(VC.room ? "Changer de salon" : "Rejoindre","lemon", () => vcJoin(k, l))); c.appendChild(a);
     g.appendChild(c); });
   root.appendChild(g);
+  const cv = (S.cgroups || []).filter(x => (x.people || []).length);
+  if (cv.length){
+    const sec = el("section","vx-inv"); const top = el("div","vx-invh"); const tt = el("div"); tt.append(el("h2",null,"Visios mensuelles avec les clients"), el("p","muted","Chaque client a sa salle. Il la rejoint depuis son espace, onglet Visio, sans lien à envoyer."));
+    top.appendChild(tt); sec.appendChild(top);
+    cv.forEach(x => { const here = voiceHere(x.room), mine = VC.room === x.room; const r = el("div","vx-ir" + (here.length ? " live" : ""));
+      const tx = el("div"); tx.append(el("b",null,x.name), el("small",null, here.length ? here.join(", ") + " dans la salle." : "Personne dans la salle pour l’instant."));
+      const a = el("div","vx-ia"); a.appendChild(mine ? btn("Quitter","sm", () => vcLeave()) : btn("Rejoindre","sm lemon", () => vcJoin(x.room, "Visio, " + x.name)));
+      r.append(tx, a); sec.appendChild(r); });
+    root.appendChild(sec);
+  }
   if (S.role === "owner" || S.role === "commercial"){
     if (!S.invites && !S.invLoading){ S.invLoading = true; GC.api("GET","/api/rtc/invites").then(r => { S.invites = r.invites; }).catch(() => { S.invites = []; }).finally(() => { S.invLoading = false; render(); }); }
     const sec = el("section","vx-inv"); const top = el("div","vx-invh"); const tt = el("div"); tt.append(el("h2",null,"Rendez-vous avec des prospects"), el("p","muted","Un lien à envoyer : la personne entre son nom et rejoint la visio, sans compte. Elle n’a accès qu’à ce salon."));
@@ -1488,7 +1536,8 @@ function vMessagerie(root){
   };
   side.appendChild(el("span","wa-lab","Équipe")); CHANNELS.forEach(([k,l]) => row(pre+k, l));
   if (mode !== "shoot"){ const dms = dmChannels(); if (dms.length){ side.appendChild(el("span","wa-lab","Privé")); dms.sort((a, b) => ((lastOf[b] || {}).at || "").localeCompare((lastOf[a] || {}).at || "")).forEach(k => row(k, dmOther(k))); } }
-  const cgShown = mode === "shoot" ? [] : cgChannels().filter(k => k === ch || lastOf[k] || ((cgOf(k) || {}).people || []).length);
+  if (mode !== "shoot"){ const cd = cdmChannels(); if (cd.length){ side.appendChild(el("span","wa-lab","Privé avec les clients")); cd.sort((a, b) => ((lastOf[b] || {}).at || "").localeCompare((lastOf[a] || {}).at || "")).forEach(k => row(k, cdmClient(k))); } }
+  const cgShown = cgChannels().filter(k => k === ch.replace(/^tg:/, "") || lastOf[pre + k] || ((cgOf(k) || {}).people || []).length).map(k => pre + k);
   if (cgShown.length){ side.appendChild(el("span","wa-lab","Groupes avec les clients"));
     cgShown.map(k => [k, chName(k)]).sort((a, b) => ((lastOf[b[0]] || {}).at || "").localeCompare((lastOf[a[0]] || {}).at || "") || a[1].localeCompare(b[1])).forEach(([k, n]) => row(k, n)); }
   side.appendChild(el("span","wa-lab","Clients, entre nous"));
@@ -1499,10 +1548,12 @@ function vMessagerie(root){
   const hd = el("header","wa-head");
   const back = el("button","wa-back"); back.type = "button"; back.setAttribute("aria-label","Retour aux conversations"); back.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>'; back.onclick = () => { S.ui.waConv = false; remember(); render(); };
   const ht = el("div","wa-htx"); const isCli = ch.replace(/^tg:/,"").startsWith("c:");
-  const isDm = ch.startsWith("dm:"), isCg = ch.startsWith("cg:");
-  ht.append(el("b",null,(mode === "shoot" ? "Tournage, " : "") + chName(ch)), el("small",null, isDm ? "Conversation privée, visible de vous deux seulement" : isCg ? "Groupe partagé avec le client" + ((cgOf(ch) || {}).people || []).filter(Boolean).map((p, i) => (i ? ", " : " : ") + p).join("") : isCli ? "Échanges de l’équipe sur ce client, le client ne les voit pas" : (S.team || []).map(t => t.name).join(", ")));
+  const isDm = ch.startsWith("dm:"), isCdm = ch.startsWith("cdm:"), isCg = ch.replace(/^tg:/, "").startsWith("cg:");
+  ht.append(el("b",null,(mode === "shoot" ? "Tournage, " : "") + chName(ch)), el("small",null, isDm ? "Conversation privée, visible de vous deux seulement" : isCdm ? "Conversation privée avec le client, toi seul la vois" : isCg ? (mode === "shoot" ? "Tournages, partagé avec le client" : "Groupe partagé avec le client") + ((cgOf(ch.replace(/^tg:/, "")) || {}).people || []).filter(Boolean).map((p, i) => (i ? ", " : " : ") + p).join("") : isCli ? "Échanges de l’équipe sur ce client, le client ne les voit pas" : (S.team || []).map(t => t.name).join(", ")));
   const hav = chAvatar(ch, 40); if (isDm){ hav.classList.add("av-click"); hav.onclick = () => profileCard(dmOther(ch)); ht.classList.add("av-click"); ht.onclick = () => profileCard(dmOther(ch)); }
-  hd.append(back, hav, ht); main.appendChild(hd);
+  hd.append(back, hav, ht);
+  if (isCg && mode !== "shoot"){ const pv = btn("Message privé","sm", () => { const k = "cdm:" + ch.slice(3) + "|" + me; S.ui.cdmOpen = [...new Set((S.ui.cdmOpen || []).concat(k))]; S.ui.msgCh = k; S.ui.waConv = true; remember(); render(); }); pv.classList.add("wa-hbtn"); hd.appendChild(pv); }
+  main.appendChild(hd);
   const list = el("div","wa-msgs"); list.id = "chat-list";
   const msgs = S.d.messages.filter(m => m.ch === ch).sort((a,b) => (a.at||"").localeCompare(b.at||""));
   if (!msgs.length) list.appendChild(el("p","wa-empty","Aucun message ici pour l’instant. Écris le premier."));
@@ -1520,7 +1571,7 @@ function vMessagerie(root){
     (m.files || []).forEach(f => bub.appendChild(attachEl(f)));
     if (m.audio) bub.appendChild(audioFor(m));
     if (m.text) bub.appendChild(el("div","wa-txt", m.text));
-    bub.appendChild(el("span","wa-time", md.getHours()+" h "+String(md.getMinutes()).padStart(2,"0")));
+    bub.appendChild(el("span","wa-time", hhmm(md)));
     const col = el("div","wa-col"); col.appendChild(bub); line.appendChild(col);
     const dots = el("button","wa-dots"); dots.type = "button"; dots.title = "Plus d’options"; dots.setAttribute("aria-label", dots.title);
     dots.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>';
