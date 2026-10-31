@@ -684,7 +684,7 @@ function makeChar(name, o) {
   if (!A.h[look.o]) { m.updateMatrixWorld(true); let top = -1e9, bot = 1e9; const v = new THREE.Vector3();
     m.traverse(o => { if (o.isBone) { const y = o.getWorldPosition(v).y; top = Math.max(top, y); bot = Math.min(bot, y); } });
     A.h[look.o] = top > bot ? (top - bot) * 1.06 : Math.max(0.1, new THREE.Box3().setFromObject(m).getSize(v).y); A.y0 = A.y0 || {}; A.y0[look.o] = bot; }
-  m.scale.multiplyScalar(HERO_H / A.h[look.o]); if (A.y0 && A.y0[look.o] != null && Math.abs(A.y0[look.o]) > 0.05 * A.h[look.o]) m.position.y -= A.y0[look.o] * HERO_H / A.h[look.o];
+  m.scale.multiplyScalar(HERO_H / A.h[look.o]); if (isK) { m.scale.x *= 1.2; m.scale.z *= 1.15; } // carrure plus massive, façon héros de Warcraft if (A.y0 && A.y0[look.o] != null && Math.abs(A.y0[look.o]) > 0.05 * A.h[look.o]) m.position.y -= A.y0[look.o] * HERO_H / A.h[look.o];
   m.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; c.frustumCulled = false; [].concat(c.material).forEach(mt => { mt.envMapIntensity = 0.75; if (/Hair|Eyebrow/i.test(mt.name)) { mt.alphaTest = 0.4; mt.transparent = false; mt.side = THREE.DoubleSide; } if (/Eyes/i.test(mt.name)) { mt.transparent = false; } if (isK) { mt.metalness = Math.min(mt.metalness, .45); mt.roughness = Math.max(mt.roughness, .55); } }); } });
   g.add(m);
   const hit = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 4.6, 8), HIT); hit.position.y = 2.3; g.add(hit);
