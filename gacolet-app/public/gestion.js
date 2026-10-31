@@ -1311,11 +1311,13 @@ const rtcSend = (to, data) => GC.api("POST","/api/rtc/signal",{ room: VC.room, p
 function vcPeer(pid, name){
   if (VC.peers.has(pid)) return VC.peers.get(pid);
   const pc = new RTCPeerConnection({ iceServers: [{ urls: ["stun:stun.l.google.com:19302","stun:stun1.l.google.com:19302"] }] });
-  const P = { pid, name, pc, polite: VC.pid > pid, makingOffer: false, ignoreOffer: false, stream: new MediaStream(), audio: document.createElement("audio"), vsender: null };
-  P.audio.autoplay = true; P.audio.srcObject = P.stream; vcBox().appendChild(P.audio);
+  const P = { pid, name, pc, polite: VC.pid > pid, makingOffer: false, ignoreOffer: false, stream: new MediaStream(), astream: new MediaStream(), audio: document.createElement("audio"), vsender: null };
+  /* Son sans délai : l’audio voyage seul (pas synchronisé sur l’image) et se joue avec le plus petit tampon possible */
+  P.audio.autoplay = true; P.audio.srcObject = P.astream; vcBox().appendChild(P.audio);
   VC.local.getAudioTracks().forEach(t => pc.addTrack(t, VC.local));
-  if (VC.video) P.vsender = pc.addTrack(VC.video, VC.local);
-  pc.ontrack = e => { if (!P.stream.getTracks().includes(e.track)) P.stream.addTrack(e.track); e.track.onended = e.track.onmute = e.track.onunmute = () => vcRender(); P.stream.onremovetrack = () => vcRender(); vcMeter(pid, P.stream); vcRender(); };
+  if (VC.video) P.vsender = pc.addTrack(VC.video);
+  pc.ontrack = e => { if (!P.stream.getTracks().includes(e.track)) P.stream.addTrack(e.track);
+    if (e.track.kind === "audio"){ if (!P.astream.getTracks().includes(e.track)) P.astream.addTrack(e.track); try { e.receiver.jitterBufferTarget = 0; } catch(x){} try { e.receiver.playoutDelayHint = 0; } catch(x){} } e.track.onended = e.track.onmute = e.track.onunmute = () => vcRender(); P.stream.onremovetrack = () => vcRender(); vcMeter(pid, P.stream); vcRender(); };
   pc.onicecandidate = e => { if (e.candidate) rtcSend(pid, { candidate: e.candidate }); };
   pc.onnegotiationneeded = async () => { try { P.makingOffer = true; await pc.setLocalDescription(); rtcSend(pid, { description: pc.localDescription }); } catch(e){} finally { P.makingOffer = false; } };
   pc.onconnectionstatechange = () => vcRender();
@@ -1381,8 +1383,8 @@ async function vcVideo(kind){
   let track;
   try { const st = kind === "screen" ? await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 }, audio: false }) : await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } }); track = st.getVideoTracks()[0]; }
   catch(e){ if (kind !== "screen") toast("Caméra refusée ou introuvable."); return; }
-  if (VC.video){ const old = VC.video; VC.local.removeTrack(old); VC.local.addTrack(track); VC.video = track; VC.peers.forEach(P => { if (P.vsender) P.vsender.replaceTrack(track); else P.vsender = P.pc.addTrack(track, VC.local); }); old.stop(); }
-  else { VC.video = track; VC.local.addTrack(track); VC.peers.forEach(P => { P.vsender = P.pc.addTrack(track, VC.local); }); }
+  if (VC.video){ const old = VC.video; VC.local.removeTrack(old); VC.local.addTrack(track); VC.video = track; VC.peers.forEach(P => { if (P.vsender) P.vsender.replaceTrack(track); else P.vsender = P.pc.addTrack(track); }); old.stop(); }
+  else { VC.video = track; VC.local.addTrack(track); VC.peers.forEach(P => { P.vsender = P.pc.addTrack(track); }); }
   VC.kind = kind; track.onended = () => { if (VC.video === track) vcStopVideo(); };
   vcRender(); if (S.view === "vocal") render();
 }
