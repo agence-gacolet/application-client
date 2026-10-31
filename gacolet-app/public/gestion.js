@@ -33,7 +33,7 @@ const ROLE_VIEWS = {
   member: ["accueil","agenda","taches","messagerie","vocal","focus","formation","parametres"],
   commercial: ["accueil","agenda","taches","messagerie","vocal","focus","commercial","clients","montage","publications","idees","campagnes","formation","parametres"]
 };
-const canSee = k => !S.role || S.role === "owner" || (ROLE_VIEWS[S.role] || []).includes(k);
+const canSee = k => !S.role || S.role === "owner" || (Array.isArray(S.views) ? S.views : ["accueil","parametres"].concat(ROLE_VIEWS[S.role] || [])).includes(k);
 const COLLS = ["events","tasks","commercial","campaigns","rushes","publications","clients","cevents","keydates","posts","edtodo","meta","messages","formations","msheets","idees"];
 
 /* ---------- Outils ---------- */
@@ -1941,7 +1941,7 @@ function render(){
 function applyMe(r){
   if (!r || !r.user) return;
   const u = r.user;
-  S.user = u; S.role = u.role; S.secours = !!u.secours; S.preview = !!u.preview;
+  S.user = u; S.role = u.role; S.views = Array.isArray(u.views) ? u.views : null; S.secours = !!u.secours; S.preview = !!u.preview;
   S.isOwner = u.role === "owner"; S.canWrite = !u.preview;
   S.team = r.team || [];
   const names = S.team.map(t => t.name);
@@ -2137,19 +2137,13 @@ function pmEquipe(w){
     if (!(S.user && u.id === S.user.id)){ const rm = el("button","btn sm rmb","Retirer"); rm.type = "button"; let armed = false;
       rm.onclick = async () => { if (!armed){ armed = true; rm.textContent = "Confirmer"; setTimeout(() => { armed = false; rm.textContent = "Retirer"; }, 3000); return; } try { await GC.api("DELETE","/api/g-users/"+u.id); toast("Siège retiré."); } catch(x){ toast(x.message); } reloadUsers(); };
       a.appendChild(rm); }
+    if (u.role !== "owner") a.insertBefore(btn("Pages","sm", () => pagesForm(u)), a.firstChild);
     td(tr, a);
     tb.appendChild(tr);
   });
   c.appendChild(tw); w.appendChild(c);
 
-  const r = pmCard("Les rôles");
-  const rl = el("dl","pm-dl wide");
-  [["Propriétaire","Tout : chaque onglet, toutes les tâches, l’agenda complet, les comptes et ces réglages."],
-   ["Membre","Accueil, Agenda (uniquement ses tâches et les événements où il est inscrit), ses tâches, la Messagerie et la Formation."],
-   ["Commercial","Comme un membre, plus Commercial, Calendrier clients, Montage, Publications et Campagnes."]].forEach(([k, v]) => rl.append(el("dt",null,k), el("dd",null,v)));
-  r.appendChild(rl);
-  r.appendChild(el("p","pm-note","Le serveur applique ces limites : une personne ne reçoit jamais les données que son rôle ne permet pas de voir. Les propriétaires peuvent retirer n’importe quel message, les autres seulement les leurs."));
-  w.appendChild(r);
+  w.appendChild(rolesCard());
 
   const p = pmCard("Aperçu", "Pour vérifier les réglages : l’application s’ouvre exactement comme la voit la personne choisie, en lecture seule.");
   const g = el("div","pm-grid");
@@ -2164,6 +2158,49 @@ function pmEquipe(w){
   g.append(box1, box2); p.appendChild(g);
   if (!others.length) p.appendChild(el("p","pm-note","Ajoute d’abord un siège pour pouvoir l’ouvrir en aperçu."));
   w.appendChild(p);
+}
+/* Pages par rôle : un interrupteur par page et par rôle. Le serveur applique les mêmes règles aux données. */
+const PAGE_LIST = [["agenda","Agenda"],["taches","Tâches"],["messagerie","Messagerie"],["vocal","Vocal"],["focus","Focus"],["clients","Calendrier clients"],["montage","Montage"],
+  ["fiches","Tableau clients"],["commercial","Commercial"],["publications","Publications"],["idees","Idées clients"],["campagnes","Campagnes Meta"],["formation","Formation"]];
+function swEl(on, fn, label, locked){ const l = el("label","sw" + (locked ? " locked" : "")); const i = el("input"); i.type = "checkbox"; i.checked = !!on; i.disabled = !!locked || !writable(); i.setAttribute("aria-label", label); i.onchange = () => fn(i.checked); l.append(i, el("span")); return l; }
+async function loadAccess(){ try { S.access = await GC.api("GET","/api/g-access"); } catch(e){ S.access = { roles: {}, people: {} }; } render(); }
+async function saveAccess(msg){ try { await GC.api("PUT","/api/g-access", { roles: S.access.roles, people: S.access.people }); if (msg) toast(msg); } catch(e){ toast(e.message); loadAccess(); } }
+function rolesCard(){
+  const r = pmCard("Pages par rôle", "Coche ce que chaque rôle voit. Le changement s’applique tout de suite, à la prochaine ouverture de l’application.");
+  if (!S.access){ r.appendChild(el("p","muted","Chargement…")); loadAccess(); return r; }
+  const { w: tw, tb } = table(["Page","Propriétaire","Membre","Commercial"]); tw.classList.add("ax-tw");
+  PAGE_LIST.forEach(([k, l]) => { const tr = el("tr","row");
+    td(tr, l, "nw"); td(tr, swEl(true, () => {}, l + ", propriétaire", true));
+    ["member","commercial"].forEach(role => { const list = S.access.roles[role] || [];
+      td(tr, swEl(list.includes(k), on => { const set = new Set(S.access.roles[role] || []); on ? set.add(k) : set.delete(k); S.access.roles[role] = [...set]; saveAccess((ROLE_LABEL[role] || role) + (on ? " : " + l + " ajouté." : " : " + l + " retiré.")); }, l + ", " + (ROLE_LABEL[role] || role).toLowerCase())); });
+    tb.appendChild(tr); });
+  r.appendChild(tw);
+  r.appendChild(el("p","pm-note","Accueil et Paramètres restent toujours visibles. Le propriétaire voit tout. Pour un besoin ponctuel, utilise le bouton Pages d’une personne dans le tableau des sièges : accès pour une heure, la journée ou toujours."));
+  return r;
+}
+function pagesForm(u){
+  if (!S.access){ loadAccess().then(() => pagesForm(u)); return; }
+  const role = S.access.roles[u.role] || [], mine = Object.assign({}, (S.access.people || {})[u.name] || {}), now = Date.now();
+  let dur = "0";
+  openModal(m => {
+    const t = el("h3",null,"Pages de " + u.name); t.id = "mtitle"; m.appendChild(t);
+    m.appendChild(el("p","muted","En plus de son rôle (" + (ROLE_LABEL[u.role] || u.role).toLowerCase() + "). Choisis la durée, puis active les pages."));
+    const sg = segm([["0","Toujours"],["3600000","1 heure"],["day","Aujourd’hui"]], dur, v => { dur = v; [...sg.querySelectorAll("button")].forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === dur))); });
+    [...sg.querySelectorAll("button")].forEach((b, i) => { b.dataset.v = ["0","3600000","day"][i]; }); m.appendChild(sg);
+    const list = el("div","ax-list");
+    PAGE_LIST.forEach(([k, l]) => { const inRole = role.includes(k), until = mine[k], active = until !== undefined && (!until || until > now);
+      const row = el("div","ax-row"); const tx = el("div"); tx.appendChild(el("b",null,l));
+      tx.appendChild(el("small",null, inRole ? "Inclus dans son rôle" : active ? (until ? "Jusqu’à " + hhmm(new Date(until)) + (iso(new Date(until)) !== today() ? ", le " + fmtD(iso(new Date(until))) : "") : "Donné pour toujours") : "Pas d’accès"));
+      row.append(tx, swEl(inRole || active, on => {
+        if (on){ const end = dur === "0" ? 0 : dur === "day" ? new Date(new Date().setHours(23, 59, 0, 0)).getTime() : Date.now() + Number(dur); mine[k] = end; }
+        else delete mine[k];
+        S.access.people = Object.assign({}, S.access.people, { [u.name]: mine }); if (!Object.keys(mine).length) delete S.access.people[u.name];
+        saveAccess(l + (on ? " ouvert à " : " retiré à ") + u.name + "."); closeModal(); pagesForm(u);
+      }, l, inRole));
+      list.appendChild(row); });
+    m.appendChild(list);
+    const a = el("div","actions"); a.appendChild(btn("Fermer","", closeModal)); m.appendChild(a);
+  });
 }
 function seatForm(){
   openForm({ key:"seat", title:"Nouveau siège", intro:"Choisis le rôle et un mot de passe provisoire à transmettre à la personne. Elle pourra le changer dans Paramètres.", okLabel:"Créer le siège", done:"Siège créé.",
