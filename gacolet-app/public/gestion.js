@@ -1697,7 +1697,7 @@ function focusPeople(){
   if (!list.length){ box.appendChild(el("p","fo-empty","Personne au coin du feu pour l’instant. Lance ta session, les autres te verront.")); return; }
   list.forEach(p => { const c = el("div","fo-p" + (p.pause ? " pause" : "") + (p.name === me ? " me" : ""));
     const av = avatarEl(p.name, 44); av.classList.add("av-click"); av.onclick = () => profileCard(p.name);
-    const tx = el("div","fo-ptx"); tx.append(el("b",null,p.name + (p.name === me ? " (toi)" : "")), el("span",null, p.pause ? "En pause" : [p.tool, p.task].filter(Boolean).join(", ") || "Concentré"), el("small",null, (Date.now() - p.since < 60000 ? "Vient d’arriver" : "En focus depuis " + focusDur(Date.now() - p.since))));
+    const tx = el("div","fo-ptx"); tx.append(el("b",null,p.name + (p.name === me ? " (toi)" : "")), el("span",null, p.pause ? "En pause" : p.tool ? "Sur " + p.tool : "Concentré"), el("small",null, (Date.now() - p.since < 60000 ? "Vient d’arriver" : "En focus depuis " + focusDur(Date.now() - p.since))));
     c.append(av, tx); box.appendChild(c); });
 }
 function focusTimerLabel(){ if (!FOCUS.end) return ""; const s = Math.max(0, Math.round((FOCUS.end - Date.now()) / 1000)); return Math.floor(s / 60) + " min " + String(s % 60).padStart(2, "0"); }
@@ -1722,17 +1722,16 @@ function vFocus(root){
   if (FOCUS.end) ov.appendChild(el("p","fo-time", focusTimerLabel())).id = "fo-time";
   const ctl = el("div","fo-ctl");
   if (!FOCUS.on){
-    const inp = el("input","fo-in"); inp.id = "fo-task"; inp.placeholder = "Sur quoi tu bosses ? (facultatif)"; inp.maxLength = 120; inp.value = FOCUS.task;
-    inp.oninput = () => { FOCUS.task = inp.value; }; inp.onkeydown = e => { if (e.key === "Enter") go2.click(); };
-    const go2 = btn("Je me mets en focus","lemon", () => { FOCUS.on = true; focusApi({ task: FOCUS.task.trim(), tool: FOCUS.tool }); if (!FOCUS.audio && FOCUS.sound !== false) fireSound(true); render(); });
-    ctl.append(inp, go2);
+    const go2 = btn("Je me mets en focus","lemon", () => { FOCUS.on = true; focusApi({ task: "", tool: FOCUS.tool }); if (!FOCUS.audio && FOCUS.sound !== false) fireSound(true); render(); });
+    ctl.append(go2);
   } else {
     ctl.append(btn(FOCUS.mode === "work" ? "Arrêter le minuteur" : "Session de 50 min", FOCUS.mode === "work" ? "" : "lemon", () => focusTimer(FOCUS.mode === "work" ? 0 : 50, "work")),
       btn(FOCUS.mode === "pause" ? "Reprendre" : "Pause de 10 min","", () => focusTimer(FOCUS.mode === "pause" ? 0 : 10, "pause")),
       btn("Quitter le salon","", () => { FOCUS.on = false; clearInterval(FOCUS.timer); FOCUS.end = 0; FOCUS.mode = ""; focusApi({ on: false }); fireSound(false); render(); }));
   }
   ov.appendChild(ctl);
-  /* Sur quel outil : visible des autres au coin du feu */
+  /* Sur quelle application, comme un statut : visible des autres au coin du feu */
+  ov.appendChild(el("p","fo-lab","Tu es sur"));
   const tl = el("div","fo-chips"); tl.setAttribute("role","group"); tl.setAttribute("aria-label","Outil en cours");
   FOCUS_TOOLS.forEach(n => { const b = el("button","fo-chip",n); b.type = "button"; b.setAttribute("aria-pressed", String(FOCUS.tool === n));
     b.onclick = () => { FOCUS.tool = FOCUS.tool === n ? "" : n; if (FOCUS.on) focusApi({ task: FOCUS.task, tool: FOCUS.tool }); render(); }; tl.appendChild(b); });
