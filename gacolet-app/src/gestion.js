@@ -14,10 +14,17 @@ const ACCESS = {
     write: ["tasks", "messages", "formations"],
   },
   commercial: {
-    read: ["tasks", "events", "messages", "formations", "clients", "meta", "commercial", "campaigns", "msheets", "idees", "rushes", "publications", "cevents", "keydates", "posts", "edtodo"],
-    write: ["tasks", "messages", "formations", "commercial", "campaigns", "idees", "rushes", "publications", "cevents", "keydates", "posts", "edtodo"],
+    read: ["tasks", "events", "messages", "formations", "clients", "meta"],
+    write: ["tasks", "messages", "formations"],
   },
 };
+/* Pages : chaque page donne accès aux données dont elle a besoin. Les rôles ont des pages par défaut,
+   modifiables par les propriétaires (interrupteurs dans Paramètres), plus des pages données à une personne, pour toujours ou pour un temps. */
+const VIEW_COLLS = { agenda: ["events", "tasks", "cevents", "keydates", "posts"], taches: ["tasks"], messagerie: ["messages"], vocal: [], focus: [], formation: ["formations"],
+  commercial: ["commercial"], clients: ["clients", "cevents", "keydates"], montage: ["rushes"], publications: ["publications", "posts", "edtodo"],
+  campagnes: ["campaigns", "meta", "msheets"], fiches: ["clients"], idees: ["idees"] };
+const DEFAULT_VIEWS = { member: ["agenda", "taches", "messagerie", "vocal", "focus", "formation"],
+  commercial: ["agenda", "taches", "messagerie", "vocal", "focus", "commercial", "clients", "montage", "publications", "idees", "campagnes", "formation"] };
 const SEED = [["Gabriel", "gabriel"], ["Matis", "matis"], ["Clara", "clara"]];
 
 module.exports = function (app, { db, wrap, root }) {
@@ -80,14 +87,25 @@ module.exports = function (app, { db, wrap, root }) {
   const auth = (req, res, next) => ensure().then(() => who(req)).then(async u => {
     if (!u) return res.status(401).json({ error: "Connexion requise." });
     req.user = await withPreview(req, u);
+    req.user.views = await effViews(req.user);
     if (req.user.preview && req.method !== "GET") return res.status(403).json({ error: "Aperçu en lecture seule : rien n’est modifié." });
     next();
   }).catch(e => res.status(500).json({ error: "Base indisponible.", detail: String(e.message || e).slice(0, 300) }));
+  // Réglage des pages : { roles: { member: [...], commercial: [...] }, people: { "<nom>": { "<page>": <fin en ms, 0 = toujours> } } }
+  let ACC = null;
+  const accCfg = async () => { if (!ACC) { const r = await db.one("SELECT data FROM docs WHERE col = ? AND id = ? AND deleted = 0", ["cfg", "access"]); ACC = r ? JSON.parse(r.data || "{}") : {}; } return ACC; };
+  async function effViews(u) {
+    if (u.role === "owner") return Object.keys(VIEW_COLLS).concat(["accueil", "parametres"]);
+    const c = await accCfg(), base = (c.roles && Array.isArray(c.roles[u.role])) ? c.roles[u.role] : (DEFAULT_VIEWS[u.role] || DEFAULT_VIEWS.member);
+    const extra = ((c.people || {})[u.name]) || {}, now = Date.now();
+    return [...new Set(["accueil", "parametres"].concat(base, Object.keys(extra).filter(k => !extra[k] || extra[k] > now)))].filter(v => v === "accueil" || v === "parametres" || VIEW_COLLS[v]);
+  }
   const ownerOnly = (req, res, next) => req.user && req.user.role === "owner" ? next() : res.status(403).json({ error: "Réservé aux propriétaires." });
 
   // ---------- Droits par rôle ----------
-  const canRead = (u, col) => u.role === "owner" || (ACCESS[u.role] && ACCESS[u.role].read.includes(col));
-  const canWriteCol = (u, col) => u.role === "owner" || (ACCESS[u.role] && ACCESS[u.role].write.includes(col));
+  const viewColls = u => (u.views || []).flatMap(v => VIEW_COLLS[v] || []);
+  const canRead = (u, col) => u.role === "owner" || (ACCESS[u.role] && ACCESS[u.role].read.includes(col)) || viewColls(u).includes(col);
+  const canWriteCol = (u, col) => u.role === "owner" || (ACCESS[u.role] && ACCESS[u.role].write.includes(col)) || viewColls(u).includes(col);
   function visible(u, col, d) {
     if (!canRead(u, col)) return false;
     if (col === "messages" && String(d.ch || "").startsWith("dm:")) return String(d.ch).slice(3).split("|").includes(u.name);
@@ -135,6 +153,16 @@ module.exports = function (app, { db, wrap, root }) {
     res.status(401).json({ error: "Identifiant ou mot de passe incorrect." });
   }));
   const infoOf = u => { try { return JSON.parse(u.info || "{}"); } catch (e) { return {}; } };
+  app.get("/api/g-access", auth, ownerOnly, wrap(async (req, res) => {
+    const c = await accCfg(); res.json({ roles: Object.assign({}, DEFAULT_VIEWS, c.roles || {}), people: c.people || {}, pages: Object.keys(VIEW_COLLS) });
+  }));
+  app.put("/api/g-access", auth, ownerOnly, wrap(async (req, res) => {
+    const b = req.body || {}, ok = v => Object.prototype.hasOwnProperty.call(VIEW_COLLS, v);
+    const roles = {}; ["member", "commercial"].forEach(r => { if (Array.isArray((b.roles || {})[r])) roles[r] = [...new Set(b.roles[r].filter(ok))]; });
+    const people = {}; Object.entries(b.people || {}).forEach(([n, m]) => { const o = {}; Object.entries(m || {}).forEach(([v, t]) => { if (ok(v)) o[v] = Number(t) || 0; }); if (Object.keys(o).length) people[String(n).slice(0, 80)] = o; });
+    ACC = { roles, people }; await put("cfg", "access", ACC);
+    res.json({ ok: true });
+  }));
   app.get("/api/g-me", auth, wrap(async (req, res) => {
     const team = (await db.all("SELECT name, role, info FROM gusers WHERE disabled = 0 ORDER BY created_at")).map(r => { const i = infoOf(r); return { name: r.name, role: r.role, avatar: i.avatar || "", email: i.email || "", tel: i.tel || "", poste: i.poste || "" }; });
     const row = req.user.secours ? null : await db.one("SELECT * FROM gusers WHERE id = ?", [req.user.id]);
