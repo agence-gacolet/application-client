@@ -205,8 +205,8 @@ async function buildProps() { say("Pose des rochers et des plantes…");
   scatter(18, (x, z) => forest(x, z) > .3 && farFromSolid(x, z, 4), (x, z) => { add("dead_tree_trunk", x, z, 1 + rnd() * .4, rnd() * 6.3, .1); });
   scatter(LOWQ ? 250 : 600, (x, z) => forest(x, z) > .25 && pathD(x, z) > 3, (x, z) => add(rnd() < .6 ? "fern_02" : "nettle_plant", x, z, .8 + rnd() * .8, rnd() * 6.3));
   scatter(LOWQ ? 120 : 260, (x, z) => pathD(x, z) > 3.5 && Math.hypot(x, z) > 20, (x, z) => add("shrub_02", x, z, .7 + rnd() * .9, rnd() * 6.3));
-  if (M.grass_medium_02) wrapGrass(M.grass_medium_02, LOWQ ? 700 : 1300, 20, 0, 1.7);
-  if (M.grass_medium_01) wrapGrass(M.grass_medium_01, LOWQ ? 260 : 520, 20, 600, 1.6);
+  if (M.grass_medium_02) wrapGrass(M.grass_medium_02, LOWQ ? 300 : 550, 20, 0, 1.5);
+  if (M.grass_medium_01) wrapGrass(M.grass_medium_01, LOWQ ? 420 : 820, 20, 600, 1.6);
   if (M.grass_bermuda_01) wrapGrass(M.grass_bermuda_01, LOWQ ? 300 : 600, 20, 0, 1.6);
   // campement au centre de la clairière
   add("stone_fire_pit", 0, 0, 1, 0, .05); SOLID.push({ x: 0, z: 0, r: 1.1 });
