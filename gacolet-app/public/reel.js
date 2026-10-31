@@ -41,9 +41,9 @@ const WORLD = 640;
 // chemin de terre qui serpente à travers la forêt et passe par le campement
 const pathX = z => Math.sin(z * .018) * 22 + Math.sin(z * .047 + 1.3) * 6;
 const pathD = (x, z) => Math.abs(x - pathX(z));
-const H0 = fbm(0, 0) * 34;
-function height(x, z) { let h = fbm(x * .0065 + 3, z * .0065 - 7) * 34 + fbm(x * .03, z * .03, 3) * 3.2 + Math.pow(fbm(x * .004 - 9, z * .004 + 2, 3), 3) * 60;
-  const d = Math.hypot(x, z), flat = sstep(14, 34, d); h = H0 + (h - H0) * flat; const pd = pathD(x, z); h -= (1 - sstep(1.2, 4.5, pd)) * .25; return h; }
+const H0 = fbm(3, -7) * 16;
+function height(x, z) { const d = Math.hypot(x, z); let h = fbm(x * .006 + 3, z * .006 - 7) * 16 + fbm(x * .03, z * .03, 3) * 1.6 + Math.pow(fbm(x * .004 - 9, z * .004 + 2, 3), 2) * 70 * sstep(110, 260, d);
+  const flat = sstep(14, 46, d); h = H0 + (h - H0) * flat; const pd = pathD(x, z); h -= (1 - sstep(1.2, 4.5, pd)) * .25; return h; }
 const clearing = (x, z) => 1 - sstep(16, 26, Math.hypot(x, z));
 const forest = (x, z) => sstep(.42, .6, fbm(x * .012 + 40, z * .012 - 10, 4)) * (1 - clearing(x, z)) * sstep(5, 11, pathD(x, z));
 
@@ -51,7 +51,7 @@ const forest = (x, z) => sstep(.42, .6, fbm(x * .012 + 40, z * .012 - 10, 4)) * 
 const HM = 512, hmData = new Uint8Array(HM * HM * 4); let hMin = 1e9, hMax = -1e9; const hs = [];
 for (let j = 0; j < HM; j++) for (let i = 0; i < HM; i++) { const x = (i / (HM - 1) - .5) * WORLD, z = (j / (HM - 1) - .5) * WORLD, h = height(x, z); hs.push(h); hMin = Math.min(hMin, h); hMax = Math.max(hMax, h); }
 for (let j = 0; j < HM; j++) for (let i = 0; i < HM; i++) { const k = j * HM + i, x = (i / (HM - 1) - .5) * WORLD, z = (j / (HM - 1) - .5) * WORLD, v = Math.round((hs[k] - hMin) / (hMax - hMin) * 65535);
-  const dens = sstep(1.6, 4.5, pathD(x, z)) * (1 - clearing(x, z) * .55) * (1 - forest(x, z) * .55); hmData.set([v >> 8, v & 255, Math.round(dens * 255), 255], k * 4); }
+  const dens = sstep(1.6, 4.5, pathD(x, z)) * (1 - clearing(x, z) * .3) * (1 - forest(x, z) * .5) * (1 - sstep(3, 0, Math.hypot(x, z))); hmData.set([v >> 8, v & 255, Math.round(dens * 255), 255], k * 4); }
 const hmTex = new THREE.DataTexture(hmData, HM, HM, THREE.RGBAFormat, THREE.UnsignedByteType); hmTex.needsUpdate = true;
 
 /* ---------- Chargement Poly Haven ---------- */
@@ -80,7 +80,7 @@ async function setSky(k) { say("Chargement du ciel…"); const t = await phHdri(
   const elev = Math.asin(SUN.y); sun.intensity = 1.2 + Math.min(1, elev / .5) * 2.6;
   // couleur de la brume : moyenne du ciel juste au-dessus de l'horizon
   const fy = Math.floor(Hh * .47), fc = new THREE.Color(0, 0, 0); let n = 0; for (let x = 0; x < W; x += 8) { const i = (fy * W + x) * st; fc.r += get(i); fc.g += get(i + 1); fc.b += get(i + 2); n++; } fc.multiplyScalar(1 / n);
-  scene.fog.color.copy(fc).multiplyScalar(.85); scene.fog.density = elev < .25 ? .0125 : .0085;
+  scene.fog.color.copy(fc).multiplyScalar(.7); scene.fog.density = elev < .25 ? .0042 : .003;
   if (skyEnv) skyEnv.dispose(); skyEnv = pmrem.fromEquirectangular(t).texture; scene.environment = skyEnv; scene.environmentIntensity = .75; scene.background = t; scene.backgroundIntensity = 1;
   $("#tod").textContent = SKIES[k][1]; say(""); }
 
@@ -113,10 +113,10 @@ async function buildTerrain() { say("Chargement des sols…");
   terrain.material = mat; }
 
 /* ---------- Herbe : des dizaines de milliers de brins autour du joueur, qui suivent le relief et le vent ---------- */
-const GR = LOWQ ? 26 : 34, GN = LOWQ ? 50000 : 95000;
+const GR = LOWQ ? 24 : 30, GN = LOWQ ? 90000 : 170000;
 const grassU = { uTime: { value: 0 }, uCam: { value: new THREE.Vector2() }, uR: { value: GR }, hMap: { value: hmTex }, hMin: { value: hMin }, hRange: { value: hMax - hMin }, hSize: { value: WORLD } };
 { const bg = new THREE.BufferGeometry(), segs = 4, pos = [], uvs = [], idx = [];
-  for (let i = 0; i <= segs; i++) { const t = i / segs, w = .045 * (1 - t * .85); pos.push(-w, t, 0, w, t, 0); uvs.push(0, t, 1, t); if (i < segs) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); } }
+  for (let i = 0; i <= segs; i++) { const t = i / segs, w = .028 * (1 - t * .9); pos.push(-w, t, 0, w, t, 0); uvs.push(0, t, 1, t); if (i < segs) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); } }
   bg.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); bg.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2)); bg.setIndex(idx); bg.computeVertexNormals();
   const ig = new THREE.InstancedBufferGeometry().copy(bg); ig.instanceCount = GN; const off = new Float32Array(GN * 4);
   for (let i = 0; i < GN; i++) { off[i * 4] = (Math.random() * 2 - 1) * GR; off[i * 4 + 1] = (Math.random() * 2 - 1) * GR; off[i * 4 + 2] = Math.random(); off[i * 4 + 3] = Math.random() * Math.PI * 2; }
@@ -132,13 +132,13 @@ const grassU = { uTime: { value: 0 }, uCam: { value: new THREE.Vector2() }, uR: 
       .replace("#include <begin_vertex>", `
       vec2 wp = uCam + mod(aOff.xy - uCam + uR, 2.0 * uR) - uR; vec2 hdv = hd(wp); float dist = length(wp - uCam);
       float keep = step(aOff.z, hdv.y) * (1.0 - smoothstep(uR * .7, uR, dist)); vFade = keep; vT = position.y; vRnd = aOff.z;
-      float hgt = (.45 + aOff.z * .55) * keep; float c = cos(aOff.w), s = sin(aOff.w);
+      float hgt = (.25 + aOff.z * .5) * keep; float c = cos(aOff.w), s = sin(aOff.w);
       vec3 transformed = vec3(position.x * c, position.y * hgt, position.x * s);
       float wv = sin(uTime * 1.7 + wp.x * .35 + wp.y * .22) * .5 + sin(uTime * 3.1 + wp.x * .9) * .2;
       transformed.x += wv * .16 * position.y * position.y * hgt; transformed.z += wv * .07 * position.y * position.y * hgt + .08 * position.y * position.y * hgt;
       transformed += vec3(wp.x, hdv.x - .03, wp.y);`).replace("#include <beginnormal_vertex>", "vec3 objectNormal = vec3(0.0, 1.0, 0.0);");
     s.fragmentShader = s.fragmentShader.replace("#include <common>", "#include <common>\nvarying float vT; varying float vRnd; varying float vFade;").replace("#include <map_fragment>", `
-      if (vFade < .01) discard; vec3 base = mix(vec3(.11, .14, .05), vec3(.20, .24, .09), vRnd), tip = mix(vec3(.56, .55, .26), vec3(.72, .63, .34), vRnd);
+      if (vFade < .01) discard; vec3 base = mix(vec3(.04, .07, .015), vec3(.08, .12, .03), vRnd), tip = mix(vec3(.36, .42, .12), vec3(.58, .54, .22), vRnd);
       diffuseColor.rgb = mix(base, tip, smoothstep(0.0, 1.0, vT)) * (.85 + vRnd * .3);`); };
   const grass = new THREE.Mesh(ig, gm); grass.frustumCulled = false; grass.receiveShadow = true; scene.add(grass); }
 
