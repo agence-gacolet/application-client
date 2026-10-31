@@ -509,9 +509,46 @@ module.exports = function (app, { db, wrap, root }) {
     res.json({ gifs: (j.data || []).map(g => ({ id: g.id, title: g.title || "", url: g.images && g.images.fixed_height ? g.images.fixed_height.url : "", small: g.images && g.images.fixed_height_small ? g.images.fixed_height_small.url : "" })).filter(g => g.url) });
   }));
 
+  // ---------- Temps réel : la page attend le prochain changement (attente longue), comme une messagerie ----------
+  // « en train d’écrire » et « vu » restent en mémoire : ils n’ont de sens que sur le moment.
+  const LIVE = { v: 1, waiters: new Set(), typing: new Map(), reads: new Map() };
+  function bump() { LIVE.v++; const w = [...LIVE.waiters]; LIVE.waiters.clear(); w.forEach(f => f()); }
+  const waitBump = (v, ms) => LIVE.v !== v ? Promise.resolve() : new Promise(ok => { const f = () => { clearTimeout(t); ok(); }; const t = setTimeout(() => { LIVE.waiters.delete(f); ok(); }, ms); LIVE.waiters.add(f); });
+  function liveFor(u) {
+    const now = Date.now(), typing = {};
+    LIVE.typing.forEach((m, ch) => { m.forEach((ts, n) => { if (now - ts > 6000) m.delete(n); else if (n !== u.name && visible(u, "messages", { ch })) (typing[ch] = typing[ch] || []).push(n); }); });
+    const reads = {}; LIVE.reads.forEach((m, n) => { if (n === u.name) return; Object.keys(m).forEach(ch => { if (visible(u, "messages", { ch })) (reads[ch] = reads[ch] || {})[n] = m[ch]; }); });
+    return { v: LIVE.v, typing, reads };
+  }
+  app.post("/api/g-typing", auth, wrap(async (req, res) => {
+    const ch = String((req.body || {}).ch || "").slice(0, 200); if (!ch || req.user.preview) return res.json({ ok: true });
+    if (!LIVE.typing.has(ch)) LIVE.typing.set(ch, new Map());
+    const m = LIVE.typing.get(ch), had = m.has(req.user.name);
+    if ((req.body || {}).stop) { m.delete(req.user.name); bump(); return res.json({ ok: true }); }
+    m.set(req.user.name, Date.now()); if (!had) bump(); res.json({ ok: true });
+  }));
+  app.post("/api/g-seen", auth, wrap(async (req, res) => {
+    const b = req.body || {}, ch = String(b.ch || "").slice(0, 200), at = String(b.at || "").slice(0, 40); if (!ch || !at || req.user.preview) return res.json({ ok: true });
+    const m = LIVE.reads.get(req.user.name) || {}; if ((m[ch] || "") < at) { m[ch] = at; LIVE.reads.set(req.user.name, m); bump(); }
+    res.json({ ok: true });
+  }));
+  // Réaction sur un message (n’importe qui peut réagir, sans pouvoir modifier le texte des autres)
+  const REACTS = ["👍","❤️","😂","😮","🙏","🔥"];
+  app.post("/api/g-react", auth, wrap(async (req, res) => {
+    const b = req.body || {}, id = String(b.id || ""), e = String(b.e || "");
+    if (!okId(id) || !REACTS.includes(e) || req.user.preview) return res.status(400).json({ error: "Demande invalide." });
+    const cur = await current("messages", id); if (!cur || !visible(req.user, "messages", cur)) return res.status(404).json({ error: "Message introuvable." });
+    const re = Object.assign({}, cur.re || {}), who = req.user.name;
+    Object.keys(re).forEach(k => { re[k] = (re[k] || []).filter(n => n !== who); if (!re[k].length) delete re[k]; });
+    if (!((cur.re || {})[e] || []).includes(who)) re[e] = (re[e] || []).concat(who);
+    await put("messages", id, Object.assign({}, cur, { re })); res.json({ ok: true, re });
+  }));
+
   // ---------- Données ----------
   // Tout ce qui a changé depuis « since » (premier appel : tout), filtré selon le rôle.
+  // Avec wait=1, la réponse attend le prochain changement (25 s au plus) : les messages arrivent tout de suite.
   app.get("/api/g/changes", auth, wrap(async (req, res) => {
+    if (req.query.wait === "1" && req.query.since) await waitBump(Number(req.query.v) || 0, 25000);
     const since = String(req.query.since || "");
     const now = stamp(), u = req.user;
     const rows = since
@@ -526,7 +563,7 @@ module.exports = function (app, { db, wrap, root }) {
       if (visible(u, r.col, d)) docs.push({ col: r.col, id: r.id, deleted: false, data: d });
       else if (since) docs.push({ col: r.col, id: r.id, deleted: true, data: null }); // n'est plus visible (réattribué...)
     }
-    res.json({ now, full: !since, docs });
+    res.json({ now, full: !since, docs, live: liveFor(u) });
   }));
 
   async function put(col, id, data) {
@@ -535,6 +572,7 @@ module.exports = function (app, { db, wrap, root }) {
     const t = stamp();
     const r = await db.run("UPDATE docs SET data = ?, deleted = 0, updated_at = ? WHERE col = ? AND id = ?", [s, t, col, id]);
     if (!r.changes) await db.run("INSERT INTO docs (col, id, data, deleted, updated_at) VALUES (?,?,?,0,?)", [col, id, s, t]);
+    bump();
   }
   const current = async (col, id) => { const r = await db.one("SELECT data FROM docs WHERE col = ? AND id = ? AND deleted = 0", [col, id]); return r ? JSON.parse(r.data || "{}") : null; };
   const refuse = (res, msg) => res.status(403).json({ error: msg });
@@ -578,7 +616,7 @@ module.exports = function (app, { db, wrap, root }) {
     const cur = await current(col, id);
     if (cur) { const no = allowed(req.user, col, cur, null, null); if (no) return refuse(res, no); }
     await db.run("UPDATE docs SET deleted = 1, data = '{}', updated_at = ? WHERE col = ? AND id = ?", [stamp(), col, id]);
-    res.json({ ok: true });
+    res.json({ ok: true }); bump();
   }));
 
   // Reprise des données de l'ancien gestionnaire (une fois). N'écrase pas ce qui existe déjà.
