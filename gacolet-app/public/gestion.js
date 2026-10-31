@@ -605,7 +605,7 @@ function vTaches(root){
   const {w, tb} = table(["Fait","~Client","À faire","Date","~Retard","~Note"].concat(who === "Tous" ? ["Qui"] : []));
   const cols = who === "Tous" ? 7 : 6;
   POLES.forEach(([code, label]) => {
-    const rows = list.filter(t => (t.pole || "00") === code).sort((a,b) => (a.done - b.done) || ((a.date||"9999").localeCompare(b.date||"9999")));
+    const rows = list.filter(t => (t.pole || "00") === code).sort((a,b) => (a.done - b.done) || (b.createdAt||b.updatedAt||"").localeCompare(a.createdAt||a.updatedAt||""));
     if (!rows.length) return;
     band(tb, label, rows.length, cols);
     rows.forEach(t => {
