@@ -585,7 +585,10 @@ function vAccueil(root){
   W.appendChild(el("h2","w2-lab", hr >= 18 || weekend ? "Pour la suite" : "Ta journée en bref"));
   const s = el("div","w2-tiles");
   tiles.forEach(([n, l, f], i) => { const t = el("button","w2-tile" + (n ? "" : " zero")); t.style.animationDelay = (0.45 + i*0.08) + "s"; t.append(el("b",null,String(n)), el("span",null,l)); if (!n) t.appendChild(el("i",null,"C’est calé")); t.onclick = f; s.appendChild(t); });
-  W.appendChild(s); root.appendChild(W);
+  W.appendChild(s);
+  /* Le Hameau : le jeu de l’agence, sur ordinateur */
+  if (matchMedia("(pointer:fine)").matches && innerWidth >= 900){ const g = el("a","w2-game"); g.href = "/jeu"; g.append(el("b",null,"Entrer dans le Hameau"), el("span",null,"Tes tâches deviennent des quêtes")); W.appendChild(g); }
+  root.appendChild(W);
 }
 
 /* ---------- Tâches ---------- */
