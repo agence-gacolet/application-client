@@ -294,6 +294,12 @@ function vMessagerie(root){
   const top = el("div","wa-top"); const tl = el("div","wa-tl"); tl.appendChild(el("h1",null,"Messagerie"));
   const sg = segm([["main","Principal"],["shoot","Tournage"]], S.mmode, v => { S.mmode = v; S.mch = "grp"; S.conv = false; render(); });
   [...sg.querySelectorAll("button")].forEach((b, i) => { const n = i ? unreadIn("tg:cg:" + id) : unreadIn("cg:" + id) + team.reduce((a, t) => a + unreadIn("cdm:" + id + "|" + t.name), 0); if (n) b.appendChild(el("span","cnt",String(n))); });
+  /* Message privé : uniquement sur demande, avec le bouton + */
+  if (S.mmode === "main" && team.length){ const plus = el("button","wa-new"); plus.type = "button"; plus.setAttribute("aria-label","Nouveau message privé"); plus.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+    plus.onclick = () => openModal(md => { md.classList.add("sheet"); const t = el("h3",null,"Message privé"); t.id = "mtitle"; md.appendChild(t); md.appendChild(el("p","muted","Choisissez la personne de l’agence à qui écrire. Elle seule verra la conversation."));
+      const l = el("nav","morelist wa-pick"); team.forEach(p => { const a = el("button","wa-pick-row"); a.type = "button"; const tx = el("span"); tx.append(el("b",null,p.name), el("small",null,p.poste || "")); a.append(avatarEl(p.name, 36), tx); a.onclick = () => { closeModal(); S.mch = "dm:" + p.name; S.conv = true; render(); }; l.appendChild(a); }); md.appendChild(l);
+      const o = el("div","actions"); o.appendChild(btn("Annuler","", closeModal)); md.appendChild(o); });
+    tl.appendChild(plus); }
   top.append(tl, sg); side.appendChild(top);
   const row = (kind, label, sub, av) => {
     const k = chKey(kind), lm = lastOf(k), un = k === ch && (S.conv || !phone) ? 0 : unreadIn(k);
@@ -304,7 +310,8 @@ function vMessagerie(root){
   };
   side.appendChild(el("span","wa-lab", S.mmode === "shoot" ? "Tournages" : "Groupe"));
   row("grp", S.mmode === "shoot" ? "Tournages avec l’agence" : "Agence Gacolet", S.mmode === "shoot" ? "Dates, lieux, préparation des tournages" : "Toute l’équipe", avatarEl("Agence Gacolet", 44, { logo: true }));
-  if (S.mmode === "main" && team.length){ side.appendChild(el("span","wa-lab","Privé")); team.forEach(t => row("dm:" + t.name, t.name, t.poste || "Message privé", avatarEl(t.name, 44))); }
+  const privs = S.mmode === "main" ? team.filter(t => lastOf(chKey("dm:" + t.name)) || S.mch === "dm:" + t.name) : [];
+  if (privs.length){ side.appendChild(el("span","wa-lab","Privé")); privs.forEach(t => row("dm:" + t.name, t.name, t.poste || "Message privé", avatarEl(t.name, 44))); }
   /* Conversation */
   const main = el("section","wa-conv");
   const hd = el("header","wa-head");
