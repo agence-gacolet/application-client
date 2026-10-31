@@ -699,6 +699,10 @@ function makeChar(name, o) {
   tag.position.y = o.sub ? 5.5 : 5.2; g.add(tag);
   g.userData = { mixer, actions, cur: "", tag, name, body: m, cls: look.o };
   if (!o.npc) { const sw = makeSword(); g.add(sw); g.userData.sword = sw; }
+  // Chevalier : son épée est sculptée à sa ceinture ; quand il la tient en main, on efface celle de la ceinture
+  if (isK) { const kHide = { value: 0 }; g.userData.kHide = kHide; m.traverse(c => { if (!c.isMesh) return; c.material = [].concat(c.material).map(mt => { const n = mt.clone(); n.onBeforeCompile = s => { s.uniforms.uHide = kHide;
+      s.vertexShader = s.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 vBind;").replace("#include <begin_vertex>", "#include <begin_vertex>\nvBind = position;");
+      s.fragmentShader = s.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec3 vBind; uniform float uHide;").replace("#include <clipping_planes_fragment>", "#include <clipping_planes_fragment>\nif (uHide > .5) { vec3 sa = vec3(.5, .33, .06), sb = vec3(.1, 1.097, .349), pa = vBind - sa, ba = sb - sa; float hh = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); if (length(pa - ba * hh) < .045 || length(vBind - vec3(.17, .963, .298)) < .085) discard; }"); }; return n; })[0]; }); }
   playAnim(g, "Idle_Loop", 0); mixer.update(Math.random() * 3);
   return g;
 }
@@ -756,18 +760,20 @@ function animChar(g, dt, moving, speed, emote, air) {
       [[B.tl, B.kl, B.fl], [B.tr, B.kr, B.fr]].forEach(([a, l, f]) => { const s2 = sgn(a); aimBone(a, l, dn.clone().multiplyScalar(0.55).addScaledVector(side, 0.55 * s2).addScaledVector(fwd, 0.45), 1); aimBone(l, f, dn.clone().addScaledVector(side, 0.12 * s2).addScaledVector(fwd, -0.15), 1); });
       if (B.ul && B.ll && B.hl && B.ur && B.lr && B.hr) [[B.ul, B.ll, B.hl], [B.ur, B.lr, B.hr]].forEach(([a, l, h]) => { const s2 = sgn(a); aimBone(a, l, dn.clone().multiplyScalar(0.8).addScaledVector(fwd, 0.45).addScaledVector(side, 0.12 * s2), 1); aimBone(l, h, fwd.clone().addScaledVector(dn, 0.25).addScaledVector(side, -0.15 * s2), 1); });
     } }
-  // Coup d'épée façon Warcraft : armé au-dessus de l'épaule, torsion du buste, frappe en diagonale avec un pas en avant
-  if (u.swing != null) { u.swing += dt; const T = u.swing, Dur = 0.62;
-    if (T >= Dur) { u.swing = null; u.trail = false; }
+  // Coup d'épée : garde, armé au-dessus de l'épaule droite (lame vers l'arrière), frappe en diagonale, accompagnement jusqu'à la hanche gauche, retour en garde.
+  // Chaque étape fixe la direction du bras, de l'avant-bras et de la lame ; le buste tourne et le pied avance pendant la frappe.
+  if (u.swing != null) { u.swing += dt; const T = u.swing / .8;
+    if (T >= 1) { u.swing = null; u.trail = false; u.swDir = null; }
     else { const B = limbs(g); if (B.ur && B.lr && B.hr) { const { up, side, fwd } = axes(g), hp = (B.hips || u.body).getWorldPosition(new THREE.Vector3()), sr = Math.sign(B.ur.getWorldPosition(new THREE.Vector3()).sub(hp).dot(side)) || 1;
-      const ez = x => x * x * (3 - 2 * x); let k, w; if (T < .26) { k = 0; w = ez(T / .26); } else if (T < .4) { k = ez((T - .26) / .14); w = 1; } else { k = 1; w = 1 - ez((T - .4) / .22); }
-      const tw = (.6 - 1.15 * k) * sr * w; B.sp.forEach(b => twistBone(b, up, tw / Math.max(1, B.sp.length)));
-      const ua = up.clone().multiplyScalar(.9).addScaledVector(side, .55 * sr).addScaledVector(fwd, -.25).lerp(fwd.clone().multiplyScalar(.75).addScaledVector(up, -.45).addScaledVector(side, -.55 * sr), k);
-      const fa = up.clone().multiplyScalar(.25).addScaledVector(fwd, -.8).addScaledVector(side, -.3 * sr).lerp(fwd.clone().multiplyScalar(.6).addScaledVector(up, -.55).addScaledVector(side, -.75 * sr), k);
-      aimBone(B.ur, B.lr, ua, w); aimBone(B.lr, B.hr, fa, w);
-      if (B.ul && B.ll && B.hl) { const la = fwd.clone().multiplyScalar(.45).addScaledVector(up, -.85).addScaledVector(side, -.25 * sr); aimBone(B.ul, B.ll, la, w * .8); aimBone(B.ll, B.hl, fwd.clone().addScaledVector(up, -.3), w * .8); }
-      g.position.addScaledVector(fwd, .45 * Math.sin(Math.min(1, T / .55) * Math.PI));
-      if (T > .27 && !u.trail) { u.trail = true; slashTrail(g, sr); } } } }
+      const KS = [[0, [.25, -.8, .45], [-.1, .25, .95], [-.05, .6, .8], 0], [.3, [.55, .65, -.2], [-.25, .7, -.45], [-.25, .15, -.95], .65], [.42, [.15, .05, .95], [-.3, -.15, .95], [-.55, -.15, .8], -.15], [.58, [-.3, -.55, .7], [-.8, -.45, .35], [-.6, -.55, -.55], -.65], [1, [.25, -.8, .45], [-.1, .25, .95], [-.05, .6, .8], 0]];
+      let a = 0; while (a < KS.length - 2 && T > KS[a + 1][0]) a++; const k0 = KS[a], k1 = KS[a + 1], x = Math.min(1, (T - k0[0]) / (k1[0] - k0[0])), e = a === 1 ? x : x * x * (3 - 2 * x);
+      const V = v => side.clone().multiplyScalar(v[0] * sr).addScaledVector(up, v[1]).addScaledVector(fwd, v[2]).normalize(), L = (i) => V(k0[i]).lerp(V(k1[i]), e).normalize();
+      const w = Math.min(1, T / .08) * (T > .85 ? 1 - (T - .85) / .15 : 1);
+      const tw = (k0[4] + (k1[4] - k0[4]) * e) * sr * w; B.sp.forEach(b => twistBone(b, up, tw / Math.max(1, B.sp.length)));
+      aimBone(B.ur, B.lr, L(1), w); aimBone(B.lr, B.hr, L(2), w); u.swDir = w > .3 ? L(3) : null;
+      if (B.ul && B.ll && B.hl) { aimBone(B.ul, B.ll, side.clone().multiplyScalar(-.35 * sr).addScaledVector(up, -.8).addScaledVector(fwd, .25), w * .7); aimBone(B.ll, B.hl, fwd.clone().addScaledVector(up, -.2).addScaledVector(side, -.3 * sr), w * .7); }
+      g.position.addScaledVector(fwd, .55 * Math.sin(Math.min(1, Math.max(0, (T - .25) / .45)) * Math.PI));
+      if (T > .32 && !u.trail) { u.trail = true; slashTrail(g, sr); } } } }
   // Mort : le héros s'effondre et reste étendu sur le dos, bras écartés
   const dieW = emote === "mort" ? 1 : 0; u.die = (u.die || 0) + (dieW - (u.die || 0)) * Math.min(1, dt * (dieW ? 3.5 : 9));
   if (u.die > 0.001) { const w = u.die, base = g.position.y; g.rotation.order = "YXZ"; g.rotation.x = -Math.PI / 2 * Math.min(1, w * 1.08); u.dieOn = true;
@@ -781,10 +787,10 @@ function animChar(g, dt, moving, speed, emote, air) {
 }
 const _sq1 = new THREE.Quaternion(), _sq2 = new THREE.Quaternion(), _SY = new THREE.Vector3(0, 1, 0);
 function placeSword(g, emote) { const u = g.userData, s = u.sword; if (!s) return;
-  const hide = !u.armed || u.flip > 0.05 || u.die > 0.3 || emote === "assis" || emote === "danse" || emote === "cheval" || !g.visible; s.visible = !hide; if (hide) return;
+  const hide = !u.armed || u.flip > 0.05 || u.die > 0.3 || emote === "assis" || emote === "danse" || emote === "cheval" || !g.visible; s.visible = !hide; if (u.kHide) u.kHide.value = hide ? 0 : 1; if (hide) return;
   const B = limbs(g); if (!B.hr || !B.lr) { s.visible = false; return; }
   const { up, fwd } = axes(g), h = B.hr.getWorldPosition(new THREE.Vector3()), arm = h.clone().sub(B.lr.getWorldPosition(new THREE.Vector3())).normalize();
-  const dir = u.swing != null ? arm.clone().addScaledVector(up, .12) : arm.clone().multiplyScalar(.35).add(fwd).addScaledVector(up, .35); dir.normalize();
+  const dir = u.swDir ? u.swDir.clone() : arm.clone().multiplyScalar(.35).add(fwd).addScaledVector(up, .35); dir.normalize();
   const pos = h.addScaledVector(arm, .14); g.worldToLocal(pos); s.position.copy(pos);
   _sq1.setFromUnitVectors(_SY, dir); g.getWorldQuaternion(_sq2).invert(); s.quaternion.copy(_sq2.multiply(_sq1)); }
 
