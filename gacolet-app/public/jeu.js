@@ -800,8 +800,8 @@ function updWalkers(dt) { WALKERS.forEach(w => { const far = Math.hypot(w.x - P.
     if (w.wait > 0) { w.wait -= dt; if (!far) animChar(w.m, dt, false, 1, ""); }
     else { const [tx, tz] = w.path[w.k], dx = tx - w.x, dz = tz - w.z, L = Math.hypot(dx, dz);
       if (L < .7) { const end = w.k === 0 || w.k === w.path.length - 1; if (w.loop) w.k = (w.k + 1) % w.path.length; else { if (w.k + w.dir >= w.path.length || w.k + w.dir < 0) w.dir *= -1; w.k += w.dir; } if (end || Math.random() < .25) w.wait = 2 + Math.random() * 5; }
-      else { const sp = 2.2; w.x += dx / L * sp * dt; w.z += dz / L * sp * dt; const ry = Math.atan2(dx, dz); w.ry += Math.atan2(Math.sin(ry - w.ry), Math.cos(ry - w.ry)) * Math.min(1, dt * 5); }
-      if (!far) animChar(w.m, dt, L >= .7, 1, ""); }
+      else { const sp = 2.6; w.x += dx / L * sp * dt; w.z += dz / L * sp * dt; const ry = Math.atan2(dx, dz); w.ry += Math.atan2(Math.sin(ry - w.ry), Math.cos(ry - w.ry)) * Math.min(1, dt * 5); }
+      if (!far) animChar(w.m, dt, L >= .7, .5, ""); }
     w.m.position.set(w.x, groundAt(w.x, w.z), w.z); w.m.rotation.y = w.ry; }); }
 
 /* ---------- Joueur ---------- */
