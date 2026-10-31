@@ -113,7 +113,7 @@ async function buildTerrain() { say("Chargement des sols…");
   terrain.material = mat; }
 
 /* ---------- Herbe : des dizaines de milliers de brins autour du joueur, qui suivent le relief et le vent ---------- */
-const GR = LOWQ ? 24 : 32, GN = LOWQ ? 50000 : 90000;
+const GR = 30, GN = 1; // brins simples remplacés par les touffes scannées
 const GRASS_GLSL = `attribute vec4 aOff; uniform float uTime; uniform vec2 uCam; uniform float uR; uniform sampler2D hMap; uniform float hMin; uniform float hRange; uniform float hSize;
       float dec(vec4 t){ return (t.r * 255.0 * 256.0 + t.g * 255.0) / 65535.0; }
       vec2 hd(vec2 w){ vec2 p = (w / hSize + .5) * 511.0; vec2 i = floor(p), f = p - i; ivec2 a = ivec2(clamp(i, vec2(0.0), vec2(510.0)));
@@ -160,7 +160,7 @@ function wrapGrass(gltf, per, R, minTris, scale) { gltf.scene.updateMatrixWorld(
       s.vertexShader = s.vertexShader.replace("#include <common>", "#include <common>\n" + GRASS_GLSL)
         .replace("#include <beginnormal_vertex>", "#include <beginnormal_vertex>\nfloat gc = cos(aOff.w), gs = sin(aOff.w); objectNormal = vec3(objectNormal.x * gc - objectNormal.z * gs, objectNormal.y, objectNormal.x * gs + objectNormal.z * gc);")
         .replace("#include <begin_vertex>", `vec2 wp = uCam + mod(aOff.xy - uCam + uR, 2.0 * uR) - uR; vec2 hdv = hd(wp); float dist = length(wp - uCam);
-          float keep = step(aOff.z * .9, hdv.y) * (1.0 - smoothstep(uR * .65, uR, dist)); float sc = (${scale.toFixed(2)} + aOff.z * .5) * keep;
+          float keep = step(aOff.z * .9, hdv.y) * (1.0 - smoothstep(uR * .65, uR, dist)); float sc = ${scale.toFixed(2)} * (.7 + aOff.z * .65) * keep;
           vec3 p = position * sc; vec3 transformed = vec3(p.x * gc - p.z * gs, p.y, p.x * gs + p.z * gc);
           float wv = sin(uTime * 1.6 + wp.x * .35 + wp.y * .22) * .5 + sin(uTime * 3.0 + wp.x * .9) * .2; transformed.x += wv * .2 * p.y * p.y * 4.0; transformed.z += wv * .08 * p.y * p.y * 4.0;
           transformed += vec3(wp.x, hdv.x - .03, wp.y);`); };
@@ -196,7 +196,7 @@ async function buildTrees() { say("Pousse des arbres…");
 
 /* ---------- Rochers, souches, fougères, buissons, campement ---------- */
 async function buildProps() { say("Pose des rochers et des plantes…");
-  const ids = ["boulder_01", "rock_moss_set_01", "rock_07", "tree_stump_01", "dead_tree_trunk", "fern_02", "shrub_02", "nettle_plant", "stone_fire_pit", "Barrel_01", "Lantern_01", "WoodenTable_01", "grass_medium_02", "grass_medium_01"], M = {};
+  const ids = ["boulder_01", "rock_moss_set_01", "rock_07", "tree_stump_01", "dead_tree_trunk", "fern_02", "shrub_02", "nettle_plant", "stone_fire_pit", "Barrel_01", "Lantern_01", "WoodenTable_01", "grass_medium_02", "grass_medium_01", "grass_bermuda_01"], M = {};
   await Promise.all(ids.map(id => phModel(id).then(g => M[id] = g).catch(e => console.warn(id, e))));
   const L = {}; const add = (id, x, z, s, ry, sink) => ((L[id] = L[id] || []).push({ x, y: height(x, z) - (sink || 0), z, s, ry }));
   scatter(70, (x, z) => pathD(x, z) > 4 && Math.hypot(x, z) > 22 && farFromSolid(x, z, 3), (x, z) => { const s = .8 + rnd() * 2.2; add(rnd() < .5 ? "boulder_01" : "rock_07", x, z, s, rnd() * 6.3, s * .25); SOLID.push({ x, z, r: s * .8 }); });
@@ -205,8 +205,9 @@ async function buildProps() { say("Pose des rochers et des plantes…");
   scatter(18, (x, z) => forest(x, z) > .3 && farFromSolid(x, z, 4), (x, z) => { add("dead_tree_trunk", x, z, 1 + rnd() * .4, rnd() * 6.3, .1); });
   scatter(LOWQ ? 250 : 600, (x, z) => forest(x, z) > .25 && pathD(x, z) > 3, (x, z) => add(rnd() < .6 ? "fern_02" : "nettle_plant", x, z, .8 + rnd() * .8, rnd() * 6.3));
   scatter(LOWQ ? 120 : 260, (x, z) => pathD(x, z) > 3.5 && Math.hypot(x, z) > 20, (x, z) => add("shrub_02", x, z, .7 + rnd() * .9, rnd() * 6.3));
-  if (M.grass_medium_02) wrapGrass(M.grass_medium_02, LOWQ ? 500 : 1000, 22, 0, .85);
-  if (M.grass_medium_01) wrapGrass(M.grass_medium_01, LOWQ ? 140 : 260, 22, 600, .9);
+  if (M.grass_medium_02) wrapGrass(M.grass_medium_02, LOWQ ? 700 : 1300, 20, 0, 1.7);
+  if (M.grass_medium_01) wrapGrass(M.grass_medium_01, LOWQ ? 160 : 320, 20, 600, 1.5);
+  if (M.grass_bermuda_01) wrapGrass(M.grass_bermuda_01, LOWQ ? 300 : 600, 20, 0, 1.6);
   // campement au centre de la clairière
   add("stone_fire_pit", 0, 0, 1, 0, .05); SOLID.push({ x: 0, z: 0, r: 1.1 });
   [[3.2, 1.6, .4], [-2.6, 2.4, 2.1], [.4, -3.1, 1.2]].forEach(([x, z, r]) => { add("tree_stump_01", x, z, .7, r, .05); SOLID.push({ x, z, r: .45 }); });
@@ -302,7 +303,7 @@ window.__R = { THREE, renderer, scene, composer, camera, sun, cine, grade, P, CA
 
 /* ---------- Démarrage ---------- */
 (async () => {
-  try { await setSky(2); await buildTerrain(); await buildHero(); await buildProps(); await buildTrees(); }
+  try { await setSky(3); await buildTerrain(); await buildHero(); await buildProps(); await buildTrees(); }
   catch (e) { say("Le chargement a échoué : " + (e.message || e)); console.error(e); return; }
   $("#ld").classList.add("off"); setTimeout(() => $("#ld").remove(), 1200); step();
 })();
