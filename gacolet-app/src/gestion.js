@@ -556,7 +556,7 @@ module.exports = function (app, { db, wrap, root }) {
       : await db.all("SELECT col, id, data, deleted, updated_at FROM docs WHERE deleted = 0");
     const docs = [];
     for (const r of rows) {
-      if (!canRead(u, r.col)) continue;
+      if (!canRead(u, r.col) || r.col === "game" || r.col === "gmail") continue;
       if (Number(r.deleted)) { docs.push({ col: r.col, id: r.id, deleted: true, data: null }); continue; }
       const d = JSON.parse(r.data || "{}");
       if (r.col === "clients" && u.role !== "owner") { const keep = {}; ["name", "color", "title", "calendar", "leadWeeks", "recap", "logo"].forEach(k => { if (d[k] != null) keep[k] = d[k]; }); docs.push({ col: r.col, id: r.id, deleted: false, data: keep }); continue; }
@@ -782,5 +782,61 @@ module.exports = function (app, { db, wrap, root }) {
     res.json({ groups: cl.map(c => ({ ch: "cg:" + c.id, id: c.id, room: visioRoom(c.id), name: c.name, people: us.filter(u => u.client_id === c.id).map(u => (u.prenom + " " + u.nom).trim()) })) });
   }));
 
+
+  // ---------- Jeu de l’agence : les tâches deviennent des quêtes ----------
+  // Positions et paroles en mémoire (éphémères) ; profil (or, sac) et courrier rangés en base, dans des collections réservées au jeu.
+  const GAME = { pl: {}, says: [], sid: 0 };
+  const gLevel = xp => Math.floor(Math.sqrt(xp / 100)) + 1;
+  async function gProfile(u) {
+    const rows = await db.all("SELECT data FROM docs WHERE col = 'tasks' AND deleted = 0");
+    const mine = rows.map(r => JSON.parse(r.data || "{}")).filter(d => d.who === u.name);
+    const done = mine.filter(d => d.done);
+    const onTime = done.filter(d => !d.date || !d.doneAt || String(d.doneAt) <= String(d.date)).length;
+    const xp = done.length * 100 + onTime * 50;
+    const p = (await current("game", "p:" + u.id)) || { gold: 0, bag: [] };
+    return { name: u.name, xp, lvl: gLevel(xp), next: Math.pow(gLevel(xp), 2) * 100, prev: Math.pow(gLevel(xp) - 1, 2) * 100,
+      gold: done.length * 10 + onTime * 5 + (Number(p.gold) || 0), bag: p.bag || [], done: done.length };
+  }
+  app.get("/api/g-game", auth, wrap(async (req, res) => {
+    const u = req.user, me = await gProfile(u);
+    const tasks = (await db.all("SELECT id, data FROM docs WHERE col = 'tasks' AND deleted = 0")).map(r => Object.assign({ id: r.id }, JSON.parse(r.data || "{}")))
+      .filter(d => d.who === u.name && !d.done).map(d => ({ id: d.id, title: d.title || "Tâche", client: d.client || "", date: d.date || "", note: String(d.note || d.notes || "").slice(0, 400), prio: d.prio || "" }));
+    const mail = (await db.all("SELECT id, data FROM docs WHERE col = 'gmail' AND deleted = 0")).map(r => Object.assign({ id: r.id }, JSON.parse(r.data || "{}")))
+      .filter(m => m.to === u.name).sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 60);
+    const team = (await db.all("SELECT name FROM gusers WHERE disabled = 0")).map(x => x.name);
+    res.json({ me, quests: tasks, mail, team });
+  }));
+  app.post("/api/g-game/pos", auth, wrap(async (req, res) => {
+    const b = req.body || {}, n = req.user.name, now = Date.now(), num = v => Math.max(-500, Math.min(500, Number(v) || 0));
+    GAME.pl[n] = { name: n, x: num(b.x), z: num(b.z), y: Math.max(0, Math.min(20, Number(b.y) || 0)), ry: Number(b.ry) || 0, mv: b.mv ? 1 : 0, emo: String(b.emo || "").slice(0, 12), lvl: Number(b.lvl) || 1, t: now };
+    if (b.say) { GAME.says.push({ id: ++GAME.sid, who: n, text: String(b.say).slice(0, 200), at: now }); GAME.says = GAME.says.slice(-40); }
+    const since = Number(b.since) || 0;
+    res.json({ players: Object.values(GAME.pl).filter(p => p.name !== n && now - p.t < 15000), says: GAME.says.filter(s => s.id > since && now - s.at < 60000), sid: GAME.sid });
+  }));
+  app.post("/api/g-game/quest/:id", auth, wrap(async (req, res) => {
+    const id = req.params.id; if (!okId(id)) return res.status(400).json({ error: "Demande invalide." });
+    const cur = await current("tasks", id);
+    if (!cur || cur.who !== req.user.name) return res.status(404).json({ error: "Quête introuvable." });
+    if (!cur.done) await put("tasks", id, Object.assign({}, cur, { done: true, doneAt: stamp().slice(0, 10) }));
+    res.json({ ok: true, me: await gProfile(req.user) });
+  }));
+  app.post("/api/g-game/mail", auth, wrap(async (req, res) => {
+    const b = req.body || {}, u = req.user, to = String(b.to || "").slice(0, 80);
+    if (!(await db.one("SELECT id FROM gusers WHERE name = ? AND disabled = 0", [to]))) return res.status(400).json({ error: "Destinataire inconnu." });
+    const gold = Math.max(0, Math.floor(Number(b.gold) || 0));
+    if (gold){ const me = await gProfile(u); if (me.gold < gold) return res.status(400).json({ error: "Pas assez d’or." });
+      const p = (await current("game", "p:" + u.id)) || { gold: 0, bag: [] }; p.gold = (Number(p.gold) || 0) - gold; await put("game", "p:" + u.id, p); }
+    await put("gmail", newId(), { from: u.name, to, subject: String(b.subject || "").slice(0, 120), body: String(b.body || "").slice(0, 4000), gold, at: stamp(), read: false, taken: false });
+    res.json({ ok: true });
+  }));
+  app.post("/api/g-game/mail/:id/:act", auth, wrap(async (req, res) => {
+    const { id, act } = req.params; if (!okId(id)) return res.status(400).json({ error: "Demande invalide." });
+    const m = await current("gmail", id); if (!m || m.to !== req.user.name) return res.status(404).json({ error: "Lettre introuvable." });
+    if (act === "read") { m.read = true; await put("gmail", id, m); }
+    else if (act === "take" && m.gold && !m.taken) { const tu = await db.one("SELECT id FROM gusers WHERE name = ?", [req.user.name]); const p = (await current("game", "p:" + tu.id)) || { gold: 0, bag: [] }; p.gold = (Number(p.gold) || 0) + m.gold; await put("game", "p:" + tu.id, p); m.taken = true; m.read = true; await put("gmail", id, m); }
+    else if (act === "del") await db.run("UPDATE docs SET deleted = 1, data = '{}', updated_at = ? WHERE col = 'gmail' AND id = ?", [stamp(), id]);
+    res.json({ ok: true, me: await gProfile(req.user) });
+  }));
+  app.get(["/jeu", "/jeu/"], (req, res) => res.sendFile(path.join(root, "public", "jeu.html")));
   app.get(["/gestion", "/gestion/"], (req, res) => res.sendFile(path.join(root, "public", "gestion.html")));
 };
