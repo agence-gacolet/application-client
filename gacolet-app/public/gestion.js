@@ -1633,63 +1633,29 @@ function vMessagerie(root){
 
 /* ---------- Salon focus : travail au calme, ensemble ---------- */
 const FOCUS_TOOLS = ["Premiere Pro","After Effects","DaVinci Resolve","CapCut","Photoshop","Lightroom","Illustrator","Canva","Metricool","Meta Business","Google Drive","Mails et appels"];
-const FOCUS = { on: false, task: "", tool: "", people: [], cv: null, raf: 0, audio: null, vol: 0.5, timer: null, mode: "", end: 0, loaded: false };
+const FOCUS = { on: false, task: "", tool: "", people: [], vid: null, radio: null, sound: false, vol: 0.5, timer: null, mode: "", end: 0, loaded: false };
 function focusApi(body){ return GC.api(body ? "POST" : "GET", "/api/focus", body).then(r => { FOCUS.people = r.people || []; FOCUS.loaded = true; if (S.view === "focus") focusPeople(); renderTabs(); }).catch(() => {}); }
 setInterval(() => { if (!S.ready) return; if (FOCUS.on) focusApi({ task: FOCUS.task, tool: FOCUS.tool }); else if (S.view === "focus" || !FOCUS.loaded) focusApi(); }, 20000);
 window.addEventListener("beforeunload", () => { if (FOCUS.on) fetch("/api/focus", { method: "POST", keepalive: true, headers: { "Content-Type": "application/json", "Authorization": "Bearer " + (localStorage.getItem("gacolet-gestion-cle") || "") }, body: JSON.stringify({ on: false }) }).catch(() => {}); });
 function focusDur(ms){ const m = Math.max(0, Math.floor(ms / 60000)); if (m < 1) return "un instant"; return m < 60 ? m + " min" : Math.floor(m / 60) + " h" + (m % 60 ? " " + String(m % 60).padStart(2, "0") : ""); }
-/* Cheminée : flammes en particules, braises, lueur qui respire. Dessin original, sans image. */
-function fireCanvas(){
-  if (FOCUS.cv) return FOCUS.cv;
-  const cv = document.createElement("canvas"); cv.className = "fo-fire"; FOCUS.cv = cv;
-  const ctx = cv.getContext("2d"); let W = 0, H = 0, parts = [], sparks = [], t = 0;
-  const fit = () => { const r = cv.getBoundingClientRect(), d = Math.min(2, window.devicePixelRatio || 1); W = Math.max(1, r.width); H = Math.max(1, r.height); cv.width = W * d; cv.height = H * d; ctx.setTransform(d, 0, 0, d, 0, 0); };
-  const loop = () => {
-    if (!document.body.contains(cv)){ FOCUS.raf = 0; return; }
-    if (cv.width < 2 || Math.abs(cv.getBoundingClientRect().width - W) > 2) fit();
-    t += 1; const cx = W / 2, small = W < 600, base = H * (small ? 0.6 : 0.74), fw = small ? W * 0.6 : Math.min(W * 0.48, 470), sc = small ? 0.8 : 1.25;
-    ctx.globalCompositeOperation = "source-over"; ctx.fillStyle = "#0B0806"; ctx.fillRect(0, 0, W, H);
-    const pulse = 0.85 + 0.15 * Math.sin(t / 47) + 0.05 * Math.sin(t / 13);
-    const g = ctx.createRadialGradient(cx, base - 40, 10, cx, base - 40, Math.max(W, H) * 0.7);
-    g.addColorStop(0, "rgba(255,140,40," + (0.32 * pulse) + ")"); g.addColorStop(0.35, "rgba(160,60,15," + (0.16 * pulse) + ")"); g.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    for (let i = 0; i < 10; i++) parts.push({ x: cx + (Math.random() - .5) * fw * (0.4 + Math.random() * 0.6), y: base - 6, vx: (Math.random() - .5) * 0.5, vy: -(1.2 + Math.random() * 1.9) * sc, life: 0, max: 50 + Math.random() * 50, r: (16 + Math.random() * 24) * sc });
-    if (Math.random() < 0.18) sparks.push({ x: cx + (Math.random() - .5) * fw * .6, y: base - 20, vx: (Math.random() - .5) * 1.2, vy: -(1.5 + Math.random() * 2.5), life: 0, max: 60 + Math.random() * 80 });
-    ctx.globalCompositeOperation = "lighter";
-    parts = parts.filter(p => p.life < p.max);
-    parts.forEach(p => { p.life++; const k = p.life / p.max; p.x += p.vx + Math.sin((p.y + t) / 18) * 0.35 + (cx - p.x) * 0.012; p.y += p.vy; const r = p.r * (1 - k * 0.7);
-      const c = k < 0.25 ? [255, 230, 160] : k < 0.55 ? [255, 150, 50] : [200, 60, 20], a = (1 - k) * 0.26;
-      const rg = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r); rg.addColorStop(0, "rgba(" + c + "," + a + ")"); rg.addColorStop(1, "rgba(" + c + ",0)");
-      ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill(); });
-    sparks = sparks.filter(s => s.life < s.max);
-    sparks.forEach(s => { s.life++; s.x += s.vx + Math.sin((s.life + s.y) / 9) * 0.4; s.y += s.vy; s.vy *= 0.985; const a = 1 - s.life / s.max; ctx.fillStyle = "rgba(255,190,90," + a + ")"; ctx.fillRect(s.x, s.y, 1.6, 1.6); });
-    ctx.globalCompositeOperation = "source-over";
-    const logs = [[-0.55, 0.06, 0.18], [0.5, 0.05, -0.16], [0, 0.0, 0.03]];
-    logs.forEach(([dx, dy, rot]) => { ctx.save(); ctx.translate(cx + dx * fw * 0.5, base + 12 + dy * 60); ctx.rotate(rot); const lw = fw * 0.75, lh = 22;
-      const lg = ctx.createLinearGradient(0, -lh / 2, 0, lh / 2); lg.addColorStop(0, "#3A2416"); lg.addColorStop(1, "#160C06"); ctx.fillStyle = lg;
-      ctx.beginPath(); ctx.roundRect ? ctx.roundRect(-lw / 2, -lh / 2, lw, lh, 11) : ctx.rect(-lw / 2, -lh / 2, lw, lh); ctx.fill();
-      ctx.fillStyle = "rgba(255,120,40," + (0.25 + 0.2 * Math.sin(t / 20 + dx * 5)) + ")"; ctx.fillRect(-lw / 2 + 12, -lh / 2, lw - 24, 2.5); ctx.restore(); });
-    const fl = ctx.createLinearGradient(0, base + 30, 0, H); fl.addColorStop(0, "rgba(255,110,30," + 0.12 * pulse + ")"); fl.addColorStop(1, "rgba(0,0,0,0)"); ctx.fillStyle = fl; ctx.fillRect(0, base + 30, W, H - base);
-    FOCUS.raf = requestAnimationFrame(loop);
-  };
-  cv._start = () => { if (!FOCUS.raf) FOCUS.raf = requestAnimationFrame(loop); };
-  return cv;
+/* Cheminée : une vraie vidéo de feu en boucle (YouTube, sans pub), en fond de tout le salon. Le son se règle depuis le salon. */
+const FIRES = ["cdKop6aixVE","KkGQjCAGVUo","cDZSQkOidlI"];
+const CLAUDE_FM = "https://www.youtube.com/live/AUQKjgKQF7w";
+function ytCmd(fr, func, args){ try { fr.contentWindow.postMessage(JSON.stringify({ event: "command", func, args: args || [] }), "*"); } catch(e){} }
+function fireVideo(){
+  const id = FIRES[(S.ui.foFire || 0) % FIRES.length];
+  if (FOCUS.vid && FOCUS.vid.dataset.id === id) return FOCUS.vid;
+  const w = el("div","fo-vid"); w.dataset.id = id;
+  const fr = document.createElement("iframe"); fr.title = "Cheminée"; fr.allow = "autoplay; encrypted-media"; fr.tabIndex = -1;
+  fr.src = "https://www.youtube-nocookie.com/embed/" + id + "?autoplay=1&mute=1&loop=1&playlist=" + id + "&controls=0&disablekb=1&modestbranding=1&rel=0&playsinline=1&iv_load_policy=3&enablejsapi=1";
+  fr.onload = () => setTimeout(() => { if (FOCUS.sound){ ytCmd(fr, "unMute"); ytCmd(fr, "setVolume", [Math.round(FOCUS.vol * 100)]); } }, 800);
+  w.appendChild(fr); FOCUS.vid = w; return w;
 }
-/* Ambiance sonore générée : souffle du feu et crépitements. */
-function fireSound(on){
-  if (!on){ if (FOCUS.audio){ FOCUS.audio.ctx.close(); FOCUS.audio = null; } return; }
-  if (FOCUS.audio) return;
-  const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
-  const ctx = new AC(), out = ctx.createGain(); out.gain.value = FOCUS.vol; out.connect(ctx.destination);
-  const len = ctx.sampleRate * 4, buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0); let last = 0;
-  for (let i = 0; i < len; i++){ const w = Math.random() * 2 - 1; last = (last + 0.02 * w) / 1.02; d[i] = last * 3.2; }
-  const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true; const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 420; const rg = ctx.createGain(); rg.gain.value = 0.55;
-  src.connect(lp); lp.connect(rg); rg.connect(out); src.start();
-  const crack = () => { if (!FOCUS.audio) return; const n = ctx.createBufferSource(), b = ctx.createBuffer(1, ctx.sampleRate * 0.03, ctx.sampleRate), x = b.getChannelData(0);
-    for (let i = 0; i < x.length; i++) x[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / x.length, 3);
-    n.buffer = b; const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 1200 + Math.random() * 2500; const gg = ctx.createGain(); gg.gain.value = 0.08 + Math.random() * 0.25;
-    n.connect(hp); hp.connect(gg); gg.connect(out); n.start(); setTimeout(crack, 60 + Math.random() * (Math.random() < 0.2 ? 120 : 900)); };
-  FOCUS.audio = { ctx, out }; crack();
+function fireSound(on){ FOCUS.sound = !!on; const fr = FOCUS.vid && FOCUS.vid.querySelector("iframe"); if (!fr) return; if (on){ ytCmd(fr, "unMute"); ytCmd(fr, "setVolume", [Math.round(FOCUS.vol * 100)]); } else ytCmd(fr, "mute"); }
+function radioFrame(src){
+  if (FOCUS.radio && FOCUS.radio.dataset.src === src) return FOCUS.radio;
+  const w = el("div","fo-radio"); w.dataset.src = src; const i = document.createElement("iframe"); i.src = src + (src.includes("?") ? "&" : "?") + "autoplay=1&rel=0"; i.allow = "autoplay; encrypted-media"; i.title = "Radio du salon focus"; w.appendChild(i);
+  FOCUS.radio = w; return w;
 }
 function focusPeople(){
   const box = document.getElementById("fo-people"); if (!box) return; box.textContent = "";
@@ -1712,52 +1678,61 @@ function focusTimer(min, mode){
   render();
 }
 function vFocus(root){
-  const me = S.me || "Gabriel";
   if (!FOCUS.loaded) focusApi();
   const wrap = el("section","fo"); wrap.id = "fo";
-  const stage = el("div","fo-stage"); const cv = fireCanvas(); stage.appendChild(cv);
-  const ov = el("div","fo-ov");
-  const h = el("h1","fo-h"); h.append(document.createTextNode("Salon "), el("span",null,"focus")); ov.appendChild(h);
-  ov.appendChild(el("p","fo-sub", FOCUS.on ? "Tu es au coin du feu. Les autres voient que tu travailles." : "Un coin calme pour travailler ensemble. Chacun voit qui est concentré, sans se déranger."));
-  if (FOCUS.end) ov.appendChild(el("p","fo-time", focusTimerLabel())).id = "fo-time";
-  const ctl = el("div","fo-ctl");
-  if (!FOCUS.on){
-    const go2 = btn("Je me mets en focus","lemon", () => { FOCUS.on = true; focusApi({ task: "", tool: FOCUS.tool }); if (!FOCUS.audio && FOCUS.sound !== false) fireSound(true); render(); });
-    ctl.append(go2);
-  } else {
-    ctl.append(btn(FOCUS.mode === "work" ? "Arrêter le minuteur" : "Session de 50 min", FOCUS.mode === "work" ? "" : "lemon", () => focusTimer(FOCUS.mode === "work" ? 0 : 50, "work")),
-      btn(FOCUS.mode === "pause" ? "Reprendre" : "Pause de 10 min","", () => focusTimer(FOCUS.mode === "pause" ? 0 : 10, "pause")),
-      btn("Quitter le salon","", () => { FOCUS.on = false; clearInterval(FOCUS.timer); FOCUS.end = 0; FOCUS.mode = ""; focusApi({ on: false }); fireSound(false); render(); }));
-  }
-  ov.appendChild(ctl);
-  /* Sur quelle application, comme un statut : visible des autres au coin du feu */
-  ov.appendChild(el("p","fo-lab","Tu es sur"));
-  const tl = el("div","fo-chips"); tl.setAttribute("role","group"); tl.setAttribute("aria-label","Outil en cours");
-  FOCUS_TOOLS.forEach(n => { const b = el("button","fo-chip",n); b.type = "button"; b.setAttribute("aria-pressed", String(FOCUS.tool === n));
-    b.onclick = () => { FOCUS.tool = FOCUS.tool === n ? "" : n; if (FOCUS.on) focusApi({ task: FOCUS.task, tool: FOCUS.tool }); render(); }; tl.appendChild(b); });
-  ov.appendChild(tl);
-  const tools = el("div","fo-tools");
-  const snd = btn(FOCUS.audio ? "Couper le feu" : "Son du feu","sm", () => { fireSound(!FOCUS.audio); FOCUS.sound = !!FOCUS.audio; render(); });
-  const vol = el("input","fo-vol"); vol.type = "range"; vol.min = 0; vol.max = 1; vol.step = 0.05; vol.value = FOCUS.vol; vol.title = "Volume du feu"; vol.setAttribute("aria-label", vol.title);
-  vol.oninput = () => { FOCUS.vol = Number(vol.value); if (FOCUS.audio) FOCUS.audio.out.gain.value = FOCUS.vol; };
-  const voc = VC.room === "focus" ? btn("Quitter le vocal","sm", () => vcLeave()) : btn("Rejoindre en vocal","sm", () => vcJoin("focus","Salon focus"));
-  const full = btn("Plein écran","sm", () => { const f = document.getElementById("fo"); if (document.fullscreenElement) document.exitFullscreen(); else if (f && f.requestFullscreen) f.requestFullscreen().catch(() => {}); });
-  tools.append(snd, vol, voc, full); ov.appendChild(tools);
-  stage.appendChild(ov); wrap.appendChild(stage);
-  /* Radio : un direct YouTube ou une playlist, au choix de chacun */
+  wrap.append(fireVideo(), el("div","fo-shade"));
+  const ov = el("div","fo-ov"); ov.id = "fo-ov"; wrap.appendChild(ov);
   const side = el("aside","fo-side");
   side.appendChild(el("h2",null,"Au coin du feu"));
   const pp = el("div","fo-people"); pp.id = "fo-people"; side.appendChild(pp);
   side.appendChild(el("h2",null,"Radio"));
-  const src = embedUrl(S.ui.foRadio || "");
-  if (src && FOCUS.on){ const fr = el("div","fo-radio"); const i = document.createElement("iframe"); i.src = src + (src.includes("?") ? "&" : "?") + "autoplay=1"; i.allow = "autoplay; encrypted-media"; i.title = "Radio du salon focus"; fr.appendChild(i); side.appendChild(fr); }
-  const rf = el("form","fo-rf"); const ri = el("input","fo-in"); ri.id = "fo-radio-in"; ri.placeholder = "Lien YouTube d’un direct ou d’une playlist"; ri.value = S.ui.foRadio || "";
-  const rb = el("button","btn sm","OK"); rb.type = "submit"; rf.append(ri, rb);
-  rf.onsubmit = e => { e.preventDefault(); const v = ri.value.trim(); if (v && !embedUrl(v)){ toast("Colle un lien YouTube ou Vimeo."); return; } S.ui.foRadio = v; remember(); render(); };
-  side.appendChild(rf);
-  side.appendChild(el("p","muted fo-note", src ? (FOCUS.on ? "La radio joue pendant ta session." : "La radio démarre quand tu te mets en focus.") : "Colle le lien de ta radio préférée, elle se lancera à chaque session."));
+  const rs = el("div","fo-rslot"); rs.id = "fo-rslot"; side.appendChild(rs);
+  const sc = el("div"); sc.id = "fo-sctl"; side.appendChild(sc);
   wrap.appendChild(side); root.appendChild(wrap);
-  setTimeout(() => { cv._start(); focusPeople(); }, 0);
+  focusFill();
+}
+/* Met à jour le salon sans recharger la vidéo du feu ni la radio */
+function focusFill(){
+  const ov = document.getElementById("fo-ov"), sc = document.getElementById("fo-sctl"), rs = document.getElementById("fo-rslot"); if (!ov) return;
+  const fo = document.getElementById("fo"), nv = fireVideo(), cur = fo.querySelector(".fo-vid"); if (cur && cur !== nv) fo.replaceChild(nv, cur);
+  if (document.activeElement && sc.contains(document.activeElement)){ focusPeople(); return; }
+  ov.textContent = ""; sc.textContent = "";
+  const h = el("h1","fo-h"); h.append(document.createTextNode("Salon "), el("span",null,"focus")); ov.appendChild(h);
+  ov.appendChild(el("p","fo-sub", FOCUS.on ? "Tu es au coin du feu. Les autres voient que tu travailles." : "Un coin calme pour travailler ensemble. Chacun voit qui est concentré, sans se déranger."));
+  if (FOCUS.end){ const t = el("p","fo-time", focusTimerLabel()); t.id = "fo-time"; ov.appendChild(t); }
+  const ctl = el("div","fo-ctl");
+  if (!FOCUS.on) ctl.appendChild(btn("Je me mets en focus","lemon", () => { FOCUS.on = true; const f = document.getElementById("fo"); if (f && f.requestFullscreen && !document.fullscreenElement) f.requestFullscreen().catch(() => {}); focusApi({ task: "", tool: FOCUS.tool }); render(); }));
+  else ctl.append(btn(FOCUS.mode === "work" ? "Arrêter le minuteur" : "Session de 50 min", FOCUS.mode === "work" ? "" : "lemon", () => focusTimer(FOCUS.mode === "work" ? 0 : 50, "work")),
+      btn(FOCUS.mode === "pause" ? "Reprendre" : "Pause de 10 min","", () => focusTimer(FOCUS.mode === "pause" ? 0 : 10, "pause")),
+      btn("Quitter le salon","", () => { FOCUS.on = false; clearInterval(FOCUS.timer); FOCUS.end = 0; FOCUS.mode = ""; focusApi({ on: false }); render(); }));
+  ov.appendChild(ctl);
+  /* Sur quelle application, comme un statut : visible des autres au coin du feu */
+  ov.appendChild(el("p","fo-lab","Tu es sur"));
+  const tl = el("div","fo-chips"); tl.setAttribute("role","group"); tl.setAttribute("aria-label","Application en cours");
+  FOCUS_TOOLS.forEach(n => { const b = el("button","fo-chip",n); b.type = "button"; b.setAttribute("aria-pressed", String(FOCUS.tool === n));
+    b.onclick = () => { FOCUS.tool = FOCUS.tool === n ? "" : n; if (FOCUS.on) focusApi({ task: "", tool: FOCUS.tool }); render(); }; tl.appendChild(b); });
+  ov.appendChild(tl);
+  const tools = el("div","fo-tools");
+  const snd = btn(FOCUS.sound ? "Couper le feu" : "Son du feu","sm", () => { fireSound(!FOCUS.sound); render(); });
+  const vol = el("input","fo-vol"); vol.type = "range"; vol.min = 0; vol.max = 1; vol.step = 0.05; vol.value = FOCUS.vol; vol.title = "Volume du feu"; vol.setAttribute("aria-label", vol.title);
+  vol.oninput = () => { FOCUS.vol = Number(vol.value); const fr = FOCUS.vid && FOCUS.vid.querySelector("iframe"); if (fr && FOCUS.sound) ytCmd(fr, "setVolume", [Math.round(FOCUS.vol * 100)]); };
+  const nxt = btn("Autre feu","sm", () => { S.ui.foFire = ((S.ui.foFire || 0) + 1) % FIRES.length; remember(); render(); });
+  const voc = VC.room === "focus" ? btn("Quitter le vocal","sm", () => vcLeave()) : btn("Rejoindre en vocal","sm", () => vcJoin("focus","Salon focus"));
+  const full = btn(document.fullscreenElement ? "Quitter le plein écran" : "Plein écran","sm", () => { const f = document.getElementById("fo"); if (document.fullscreenElement) document.exitFullscreen(); else if (f && f.requestFullscreen) f.requestFullscreen().catch(() => {}); });
+  tools.append(snd, vol, nxt, voc, full); ov.appendChild(tools);
+  const radio = S.ui.foRadio || CLAUDE_FM, src = embedUrl(radio);
+  const want = src && FOCUS.on && S.ui.foRadioOn !== false ? src : "";
+  if (!want){ rs.textContent = ""; FOCUS.radio = null; } else if (!FOCUS.radio || FOCUS.radio.dataset.src !== want || FOCUS.radio.parentNode !== rs){ rs.textContent = ""; rs.appendChild(radioFrame(want)); }
+  const rr = el("div","fo-rr");
+  rr.append(btn(S.ui.foRadioOn === false ? "Allumer la radio" : "Couper la radio","sm", () => { S.ui.foRadioOn = S.ui.foRadioOn === false; if (!S.ui.foRadioOn) FOCUS.radio = null; remember(); render(); }));
+  if (S.ui.foRadio) rr.appendChild(btn("Revenir à Claude FM","sm", () => { S.ui.foRadio = ""; FOCUS.radio = null; remember(); render(); }));
+  sc.appendChild(rr);
+  const rf = el("form","fo-rf"); const ri = el("input","fo-in"); ri.id = "fo-radio-in"; ri.placeholder = "Autre radio : lien YouTube"; ri.value = S.ui.foRadio || "";
+  const rb = el("button","btn sm","OK"); rb.type = "submit"; rf.append(ri, rb);
+  rf.onsubmit = e => { e.preventDefault(); const v = ri.value.trim(); if (v && !embedUrl(v)){ toast("Colle un lien YouTube ou Vimeo."); return; } S.ui.foRadio = v; FOCUS.radio = null; remember(); render(); };
+  sc.appendChild(rf);
+  sc.appendChild(el("p","muted fo-note", FOCUS.on ? (S.ui.foRadio ? "Ta radio joue pendant la session." : "Claude FM joue pendant la session.") : "La radio démarre quand tu te mets en focus."));
+  focusPeople();
 }
 
 /* ---------- Idées clients : ce que les clients déposent depuis leur espace ---------- */
@@ -1791,7 +1766,7 @@ function vIdees(root){
 /* ---------- Formation ---------- */
 function embedUrl(u){
   u = String(u||"").trim(); let m;
-  if ((m = u.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{6,})/))) return "https://www.youtube-nocookie.com/embed/" + m[1];
+  if ((m = u.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([\w-]{6,})/))) return "https://www.youtube-nocookie.com/embed/" + m[1];
   if ((m = u.match(/vimeo\.com\/(?:video\/)?(\d+)/))) return "https://player.vimeo.com/video/" + m[1];
   if ((m = u.match(/drive\.google\.com\/file\/d\/([\w-]+)/))) return "https://drive.google.com/file/d/" + m[1] + "/preview";
   return "";
@@ -1919,13 +1894,14 @@ function cardLabels(root){
 }
 function render(){
   if (vcIsFull()){ vcStage(); vcRender(); return; }
-  if (document.fullscreenElement && document.fullscreenElement.id === "fo"){ focusPeople(); return; }
+  if (S.view === "focus" && document.getElementById("fo") && $("#app").contains(document.getElementById("fo"))){ renderTabs(); focusFill(); vcRender(); return; }
   if (S.view !== "campagnes") document.documentElement.classList.remove("gs-lock");
   renderTabs();
   const root = $("#app");
   const focusId = document.activeElement && document.activeElement.id; const caret = focusId && document.activeElement.selectionStart;
   root.textContent = "";
   document.body.classList.toggle("chat-full", S.view === "messagerie" && !S.failed && !!S.ready);
+  document.body.classList.toggle("focus-full", S.view === "focus");
   if (S.failed){ root.appendChild(head("Gestionnaire", "")); root.appendChild(el("p","empty",S.failed)); return; }
   if (!S.ready){ root.appendChild(head(VIEWS.find(v => v[0] === S.view)[1], "Chargement des données de l’agence…")); root.appendChild(el("p","empty","Les tâches, le commercial, les campagnes, les calendriers et l’agenda s’affichent dans un instant.")); return; }
   try { RENDER[S.view](root); cardLabels(root); } catch(x){ root.appendChild(el("p","err","Affichage impossible : "+(x && x.message))); console.error(x); }
@@ -2154,7 +2130,9 @@ function pmEquipe(w){
   const s2 = el("select","pick"); (S.pvClients || []).forEach(x => { const o = el("option",null,x.name); o.value = x.id; s2.appendChild(o); });
   if (!S.pvClients && !S.pvLoading){ S.pvLoading = true; GC.api("GET","/api/g-preview-clients").then(r => { S.pvClients = r.clients; render(); }).catch(() => { S.pvClients = []; }); }
   const b2 = btn("Voir l’espace de ce client","lemon", async () => { if (!s2.value) return; const win = window.open("about:blank","_blank"); try { const r = await GC.api("POST","/api/g-preview-client",{ clientId: Number(s2.value) }); if (win) win.location = r.url; else location.href = r.url; } catch(x){ if (win) win.close(); toast(x.message); } });
-  const box2 = el("div","pm-f"); box2.append(el("span",null,"Client"), s2, b2);
+  const b3 = btn("Tester pour de vrai","", async () => { if (!s2.value) return; const win = window.open("about:blank","_blank"); try { const r = await GC.api("POST","/api/g-test-client",{ clientId: Number(s2.value) }); if (win) win.location = r.url; else location.href = r.url; } catch(x){ if (win) win.close(); toast(x.message); } });
+  b3.title = "Ouvre l’espace du client avec un compte « Test Agence » : valider, écrire, envoyer des idées et rejoindre la visio fonctionnent vraiment.";
+  const box2 = el("div","pm-f"); box2.append(el("span",null,"Client"), s2, b2, b3);
   g.append(box1, box2); p.appendChild(g);
   if (!others.length) p.appendChild(el("p","pm-note","Ajoute d’abord un siège pour pouvoir l’ouvrir en aperçu."));
   w.appendChild(p);
