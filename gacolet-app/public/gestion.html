@@ -81,7 +81,7 @@
   const shell = document.getElementById("shell"), login = document.getElementById("login");
   function boot() {
     login.hidden = true; shell.hidden = false;
-    const s = document.createElement("script"); s.src = "/gestion.js?v=10"; document.body.appendChild(s);
+    const s = document.createElement("script"); s.src = "/gestion.js?v=11"; document.body.appendChild(s);
   }
   window.addEventListener("gc-logout", () => location.reload());
   document.getElementById("logout").onclick = () => GC.logout();
