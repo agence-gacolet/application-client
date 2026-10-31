@@ -1478,3 +1478,14 @@ html{-webkit-tap-highlight-color:transparent}
 .pb-due{color:var(--w2);font-weight:600}
 .pb-pays{list-style:none;margin:8px 0 0;padding:0;border-top:1px solid var(--line)}
 .pb-pays li{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13.5px}.pb-pays li span{flex:1;color:var(--ink-2)}.pb-pays li b{font-weight:700}
+.mt-pick select.pick{min-width:280px;max-width:420px}.mt-pick .fgroup{position:relative}.mt-dot{width:10px;height:10px;border-radius:50%;background:var(--c);display:inline-block;margin-left:10px;align-self:center}
+/* Finance et chalet */
+.fin-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:18px 0 8px}
+.fin-kpi{border:1px solid var(--line-2);border-radius:12px;background:var(--card);padding:16px 18px}.fin-kpi b{display:block;font:italic 400 40px/.95 var(--display);color:var(--lemon)}.fin-kpi span{display:block;margin-top:6px;font-size:13px;color:var(--ink-2);font-weight:600}
+.fin-h{margin:30px 0 12px;font:italic 400 26px/1 var(--display);letter-spacing:.02em;color:var(--ink)}
+.fin-btns{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
+.pill.ok{background:rgba(139,203,142,.15);color:var(--ok)}
+.ch-now{margin-top:10px}.ch-late{border-color:var(--w2)}.ch-dec{margin:8px 0 0;font-size:13.5px;font-weight:600;color:var(--lemon)}
+.pb-card .pb-h select.pick{max-width:220px;font-size:12.5px;padding:5px 26px 5px 10px}
+.rb-h{display:flex;align-items:center;gap:12px;justify-content:space-between}.rb-h .fin-h{margin-bottom:12px}
+.fin-grp td{font-weight:600}
