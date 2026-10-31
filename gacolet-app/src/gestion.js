@@ -6,7 +6,7 @@ const fs = require("fs");
 const crypto = require("crypto");
 const multer = require("multer");
 
-const COLLS = ["events", "tasks", "commercial", "campaigns", "rushes", "publications", "clients", "cevents", "keydates", "posts", "edtodo", "meta", "messages", "formations", "msheets"];
+const COLLS = ["events", "tasks", "commercial", "campaigns", "rushes", "publications", "clients", "cevents", "keydates", "posts", "edtodo", "meta", "messages", "formations", "msheets", "idees"];
 const ROLES = ["owner", "member", "commercial"];
 const ACCESS = {
   member: {
@@ -14,8 +14,8 @@ const ACCESS = {
     write: ["tasks", "messages", "formations"],
   },
   commercial: {
-    read: ["tasks", "events", "messages", "formations", "clients", "meta", "commercial", "campaigns", "msheets", "rushes", "publications", "cevents", "keydates", "posts", "edtodo"],
-    write: ["tasks", "messages", "formations", "commercial", "campaigns", "rushes", "publications", "cevents", "keydates", "posts", "edtodo"],
+    read: ["tasks", "events", "messages", "formations", "clients", "meta", "commercial", "campaigns", "msheets", "idees", "rushes", "publications", "cevents", "keydates", "posts", "edtodo"],
+    write: ["tasks", "messages", "formations", "commercial", "campaigns", "idees", "rushes", "publications", "cevents", "keydates", "posts", "edtodo"],
   },
 };
 const SEED = [["Gabriel", "gabriel"], ["Matis", "matis"], ["Clara", "clara"]];
@@ -545,6 +545,74 @@ module.exports = function (app, { db, wrap, root }) {
     if (!/^[a-f0-9]{32}(\.[a-z0-9]{1,7})?$/.test(n)) return res.status(404).end();
     res.sendFile(path.join(DIR, n), err => { if (err && !res.headersSent) res.status(404).end(); });
   });
+
+  // ---------- Espace client : accueil, validations, groupe de discussion avec l’agence, idées et médias ----------
+  // Le client se connecte avec son code (jeton de la table users). Il ne voit que le groupe « cg:<id du client> »
+  // et ses propres idées. Les échanges internes de l’équipe sur ce client (« c:<nom> ») restent invisibles pour lui.
+  const cauth = (req, res, next) => (async () => {
+    await ensure();
+    const t = String(req.get("authorization") || "").replace(/^Bearer\s+/i, "");
+    const u = t && !t.startsWith("retire-") ? await db.one("SELECT * FROM users WHERE token = ?", [t]) : null;
+    if (!u) return res.status(401).json({ error: "Session expirée. Saisissez à nouveau votre code." });
+    const c = await db.one("SELECT * FROM clients WHERE id = ? AND active = 1", [u.client_id]);
+    if (!c) return res.status(401).json({ error: "Compte désactivé. Contactez l’agence." });
+    if (u.email === PREVIEW_MAIL && req.method !== "GET") return res.status(403).json({ error: "Aperçu de l’agence : lecture seule, rien n’est envoyé." });
+    req.cu = u; req.cl = c; req.cname = (String(u.prenom || "").trim() + " " + String(u.nom || "").trim()).trim() || c.name; next();
+  })().catch(e => { console.error(e); res.status(500).json({ error: "Erreur du serveur." }); });
+  const cgOf = c => "cg:" + c.id;
+  const cleanFiles = a => (Array.isArray(a) ? a : []).slice(0, 10).filter(f => f && /^\/f\/[a-f0-9]{32}(\.[a-z0-9]{1,7})?$/.test(String(f.url || "")))
+    .map(f => ({ url: String(f.url), name: String(f.name || "").slice(0, 160), type: String(f.type || "").slice(0, 80), size: Number(f.size) || 0 }));
+  async function docsLike(col, needle) {
+    const rows = await db.all("SELECT id, data FROM docs WHERE col = ? AND deleted = 0 AND data LIKE ?", [col, "%" + needle + "%"]);
+    return rows.map(r => { let d = {}; try { d = JSON.parse(r.data || "{}"); } catch (e) {} return Object.assign({ id: r.id }, d); });
+  }
+  app.get("/api/c/feed", cauth, wrap(async (req, res) => {
+    const c = req.cl, ch = cgOf(c);
+    const messages = (await docsLike("messages", JSON.stringify(ch))).filter(m => m.ch === ch).sort((a, b) => String(a.at || "").localeCompare(String(b.at || ""))).slice(-400);
+    const idees = (await docsLike("idees", '"cid":' + c.id)).filter(i => Number(i.cid) === c.id).sort((a, b) => String(b.at || "").localeCompare(String(a.at || "")));
+    const team = (await db.all("SELECT name, info FROM gusers WHERE disabled = 0 ORDER BY created_at")).map(r => { const i = infoOf(r); return { name: r.name, avatar: i.avatar || "", poste: i.poste || "" }; });
+    res.json({ me: { name: req.cname, prenom: req.cu.prenom, entreprise: req.cu.entreprise }, client: { name: c.name }, preview: req.cu.email === PREVIEW_MAIL, messages, idees, team });
+  }));
+  app.post("/api/c/msg", cauth, wrap(async (req, res) => {
+    const b = req.body || {}, text = String(b.text || "").trim().slice(0, 4000), files = cleanFiles(b.files);
+    if (!text && !files.length) return res.status(400).json({ error: "Message vide." });
+    const id = newId();
+    await put("messages", id, Object.assign({ ch: cgOf(req.cl), text, who: req.cname, ext: 1, at: new Date().toISOString() }, files.length ? { files } : {}));
+    res.json({ ok: true, id });
+  }));
+  app.delete("/api/c/msg/:id", cauth, wrap(async (req, res) => {
+    const id = String(req.params.id); if (!okId(id)) return res.status(400).json({ error: "Demande invalide." });
+    const cur = await current("messages", id);
+    if (!cur || cur.ch !== cgOf(req.cl) || cur.who !== req.cname || !cur.ext) return res.status(403).json({ error: "Vous ne pouvez retirer que vos propres messages." });
+    await db.run("UPDATE docs SET deleted = 1, data = '{}', updated_at = ? WHERE col = ? AND id = ?", [stamp(), "messages", id]);
+    res.json({ ok: true });
+  }));
+  app.post("/api/c/idee", cauth, wrap(async (req, res) => {
+    const b = req.body || {}, text = String(b.text || "").trim().slice(0, 4000), files = cleanFiles(b.files);
+    const kind = ["Idée", "Photos", "Vidéos", "Inspiration"].includes(b.kind) ? b.kind : "Idée";
+    if (!text && !files.length) return res.status(400).json({ error: "Écrivez une idée ou ajoutez une photo ou une vidéo." });
+    const id = newId();
+    await put("idees", id, { cid: req.cl.id, client: req.cl.name, who: req.cname, kind, text, files, at: new Date().toISOString(), seen: [] });
+    res.json({ ok: true, id });
+  }));
+  app.delete("/api/c/idee/:id", cauth, wrap(async (req, res) => {
+    const id = String(req.params.id); if (!okId(id)) return res.status(400).json({ error: "Demande invalide." });
+    const cur = await current("idees", id);
+    if (!cur || Number(cur.cid) !== req.cl.id || cur.who !== req.cname) return res.status(403).json({ error: "Vous ne pouvez retirer que vos propres envois." });
+    await db.run("UPDATE docs SET deleted = 1, data = '{}', updated_at = ? WHERE col = ? AND id = ?", [stamp(), "idees", id]);
+    res.json({ ok: true });
+  }));
+  app.post("/api/c/upload", cauth, up.single("file"), (req, res) => {
+    const f = req.file;
+    if (!f) return res.status(400).json({ error: "Aucun fichier reçu." });
+    res.json({ url: "/f/" + f.filename, name: String(f.originalname || "").slice(0, 160), type: f.mimetype, size: f.size });
+  });
+  // Liste des groupes clients pour la messagerie de l’équipe
+  app.get("/api/g-cgroups", auth, wrap(async (req, res) => {
+    const cl = await db.all("SELECT id, name FROM clients WHERE active = 1 ORDER BY name");
+    const us = await db.all("SELECT client_id, prenom, nom FROM users WHERE token NOT LIKE 'retire-%' AND email <> ?", [PREVIEW_MAIL]);
+    res.json({ groups: cl.map(c => ({ ch: "cg:" + c.id, name: c.name, people: us.filter(u => u.client_id === c.id).map(u => (u.prenom + " " + u.nom).trim()) })) });
+  }));
 
   app.get(["/gestion", "/gestion/"], (req, res) => res.sendFile(path.join(root, "public", "gestion.html")));
 };
