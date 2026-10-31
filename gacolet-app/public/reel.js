@@ -230,7 +230,7 @@ scene.add(DUST);
 const P = { x: 4, z: 9, y: H0, ry: Math.PI, model: null, mixer: null, act: {}, cur: "" };
 async function buildHero() { say("Arrivée du cavalier…"); const g = await new Promise((ok, ko) => new GLTFLoader().load("/hameau/extra/knight.glb", ok, undefined, ko)); const m = g.scene;
   m.updateMatrixWorld(true); let top = -1e9, bot = 1e9; const v = new THREE.Vector3(); m.traverse(o => { if (o.isBone) { const y = o.getWorldPosition(v).y; top = Math.max(top, y); bot = Math.min(bot, y); } });
-  const hh = top > bot ? (top - bot) * 1.06 : new THREE.Box3().setFromObject(m).getSize(v).y; const w = new THREE.Group(); m.scale.multiplyScalar(1.82 / hh); m.position.y -= bot * 1.82 / hh; w.add(m);
+  const hh = top > bot ? (top - bot) * 1.06 : new THREE.Box3().setFromObject(m).getSize(v).y; const w = new THREE.Group(); m.scale.multiplyScalar(1.82 / hh); m.position.y -= bot * 1.82 / hh; w.add(m); w.scale.set(1.2, 1, 1.15); // carrure plus massive, façon héros de Warcraft
   m.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; [].concat(o.material).forEach(mt => { mt.side = THREE.DoubleSide; mt.shadowSide = THREE.DoubleSide; if (mt.transparent && !mt.alphaMap) { mt.transparent = false; mt.depthWrite = true; } mt.envMapIntensity = 1.1; mt.needsUpdate = true; }); } }); scene.add(w); P.model = w; // armure sans trous : faces visibles des deux côtés
   P.mixer = new THREE.AnimationMixer(m); g.animations.forEach(c => P.act[c.name] = P.mixer.clipAction(c)); play("Idle"); }
 function play(n) { if (P.cur === n || !P.act[n]) return; const a = P.act[n], b = P.act[P.cur]; a.reset().play(); if (b) a.crossFadeFrom(b, .25, false); P.cur = n; }
