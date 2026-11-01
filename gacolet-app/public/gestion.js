@@ -376,12 +376,18 @@ function editCampaign(k){
 
 /* Prêt à monter */
 function editRush(r){
-  openForm({ key:"ru", title: r.id ? "Montage, "+r.client : "Retour de tournage", intro: r.id ? "" : "Une ligne par tournage dont les rushs attendent le montage.", values: Object.assign({status:"À monter", shotAt:today()}, r),
+  if (!r.id) return openForm({ key:"ru", title: "Rushs disponibles", intro: "Un retour de tournage : écris un rush (un futur réel) par ligne. Chaque ligne arrive dans le stock.", values: { client: r.client || "", shotAt: today(), editor: "Matis" },
     fields:[{k:"client",label:"Client",list:clientNames(),half:true,req:"Indique le client."},{k:"shotAt",label:"Tourné le",type:"date",half:true},
-      {k:"content",label:"Ce qui a été tourné",type:"textarea",rows:2},{k:"reels",label:"Réels prévus avec ces rushs (un par ligne, facultatif)",type:"textarea",rows:4},{k:"editor",label:"Qui monte",type:"select",options:[["","À préciser"],["Matis","Matis"],["Clara","Clara"]],half:true,req:"Dis qui monte."},
-      {k:"status",label:"Statut",type:"select",options:RUSH_STATUS,half:true},{k:"link",label:"Lien des rushs",ph:"https://"},{k:"note",label:"À savoir",type:"textarea"}],
-    onDelete: r.id ? () => remove("rushes", r.id) : null,
-    onSave: out => save("rushes", r.id || null, Object.assign(r.id ? strip(r) : {}, out)) });
+      {k:"items",label:"Rushs tournés (un par ligne)",type:"textarea",rows:7,ph:"Ex.\nPrésentation de l'équipe\nAvant après cuisine\nAnecdote du chantier",req:"Indique au moins un rush."},
+      {k:"editor",label:"Qui monte",type:"select",options:[["","À préciser"],["Matis","Matis"],["Clara","Clara"]],half:true},{k:"link",label:"Lien des rushs",ph:"https://",half:true},{k:"note",label:"À savoir (pour tous)",type:"textarea",rows:2}],
+    onSave: async out => { const its = lines(out.items); if (!its.length) throw new Error("Indique au moins un rush.");
+      for (const c of its) await save("rushes", null, { client: out.client, shotAt: out.shotAt, content: c, editor: out.editor || "", link: out.link || "", note: out.note || "", status: "À monter" }); toast(plural(its.length, "rush ajouté", "rushs ajoutés") + "."); } });
+  openForm({ key:"ru", title: "Rush, " + r.client, values: Object.assign({status:"À monter"}, r, { posted: r.status === "Posté" }),
+    fields:[{k:"client",label:"Client",list:clientNames(),half:true,req:"Indique le client."},{k:"shotAt",label:"Tourné le",type:"date",half:true},
+      {k:"content",label:"Rush (futur réel)",req:"Indique le rush."},{k:"editor",label:"Qui monte",type:"select",options:[["","À préciser"],["Matis","Matis"],["Clara","Clara"]],half:true},
+      {k:"status",label:"Statut",type:"select",options:RUSH_STATUS.concat(["Posté"]),half:true},{k:"link",label:"Lien des rushs",ph:"https://"},{k:"note",label:"À savoir",type:"textarea"}],
+    onDelete: () => remove("rushes", r.id),
+    onSave: out => { delete out.posted; if (out.status === "Posté" && !r.postedAt) out.postedAt = today(); return save("rushes", r.id, Object.assign(strip(r), out)); } });
 }
 
 /* Publications */
@@ -565,7 +571,7 @@ function vAccueil(root){
   const tiles = [];
   if (S.role && S.role !== "owner"){ if (S.role === "commercial") tiles.push([S.d.commercial.filter(c => isISO(c.nextDate) && c.nextDate <= t0).length, "relances", () => go("commercial")]); }
   else if (me === "Matis"){
-    tiles.push([S.d.rushes.filter(r => r.kind !== "reel" && r.status !== "Monté" && (r.editor === "Matis" || !r.editor)).length, "montages", () => go("montage")]);
+    tiles.push([S.d.rushes.filter(r => r.kind !== "reel" && !rushReady(r) && r.status !== "Posté" && (r.editor === "Matis" || !r.editor)).length, "montages", () => go("montage")]);
     tiles.push([S.d.events.filter(e => e.type === "Tournage" && e.status === "Prévu" && e.date >= t0 && e.date <= t7).length, "tournages cette semaine", () => go("agenda")]);
   } else if (me === "Clara"){
     tiles.push([S.d.posts.filter(p => postWho(p) === "Clara" && !POST_DONE.includes(p.status) && p.date >= t0 && p.date <= t14).length, "posts à préparer", () => { S.ui.agClient = AGENCE; go("agenda"); }]);
@@ -768,7 +774,7 @@ function vChalet(root){
 /* ---------- Tâches ---------- */
 /* Rushs à monter, dans les tâches : retour de tournage, qui monte, statut */
 function rushBlock(root, who){
-  const rows = S.d.rushes.filter(r => r.kind !== "reel" && r.status !== "Monté" && (who === "Tous" || !r.editor || r.editor === who)).sort((a,b) => (RUSH_STATUS.indexOf(a.status) - RUSH_STATUS.indexOf(b.status)) || (a.shotAt||"").localeCompare(b.shotAt||""));
+  const rows = S.d.rushes.filter(r => r.kind !== "reel" && !rushReady(r) && r.status !== "Posté" && (who === "Tous" || !r.editor || r.editor === who)).sort((a,b) => (RUSH_STATUS.indexOf(a.status) - RUSH_STATUS.indexOf(b.status)) || (a.shotAt||"").localeCompare(b.shotAt||""));
   const h = el("div","rb-h"); h.append(el("h2","fin-h","Rushs à monter" + (rows.length ? " (" + rows.length + ")" : "")), btn("Rushs disponibles","sm lemon", () => editRush({client:""}))); root.appendChild(h);
   if (!rows.length){ root.appendChild(el("p","empty","Aucun rush en attente de montage. Après un tournage, clique sur Rushs disponibles.")); return; }
   const {w, tb} = table(["Client","Tourné le","Ce qui a été tourné","Qui monte","Statut","~Rushs"]);
@@ -1024,58 +1030,48 @@ function addLead(c){
 }
 
 /* ---------- Prêt à monter ---------- */
-const RUSH_ONLY = () => S.d.rushes.filter(r => r.kind !== "reel");
-const READY = () => S.d.rushes.filter(r => r.kind === "reel");
 const lines = t => String(t || "").split(/\n+/).map(x => x.replace(/^[\s\-•*\d.)]+/, "").trim()).filter(Boolean);
-/* Réels montés : plusieurs d'un coup, un par ligne */
-function addReady(o){
-  openForm({ key:"rdy", title: "Réels prêts à poster" + (o.client ? ", " + o.client : ""), intro: "Un réel par ligne. Chaque ligne devient un réel prêt à poster.", values: { client: o.client || "", titles: o.titles || "", link: o.link || "", editor: o.editor || S.me || "Matis" },
-    fields:[{k:"client",label:"Client",list:clientNames(),half:true,req:"Indique le client."},{k:"editor",label:"Monté par",type:"select",options:["Matis","Clara"],half:true},
-      {k:"titles",label:"Réels montés (un par ligne)",type:"textarea",rows:6,req:"Indique au moins un réel."},{k:"link",label:"Lien des fichiers",ph:"https://"}],
-    onSave: async out => { const ts = lines(out.titles); if (!ts.length) throw new Error("Indique au moins un réel.");
-      for (const t of ts) await save("rushes", null, { kind: "reel", client: out.client, title: t, link: out.link || "", editor: out.editor, rushId: o.rushId || "", status: "Prêt", readyAt: today() });
-      if (o.rushId) patch("rushes", o.rushId, { status: "Monté" }); } });
-}
-function setRush(r, v){ if (!writable()) return; if (v === "Monté") addReady({ client: r.client, titles: r.reels || "", link: "", editor: r.editor, rushId: r.id }); else patch("rushes", r.id, { status: v }); }
+const RUSHES = () => S.d.rushes.filter(r => r.kind !== "reel");
+// Un rush est prêt à poster quand il est passé sur Monté, ou quand la tâche de montage créée depuis lui est cochée
+const rushTask = r => S.d.tasks.find(t => t.rushId === r.id) || null;
+const rushReady = r => r.status === "Monté" || !!(rushTask(r) || {}).done;
+const rushDone = r => r.status === "Posté";
+function rushToTask(r){ if (!writable()) return; openForm({ key:"rut", title: "Tâche de montage, " + r.client, intro: "Quand la tâche sera cochée, le réel passera dans Prêt à poster.", values: { who: r.editor || "Matis", date: addDays(today(), 3), title: "Monter le réel « " + r.content + " »" },
+  fields:[{k:"who",label:"Qui",type:"select",options:OWNERS,half:true},{k:"date",label:"Pour le",type:"date",half:true},{k:"title",label:"À faire",req:"Écris ce qu’il faut faire."}],
+  onSave: async out => { await save("tasks", null, { who: out.who, pole: "20", client: r.client, date: out.date, title: out.title, note: (r.note || "") + (r.link ? (r.note ? " " : "") + "Rushs : " + r.link : ""), done: false, rushId: r.id });
+    await patch("rushes", r.id, { status: "En montage", editor: out.who === "À attribuer" ? (r.editor || "") : out.who }); } }); }
 function vMontage(root){
-  const C = S.ui.ruClient || "", inC = r => !C || r.client === C;
-  root.appendChild(head("Rushs", "Ce qu'on a en stock à monter, et ce qui est monté et prêt à poster. Choisis un client pour ne voir que les siens.", [addBtn("Réels prêts", () => addReady({ client: C })), addBtn("Rushs disponibles", () => editRush({client:C}))]));
-  const stock = RUSH_ONLY().filter(r => r.status !== "Monté"), ready = READY().filter(r => r.status !== "Posté");
+  const C = S.ui.ruClient || "", inC = r => !C || r.client === C, all = RUSHES();
+  root.appendChild(head("Rushs", "À gauche, ce qu'on a en stock à monter, pour créer les tâches de montage. À droite, ce qui est monté et prêt à poster.", [addBtn("Rushs disponibles", () => editRush({client:C}))]));
+  const stock = all.filter(r => !rushReady(r) && !rushDone(r)), ready = all.filter(r => rushReady(r) && !rushDone(r));
   const f = el("div","filters"); const g = el("div","fgroup"); const lb = el("label","flabel","Client"); lb.htmlFor = "ru-client"; g.appendChild(lb);
   const sel = el("select","pick"); sel.id = "ru-client";
-  const used = new Set(S.d.rushes.map(r => r.client).filter(Boolean)); const names = clientNames(); used.forEach(n => { if (!names.includes(n)) names.push(n); });
+  const used = new Set(all.map(r => r.client).filter(Boolean)); const names = clientNames(); used.forEach(n => { if (!names.includes(n)) names.push(n); });
   [["","Tous les clients"]].concat(names.map(n => { const a = stock.filter(r => r.client === n).length, b = ready.filter(r => r.client === n).length; return [n, n + (a || b ? " (" + [a ? a + " en stock" : "", b ? b + " prêt" + (b > 1 ? "s" : "") : ""].filter(Boolean).join(", ") + ")" : "")]; })).forEach(([val,l]) => { const o = el("option",null,l); o.value = val; sel.appendChild(o); });
   sel.value = C; sel.onchange = () => { S.ui.ruClient = sel.value; remember(); render(); }; g.appendChild(sel); f.appendChild(g); root.appendChild(f);
-  // Stock de rushs
-  const rows = stock.filter(inC).sort((a,b) => (RUSH_STATUS.indexOf(a.status) - RUSH_STATUS.indexOf(b.status)) || (a.shotAt||"").localeCompare(b.shotAt||""));
-  root.appendChild(el("h2","fin-h","Stock de rushs" + (rows.length ? " (" + rows.length + ")" : "")));
-  { const {w, tb} = table(["Client","Tourné le","Ce qui a été tourné","Qui monte","Statut","À savoir","Rushs"]);
-    rows.forEach(r => { const tr = el("tr","row"); tr.onclick = () => editRush(r); const n = lines(r.reels).length;
-      td(tr, clientTag(r.client),"nw"); td(tr, fmtFR(r.shotAt),"nw"); const c = el("div"); c.appendChild(el("div","ttl", r.content || "")); if (n) c.appendChild(el("div","note", plural(n, "réel prévu", "réels prévus"))); td(tr, c,"w"); td(tr, r.editor || el("span","pill l2","À préciser"));
-      const s = segm(RUSH_STATUS.map(x => [x,x]), r.status, v => setRush(r, v)); s.onclick = e => e.stopPropagation(); s.style.transform = "scale(.88)"; s.style.transformOrigin = "left center"; td(tr, s,"nw");
-      td(tr, el("div","note",r.note)); const l = linkNode(r.link, "Rushs"); if (l instanceof Node) l.onclick = e => e.stopPropagation(); td(tr, l); tb.appendChild(tr); });
-    root.appendChild(rows.length ? w : el("p","empty", C ? "Aucun rush en stock pour ce client." : "Aucun rush en stock. Au retour d'un tournage, clique sur Rushs disponibles.")); }
-  // Prêt à poster
-  const rd = ready.filter(inC).sort((a,b) => (a.client||"").localeCompare(b.client||"","fr") || (a.readyAt||"").localeCompare(b.readyAt||""));
-  root.appendChild(el("h2","fin-h","Prêt à poster" + (rd.length ? " (" + rd.length + ")" : "")));
-  { const {w, tb} = table(["Client","Réel","Monté le","Par","Fichiers",""]);
-    rd.forEach(r => tb.appendChild(readyRow(r, false)));
-    root.appendChild(rd.length ? w : el("p","empty", "Rien de monté en attente. Passe un tournage sur Monté, ou clique sur Réels prêts.")); }
-  // Postés
-  const posted = READY().filter(r => r.status === "Posté" && inC(r)).sort((a,b) => (b.postedAt||"").localeCompare(a.postedAt||""));
-  if (posted.length){ const t = btn((S.ui.ruPosted ? "Masquer" : "Voir") + " les réels postés (" + posted.length + ")","sm", () => { S.ui.ruPosted = !S.ui.ruPosted; render(); }); root.appendChild(t);
-    if (S.ui.ruPosted){ const {w, tb} = table(["Client","Réel","Monté le","Par","Fichiers","Posté le"]); posted.slice(0, 80).forEach(r => tb.appendChild(readyRow(r, true))); root.appendChild(w); } }
-  function readyRow(r, done){ const tr = el("tr","row" + (done ? " done" : "")); tr.onclick = () => editReel(r);
-    td(tr, clientTag(r.client),"nw"); td(tr, r.title,"ttl w"); td(tr, fmtFR(r.readyAt),"nw"); td(tr, r.editor || "","nw"); const l = linkNode(r.link, "Fichiers"); if (l instanceof Node) l.onclick = e => e.stopPropagation(); td(tr, l);
-    if (done) td(tr, fmtFR(r.postedAt),"nw"); else { const b = btn("Posté","sm lemon", e => { e.stopPropagation(); patch("rushes", r.id, { status: "Posté", postedAt: today() }); }); b.disabled = !writable(); td(tr, b, "nw"); }
+  // Deux colonnes : stock à gauche, prêt à poster à droite (l'une sous l'autre sur petit écran)
+  const cols = el("div"); cols.style.cssText = "display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:24px;align-items:start"; const colA = el("section"), colB = el("section"); cols.append(colA, colB); root.appendChild(cols);
+  const rows = stock.filter(inC).sort((a,b) => (a.client||"").localeCompare(b.client||"","fr") || (a.shotAt||"").localeCompare(b.shotAt||""));
+  colA.appendChild(el("h2","fin-h","Stock de rushs" + (rows.length ? " (" + rows.length + ")" : "")));
+  { const {w, tb} = table(["Client","Rush","Tâche"]);
+    rows.forEach(r => { const tr = el("tr","row"); tr.onclick = () => editRush(r); const t = rushTask(r);
+      const cc = el("div"); cc.appendChild(clientTag(r.client)); if (r.shotAt) cc.appendChild(el("div","note","tourné le " + fmtD(r.shotAt))); td(tr, cc,"nw");
+      const c = el("div"); c.appendChild(el("div","ttl", r.content || "")); const sub = [r.editor ? "monte : " + r.editor : "", r.note || ""].filter(Boolean).join(", "); if (sub) c.appendChild(el("div","note", sub)); const l = linkNode(r.link, "Rushs"); if (l instanceof Node){ l.onclick = e => e.stopPropagation(); c.appendChild(l); } td(tr, c,"w");
+      if (t) td(tr, el("span","pill l1", (t.who || "Tâche") + (t.date ? ", " + fmtD(t.date) : "")),"nw");
+      else { const b = btn("+ Tâche","sm", e => { e.stopPropagation(); rushToTask(r); }); b.title = "Créer la tâche de montage"; b.disabled = !writable(); td(tr, b,"nw"); }
+      tb.appendChild(tr); });
+    colA.appendChild(rows.length ? w : el("p","empty", C ? "Aucun rush en stock pour ce client." : "Aucun rush en stock. Au retour d'un tournage, clique sur Rushs disponibles.")); }
+  const rd = ready.filter(inC).sort((a,b) => (a.client||"").localeCompare(b.client||"","fr") || (a.shotAt||"").localeCompare(b.shotAt||""));
+  colB.appendChild(el("h2","fin-h","Prêt à poster" + (rd.length ? " (" + rd.length + ")" : "")));
+  { const {w, tb} = table(["Client","Réel",""]); rd.forEach(r => tb.appendChild(readyRow(r, false)));
+    colB.appendChild(rd.length ? w : el("p","empty", "Rien de monté en attente. Un réel arrive ici quand sa tâche de montage est cochée.")); }
+  const posted = all.filter(r => rushDone(r) && inC(r)).sort((a,b) => (b.postedAt||"").localeCompare(a.postedAt||""));
+  if (posted.length){ colB.appendChild(btn((S.ui.ruPosted ? "Masquer" : "Voir") + " les réels postés (" + posted.length + ")","sm", () => { S.ui.ruPosted = !S.ui.ruPosted; render(); }));
+    if (S.ui.ruPosted){ const {w, tb} = table(["Client","Réel","Posté"]); posted.slice(0, 80).forEach(r => tb.appendChild(readyRow(r, true))); colB.appendChild(w); } }
+  function readyRow(r, done){ const tr = el("tr","row" + (done ? " done" : "")); tr.onclick = () => editRush(r); const t = rushTask(r);
+    td(tr, clientTag(r.client),"nw"); const c = el("div"); c.appendChild(el("div","ttl", r.content || "")); const sub = [r.editor ? "monté par " + r.editor : "", t && t.doneAt ? "le " + fmtD(t.doneAt) : ""].filter(Boolean).join(" "); if (sub) c.appendChild(el("div","note", sub)); td(tr, c,"w");
+    if (done) td(tr, fmtD(r.postedAt),"nw"); else { const b = btn("Posté","sm lemon", e => { e.stopPropagation(); patch("rushes", r.id, { status: "Posté", postedAt: today() }); }); b.disabled = !writable(); td(tr, b, "nw"); }
     return tr; }
-}
-function editReel(r){
-  openForm({ key:"rl", title: "Réel, " + r.client, values: Object.assign({}, r, { posted: r.status === "Posté" }),
-    fields:[{k:"client",label:"Client",list:clientNames(),half:true,req:"Indique le client."},{k:"editor",label:"Monté par",type:"select",options:["Matis","Clara"],half:true},{k:"title",label:"Réel",req:"Indique le réel."},
-      {k:"readyAt",label:"Monté le",type:"date",half:true},{k:"link",label:"Lien des fichiers",ph:"https://",half:true},{k:"posted",label:"Posté",type:"check"}],
-    onDelete: () => remove("rushes", r.id),
-    onSave: out => { const p = !!out.posted; delete out.posted; return save("rushes", r.id, Object.assign(strip(r), out, { status: p ? "Posté" : "Prêt", postedAt: p ? (r.postedAt || today()) : "" })); } });
 }
 
 /* ---------- Publications ---------- */
