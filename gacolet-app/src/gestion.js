@@ -861,7 +861,7 @@ module.exports = function (app, { db, wrap, root }) {
     const nk = v => String(v || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim(), clients = {}, C = n => clients[nk(n)] = clients[nk(n)] || { tasks: 0, who: [], rush: 0, next: "", planned: 0, published: 0, waiting: 0 };
     const rows = async col => (await db.all("SELECT data FROM docs WHERE col = ? AND deleted = 0", [col])).map(r => { try { return JSON.parse(r.data || "{}"); } catch (e) { return {}; } });
     allT.filter(d => !d.done && d.client).forEach(d => { const c = C(d.client); c.tasks++; if (d.who && !c.who.includes(d.who)) c.who.push(d.who); });
-    (await rows("rushes")).forEach(d => { if (d.client && d.kind !== "reel" && d.status !== "Monté") C(d.client).rush++; });
+    (await rows("rushes")).forEach(d => { if (d.client && d.kind !== "reel" && d.status !== "Monté" && d.status !== "Posté") C(d.client).rush++; });
     (await rows("publications")).forEach(d => { if (!d.client) return; const c = C(d.client); c.next = String(d.next || "").slice(0, 40); c.planned = Number(d.planned) || 0; c.published = Number(d.published) || 0; c.waiting = Number(d.waiting) || 0; });
     const since = new Date(Date.now() - 3 * 864e5).toISOString().slice(0, 10), recent = allT.filter(d => d.who === u.name && d.done && String(d.doneAt || "") >= since).map(d => ({ id: d.id, title: d.title || "Tâche" }));
     res.json({ me, quests: tasks, mail, team, clients, recent });
