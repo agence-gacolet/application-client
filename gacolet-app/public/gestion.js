@@ -123,6 +123,7 @@ document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal()
 
 /* fields: [{k,label,type:text|textarea|date|time|select|check|number|who|list, options, list, half, ph}] */
 function openForm(o){
+  ITEM_FOR_TASK = null;
   openModal(m => {
     const t = el("h3", null, o.title); t.id = "mtitle"; m.appendChild(t);
     if (o.intro) m.appendChild(el("p","muted", o.intro));
@@ -210,7 +211,8 @@ function openFacts(o){
   openModal(m => {
     const t = el("h3", null, o.title); t.id = "mtitle"; m.appendChild(t);
     if (o.client) m.appendChild(clientTag(o.client));
-    if (o.quick && writable()){ const q = el("div","quick"); o.quick.forEach(([label, fn]) => { const b = el("button","btn sm", label); b.onclick = fn; q.appendChild(b); }); m.appendChild(q); }
+    const it = ITEM_FOR_TASK; ITEM_FOR_TASK = null; const qk = (o.quick || []).slice(); if (it){ const tk = itemTaskOf(it); qk.push([tk ? "Déjà en tâche (" + tk.who + ")" : "En faire une tâche", () => tk ? openTask(tk) : itemToTask(it)]); }
+    if (qk.length && writable()){ const q = el("div","quick"); qk.forEach(([label, fn]) => { const b = el("button","btn sm", label); b.onclick = fn; q.appendChild(b); }); m.appendChild(q); }
     const dl = el("dl","facts");
     o.facts.forEach(([k,v]) => { if (v == null || v === "") return; dl.append(el("dt",null,k)); const dd = el("dd"); if (v instanceof Node) dd.appendChild(v); else dd.textContent = v; dl.append(dd); });
     m.appendChild(dl);
@@ -274,7 +276,40 @@ function agendaItems(){
     (!S.ui.agWho || !i.who.length || i.who.includes(S.ui.agWho))
   ).sort((a,b) => (a.date+(a.time||"99")+a.k).localeCompare(b.date+(b.time||"99")+b.k));
 }
+
+/* Agenda vers tâches : un élément de l'agenda (événement, publication, temps fort...) devient une tâche, seul ou en lot */
+let ITEM_FOR_TASK = null;
+const itemKey = i => i.k + ":" + (i.ref && i.ref.id);
+const itemTaskOf = i => S.d.tasks.find(t => t.srcKey === itemKey(i)) || null;
+function itemTaskDraft(i){ const r = i.ref || {}, isPost = i.k === "posts", reel = isPost && /réel/i.test(r.type || "");
+  const who0 = (i.who || []).find(w => OWNERS.includes(w)) || (reel ? "Matis" : S.me || "À attribuer");
+  const what = isPost ? [r.type, r.client].filter(Boolean).join(" agence, ") : (i.label || "");
+  const title = reel ? "Monter le réel agence « " + (r.client || i.label) + " »" : i.k === "events" && r.type === "Tournage" ? "Tourner « " + (r.title || r.client || "") + " »" : isPost ? "Préparer « " + what + " »" : "Préparer « " + (i.label || "") + " »";
+  const date = isPost && postDue(r) ? postDue(r) : i.date;
+  const pole = reel || (i.k === "events" && r.type === "Tournage") ? "20" : isPost || i.k === "cevents" ? "40" : "00";
+  return { who: who0, pole, client: i.client || "", date, title, note: "Depuis l’agenda : " + fmtDL(i.date) + (i.meta ? ", " + (Array.isArray(i.meta) ? i.meta.filter(Boolean).join(", ") : i.meta) : ""), done: false, srcKey: itemKey(i) }; }
+function itemToTask(i){ const d = itemTaskDraft(i); closeModal();
+  openForm({ key:"itt", title: "En faire une tâche", intro: "La tâche garde le lien avec l’élément de l’agenda.", values: d,
+    fields:[{k:"who",label:"Qui",type:"select",options:OWNERS,half:true},{k:"pole",label:"Pôle",type:"select",options:POLES,half:true},{k:"client",label:"Client",list:clientNames(),half:true},{k:"date",label:"Pour le",type:"date",half:true},{k:"title",label:"À faire",req:"Écris ce qu’il faut faire."},{k:"note",label:"Note",type:"textarea",rows:2}],
+    onSave: out => save("tasks", null, Object.assign({}, d, out)).then(() => toast("Tâche créée pour " + out.who + ".")) }); }
+function itemsToTasks(){ if (!writable()) return;
+  const cur = agCursor(), mk = iso(cur).slice(0, 7), list = agendaItems().filter(i => !["tasks","relances","keydates"].includes(i.k) && (i.date || "").slice(0, 7) === mk);
+  openModal(m => { const t = el("h3", null, "Passer en tâches"); t.id = "mtitle"; m.appendChild(t);
+    m.appendChild(el("p","muted", "Éléments affichés en " + MONTHS[cur.getMonth()] + " avec les filtres actuels. Coche ceux qui deviennent une tâche chacun. Ceux déjà en tâche sont décochés."));
+    if (!list.length){ m.appendChild(el("p","empty","Rien à passer en tâches ce mois-ci avec ces filtres.")); }
+    const row = el("div","row2"); const lw = el("label",null,"Qui (pour toutes)"); const sw = el("select"); [["","Selon l’élément"]].concat(OWNERS.map(x => [x,x])).forEach(([v,l]) => { const o = el("option",null,l); o.value = v; sw.appendChild(o); }); lw.appendChild(sw);
+    const lp = el("label",null,"Pôle (pour toutes)"); const sp = el("select"); [["","Selon l’élément"]].concat(POLES).forEach(([v,l]) => { const o = el("option",null,l); o.value = v; sp.appendChild(o); }); lp.appendChild(sp); row.append(lw, lp); const fw = el("div","form"); fw.appendChild(row); if (list.length) m.appendChild(fw);
+    const box = el("div"); box.style.cssText = "max-height:48vh;overflow:auto;margin:12px 0;display:grid;gap:6px"; const checks = [];
+    list.forEach(i => { const done = !!itemTaskOf(i), d = itemTaskDraft(i); const lab = el("label","inline"); lab.style.cssText = "align-items:flex-start;gap:10px;padding:8px 10px;border:1px solid var(--line-2);border-radius:10px";
+      const c = el("input"); c.type = "checkbox"; c.checked = !done; checks.push([c, i]); const txt = el("div"); txt.appendChild(el("div","ttl", d.title)); txt.appendChild(el("div","note", fmtD(i.date) + ", " + (i.client || "") + (done ? ", déjà en tâche" : "") + ", pour " + d.who + (d.date !== i.date ? " le " + fmtD(d.date) : ""))); lab.append(c, txt); box.appendChild(lab); });
+    if (list.length) m.appendChild(box);
+    const act = el("div","actions"); const all = el("button","btn left","Tout cocher"); all.type = "button"; all.onclick = () => { const on = checks.some(([c]) => !c.checked); checks.forEach(([c]) => c.checked = on); all.textContent = on ? "Tout décocher" : "Tout cocher"; };
+    const cancel = el("button","btn","Annuler"); cancel.onclick = closeModal; const ok = el("button","btn solid","Créer les tâches");
+    ok.onclick = async () => { const sel = checks.filter(([c]) => c.checked).map(([, i]) => i); if (!sel.length) return toast("Coche au moins un élément."); ok.disabled = true;
+      try { for (const i of sel){ const d = itemTaskDraft(i); if (sw.value) d.who = sw.value; if (sp.value) d.pole = sp.value; await save("tasks", null, d); } closeModal(); toast(plural(sel.length, "tâche créée", "tâches créées") + "."); } catch(x){ ok.disabled = false; } };
+    if (list.length) act.appendChild(all); act.append(cancel); if (list.length) act.appendChild(ok); m.appendChild(act); }); }
 function openItem(i){
+  ITEM_FOR_TASK = i.k !== "tasks" && i.k !== "relances" && i.k !== "edtodo" ? i : null;
   if (i.k === "events") return openEvent(i.ref);
   if (i.k === "tasks") return openTask(i.ref);
   if (i.k === "relances") return openCommercial(i.ref);
@@ -1219,7 +1254,7 @@ function vAgenda(root){
   const prev = btn("‹","icon", () => step(-1)); prev.setAttribute("aria-label","Période précédente");
   const next = btn("›","icon", () => step(1)); next.setAttribute("aria-label","Période suivante");
   root.appendChild(head(title, "Agenda de l’agence", [prev, btn("Aujourd’hui","", () => { S.ui.agSel = t0; S.ui.agCursor = null; render(); }), next,
-    segm([["month","Mois"],["week","Semaine"],["list","Liste"]], v, x => { S.ui.agView = x; remember(); render(); }), addBtn("Ajouter", () => newOnDay(S.ui.agSel))]));
+    segm([["month","Mois"],["week","Semaine"],["list","Liste"]], v, x => { S.ui.agView = x; remember(); render(); }), btn("En tâches","", itemsToTasks), addBtn("Ajouter", () => newOnDay(S.ui.agSel))]));
   root.lastChild.classList.add("ag-head");
   /* Filtres : quatre menus déroulants */
   const f = el("div","filters ag-f");
