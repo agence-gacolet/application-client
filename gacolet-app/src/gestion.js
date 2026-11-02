@@ -853,10 +853,13 @@ module.exports = function (app, { db, wrap, root }) {
         // Une même publication est souvent créée une fois par réseau dans Metricool : on ne compte que le réseau principal (Instagram, sinon Facebook)
         const posts = arr.filter(p => !p.draft && !((p.instagramData || {}).type === "STORY" || (p.facebookData || {}).type === "STORY"));
         const nets = p => (Array.isArray(p.providers) ? p.providers : []).map(x => x.network), main = posts.some(p => nets(p).includes("instagram")) ? "instagram" : posts.some(p => nets(p).includes("facebook")) ? "facebook" : "";
+        const isPA = p => (Array.isArray(p.brandTags) ? p.brandTags : []).some(t => /^(pa|paul ?audio)$/i.test(String((t && (t.name || t.label || t.tag)) || t).trim())), tagged = posts.some(isPA);
         posts.forEach(p => { const prov = (Array.isArray(p.providers) ? p.providers : []).find(x => !main || x.network === main); if (!prov) return;
           const ig = p.instagramData || {}, fb = p.facebookData || {}, t = main === "facebook" ? fb.type : ig.type;
           const vid = t === "REEL" || t === "TRIAL_REEL" || (!t && Array.isArray(p.media) && p.media.some(u => /\.(mp4|mov|webm)(\?|$)/i.test(u)));
           const done = prov.status === "PUBLISHED", d = ((p.publicationDate && p.publicationDate.dateTime) || "").slice(0, 10);
+          // Étiquette Metricool « Paul Audio » (ou « PA ») : si le client en utilise, seules les vidéos étiquetées comptent comme vidéos Paul Audio
+          if (vid && tagged && !isPA(p)) return;
           if (vid) done ? out.vidDone++ : out.vidSched++; else done ? out.statDone++ : out.statSched++;
           if (!done && d >= today && (!out.next || d < out.next)) out.next = d; });
       } catch (e) { out.err = "Metricool injoignable"; }
