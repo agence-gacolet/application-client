@@ -413,13 +413,14 @@ function editCampaign(k){
 function editRush(r){
   if (!r.id) return openForm({ key:"ru", title: "Rushs disponibles", intro: "Un retour de tournage : écris un rush (un futur réel) par ligne. Chaque ligne arrive dans le stock.", values: { client: r.client || "", shotAt: today(), editor: "Matis" },
     fields:[{k:"client",label:"Client",list:clientNames(),half:true,req:"Indique le client."},{k:"shotAt",label:"Tourné le",type:"date",half:true},
+      {k:"shoot",label:"Nom du tournage",ph:"Ex. Chantier de Gignac, tournage de novembre"},
       {k:"items",label:"Rushs tournés (un par ligne)",type:"textarea",rows:7,ph:"Ex.\nPrésentation de l'équipe\nAvant après cuisine\nAnecdote du chantier",req:"Indique au moins un rush."},
       {k:"editor",label:"Qui monte",type:"select",options:[["","À préciser"],["Matis","Matis"],["Clara","Clara"]],half:true},{k:"link",label:"Lien des rushs",ph:"https://",half:true},{k:"note",label:"À savoir (pour tous)",type:"textarea",rows:2}],
     onSave: async out => { const its = lines(out.items); if (!its.length) throw new Error("Indique au moins un rush.");
-      for (const c of its) await save("rushes", null, { client: out.client, shotAt: out.shotAt, content: c, editor: out.editor || "", link: out.link || "", note: out.note || "", status: "À monter" }); toast(plural(its.length, "rush ajouté", "rushs ajoutés") + "."); } });
+      for (const c of its) await save("rushes", null, { client: out.client, shotAt: out.shotAt, shoot: out.shoot || "", content: c, editor: out.editor || "", link: out.link || "", note: out.note || "", status: "À monter" }); toast(plural(its.length, "rush ajouté", "rushs ajoutés") + "."); } });
   openForm({ key:"ru", title: "Rush, " + r.client, values: Object.assign({status:"À monter"}, r, { posted: r.status === "Posté" }),
     fields:[{k:"client",label:"Client",list:clientNames(),half:true,req:"Indique le client."},{k:"shotAt",label:"Tourné le",type:"date",half:true},
-      {k:"content",label:"Rush (futur réel)",req:"Indique le rush."},{k:"editor",label:"Qui monte",type:"select",options:[["","À préciser"],["Matis","Matis"],["Clara","Clara"]],half:true},
+      {k:"shoot",label:"Nom du tournage"},{k:"content",label:"Rush (futur réel)",req:"Indique le rush."},{k:"editor",label:"Qui monte",type:"select",options:[["","À préciser"],["Matis","Matis"],["Clara","Clara"]],half:true},
       {k:"status",label:"Statut",type:"select",options:RUSH_STATUS.concat(["Posté"]),half:true},{k:"link",label:"Lien des rushs",ph:"https://"},{k:"note",label:"À savoir",type:"textarea"}],
     onDelete: () => remove("rushes", r.id),
     onSave: out => { delete out.posted; if (out.status === "Posté" && !r.postedAt) out.postedAt = today(); return save("rushes", r.id, Object.assign(strip(r), out)); } });
@@ -1073,7 +1074,7 @@ const rushReady = r => r.status === "Monté" || !!(rushTask(r) || {}).done;
 const rushDone = r => r.status === "Posté";
 function rushToTask(r){ if (!writable()) return; openForm({ key:"rut", title: "Tâche de montage, " + r.client, intro: "Quand la tâche sera cochée, le réel passera dans Prêt à poster.", values: { who: r.editor || "Matis", date: addDays(today(), 3), title: "Monter le réel « " + r.content + " »" },
   fields:[{k:"who",label:"Qui",type:"select",options:OWNERS,half:true},{k:"date",label:"Pour le",type:"date",half:true},{k:"title",label:"À faire",req:"Écris ce qu’il faut faire."}],
-  onSave: async out => { await save("tasks", null, { who: out.who, pole: "20", client: r.client, date: out.date, title: out.title, note: (r.note || "") + (r.link ? (r.note ? " " : "") + "Rushs : " + r.link : ""), done: false, rushId: r.id });
+  onSave: async out => { await save("tasks", null, { who: out.who, pole: "20", client: r.client, date: out.date, title: out.title, note: [r.shoot ? "Tournage : " + r.shoot : "", r.note || ""].filter(Boolean).join(". ") + (r.link ? (r.note ? " " : "") + "Rushs : " + r.link : ""), done: false, rushId: r.id });
     await patch("rushes", r.id, { status: "En montage", editor: out.who === "À attribuer" ? (r.editor || "") : out.who }); } }); }
 function vMontage(root){
   const C = S.ui.ruClient || "", inC = r => !C || r.client === C, all = RUSHES();
@@ -1091,7 +1092,7 @@ function vMontage(root){
   { const {w, tb} = table(["Client","Rush","Tâche"]);
     rows.forEach(r => { const tr = el("tr","row"); tr.onclick = () => editRush(r); const t = rushTask(r);
       const cc = el("div"); cc.appendChild(clientTag(r.client)); if (r.shotAt) cc.appendChild(el("div","note","tourné le " + fmtD(r.shotAt))); td(tr, cc,"nw");
-      const c = el("div"); c.appendChild(el("div","ttl", r.content || "")); const sub = [r.editor ? "monte : " + r.editor : "", r.note || ""].filter(Boolean).join(", "); if (sub) c.appendChild(el("div","note", sub)); const l = linkNode(r.link, "Rushs"); if (l instanceof Node){ l.onclick = e => e.stopPropagation(); c.appendChild(l); } td(tr, c,"w");
+      const c = el("div"); c.appendChild(el("div","ttl", r.content || "")); const sub = [r.shoot ? "tournage : " + r.shoot : "", r.editor ? "monte : " + r.editor : "", r.note || ""].filter(Boolean).join(", "); if (sub) c.appendChild(el("div","note", sub)); const l = linkNode(r.link, "Rushs"); if (l instanceof Node){ l.onclick = e => e.stopPropagation(); c.appendChild(l); } td(tr, c,"w");
       if (t) td(tr, el("span","pill l1", (t.who || "Tâche") + (t.date ? ", " + fmtD(t.date) : "")),"nw");
       else { const b = btn("+ Tâche","sm", e => { e.stopPropagation(); rushToTask(r); }); b.title = "Créer la tâche de montage"; b.disabled = !writable(); td(tr, b,"nw"); }
       tb.appendChild(tr); });
@@ -1104,7 +1105,7 @@ function vMontage(root){
   if (posted.length){ colB.appendChild(btn((S.ui.ruPosted ? "Masquer" : "Voir") + " les réels postés (" + posted.length + ")","sm", () => { S.ui.ruPosted = !S.ui.ruPosted; render(); }));
     if (S.ui.ruPosted){ const {w, tb} = table(["Client","Réel","Posté"]); posted.slice(0, 80).forEach(r => tb.appendChild(readyRow(r, true))); colB.appendChild(w); } }
   function readyRow(r, done){ const tr = el("tr","row" + (done ? " done" : "")); tr.onclick = () => editRush(r); const t = rushTask(r);
-    td(tr, clientTag(r.client),"nw"); const c = el("div"); c.appendChild(el("div","ttl", r.content || "")); const sub = [r.editor ? "monté par " + r.editor : "", t && t.doneAt ? "le " + fmtD(t.doneAt) : ""].filter(Boolean).join(" "); if (sub) c.appendChild(el("div","note", sub)); td(tr, c,"w");
+    td(tr, clientTag(r.client),"nw"); const c = el("div"); c.appendChild(el("div","ttl", r.content || "")); const sub = [r.shoot ? r.shoot + "," : "", r.editor ? "monté par " + r.editor : "", t && t.doneAt ? "le " + fmtD(t.doneAt) : ""].filter(Boolean).join(" "); if (sub) c.appendChild(el("div","note", sub)); td(tr, c,"w");
     if (done) td(tr, fmtD(r.postedAt),"nw"); else { const b = btn("Posté","sm lemon", e => { e.stopPropagation(); patch("rushes", r.id, { status: "Posté", postedAt: today() }); }); b.disabled = !writable(); td(tr, b, "nw"); }
     return tr; }
 }
