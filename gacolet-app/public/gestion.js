@@ -1111,16 +1111,30 @@ function vMontage(root){
 }
 
 /* ---------- Publications ---------- */
+/* Publications : chaque client face à ce qui est prévu au mois (statiques et vidéos Paul Audio), lu en direct dans Metricool */
+let pubAt = {}; function loadPubs(mk, force){ if (!force && Date.now() - (pubAt[mk] || 0) < 3 * 60000) return; pubAt[mk] = Date.now();
+  GC.api("GET", "/api/g-pubs?month=" + mk + (force ? "&fresh=1" : "")).then(r => { S.pubs = Object.assign({}, S.pubs, { [mk]: r }); renderSoon(); }).catch(() => {}); }
 function vPublications(root){
-  const rows = S.d.publications.slice().sort((a,b) => a.client.localeCompare(b.client,"fr"));
-  const total = rows.reduce((s,p) => s + (Number(p.planned)||0), 0);
-  root.appendChild(head("Publications", "Chaque client réseaux face à son volume prévu du mois, "+total+" prévues, rempli chaque matin depuis Metricool, stories exclues"));
-  const {w, tb} = table(["Client","Prévues","Publiées","Écart","Programmées 7 j","En attente client","Refusées","Prochaine","Alerte"]);
-  rows.forEach(p => { const tr = el("tr","row"); tr.onclick = () => editPub(p);
-    td(tr, clientTag(p.client),"nw"); [p.planned,p.published,p.gap,p.scheduled7,p.waiting,p.refused].forEach(v => td(tr, v === "" || v == null ? "—" : String(v),"nw")); td(tr, p.next,"nw");
-    td(tr, p.alert ? el("span","pill l3",p.alert) : ""); tb.appendChild(tr); });
-  root.appendChild(rows.length ? w : el("p","empty","Aucun client réseaux."));
-  if (rows.every(p => p.published === "" || p.published == null)) root.appendChild(el("p","status","Compteurs vides jusqu’au 01/11/2026 : ils repartent de zéro chaque 1er du mois."));
+  const mk = S.ui.pubM || monthKey(), R = (S.pubs || {})[mk]; loadPubs(mk);
+  const nav = [btn("‹","icon", () => { S.ui.pubM = addMonths(mk + "-01", -1).slice(0, 7); render(); }), btn("Ce mois","", () => { S.ui.pubM = ""; render(); }), btn("›","icon", () => { S.ui.pubM = addMonths(mk + "-01", 1).slice(0, 7); render(); }), btn("Actualiser","", () => { loadPubs(mk, true); toast("Lecture de Metricool…"); })];
+  const rows = R ? (R.rows || R.plan || []) : [], tot = k => rows.reduce((a, r) => a + (Number(r[k]) || 0), 0);
+  root.appendChild(head(["Publications", monthLabel(mk)], "Statiques et vidéos Paul Audio prévues au mois pour chaque client, comparées à ce qui est publié et programmé dans Metricool. Stories exclues. " + tot("stat") + " statiques et " + tot("video") + " vidéos prévues.", nav));
+  if (!R){ root.appendChild(el("p","empty","Lecture de Metricool…")); return; }
+  if (!R.ok) root.appendChild(el("p","status", R.reason === "no-token" ? "Metricool n’est pas encore relié au serveur : il manque la clé API Metricool (METRICOOL_USER_TOKEN) dans les variables d’environnement Infomaniak. Le prévu s’affiche, les compteurs se rempliront dès que la clé sera ajoutée." : "Metricool ne répond pas pour l’instant."));
+  const t = today(), past = mk < monthKey(), cur = mk === monthKey();
+  const cell = (done, sched, plan) => { const n = done + sched, c = el("div"); if (!plan && !n){ c.textContent = "—"; return c; }
+    const b = el("b", null, (R.ok ? n : "—") + " / " + plan); const ok = R.ok && n >= plan; b.style.color = !R.ok ? "" : ok ? "var(--ok, #9BD85C)" : (past || cur) ? "var(--w2)" : ""; c.appendChild(b);
+    if (R.ok && n) c.appendChild(el("div","note", done + " publiée" + (done > 1 ? "s" : "") + (sched ? ", " + sched + " programmée" + (sched > 1 ? "s" : "") : ""))); return c; };
+  const {w, tb} = table(["Client","Statiques","Vidéos Paul Audio","Reste à programmer","Prochaine"]);
+  rows.forEach(r => { const tr = el("tr","row"); td(tr, clientTag(r.client),"nw");
+    td(tr, cell(r.statDone || 0, r.statSched || 0, r.stat),"nw"); td(tr, cell(r.vidDone || 0, r.vidSched || 0, r.video),"nw");
+    const left = Math.max(0, r.stat - (r.statDone || 0) - (r.statSched || 0)) + Math.max(0, r.video - (r.vidDone || 0) - (r.vidSched || 0));
+    td(tr, !R.ok ? "—" : left ? el("span","pill " + (cur || past ? "l3" : "l1"), left + " à programmer") : el("span","pill ok","Complet"),"nw");
+    td(tr, r.err ? el("span","note", r.err) : r.next ? fmtD(r.next) : "","nw"); tb.appendChild(tr); });
+  const band2 = el("tr","band"); const c = el("td"); c.colSpan = 5; c.textContent = "TOTAL : " + tot("stat") + " STATIQUES ET " + tot("video") + " VIDÉOS PAUL AUDIO PRÉVUES" + (R.ok ? ", " + (tot("statDone") + tot("vidDone")) + " PUBLIÉES, " + (tot("statSched") + tot("vidSched")) + " PROGRAMMÉES" : ""); band2.appendChild(c); tb.appendChild(band2);
+  root.appendChild(w);
+  if (R.ok) root.appendChild(el("p","note", "Lu dans Metricool à " + hhmm(new Date(R.at)) + ". Se met à jour toutes les 3 minutes tant que la page est ouverte, ou avec Actualiser. Les compteurs repartent de zéro chaque 1er du mois."));
+  if (cur && R.ok){ clearTimeout(window.__pubT); window.__pubT = setTimeout(() => { if (S.view === "publications") { loadPubs(mk, true); } }, 3 * 60000); }
 }
 
 /* ---------- Calendrier clients (Clara) ---------- */
