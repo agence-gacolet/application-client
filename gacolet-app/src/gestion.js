@@ -850,10 +850,13 @@ module.exports = function (app, { db, wrap, root }) {
       try { const q = new URLSearchParams({ blogId: c.blogId, userId, start: mk + "-01T00:00:00", end: mk + "-" + String(last).padStart(2, "0") + "T23:59:59", timezone: "Europe/Paris" });
         const r = await fetch("https://app.metricool.com/api/v2/scheduler/posts?" + q, { headers: { "X-Mc-Auth": token, Accept: "application/json" } }); if (!r.ok) { out.err = "Metricool " + r.status; return out; }
         const j = await r.json(), arr = Array.isArray(j) ? j : Array.isArray(j.data) ? j.data : [];
-        arr.forEach(p => { if (p.draft) return; const ig = p.instagramData || {}, fb = p.facebookData || {}; if (ig.type === "STORY" || fb.type === "STORY") return;
-          const provs = Array.isArray(p.providers) ? p.providers : [], nets = provs.map(x => x.network);
-          const vid = ig.type === "REEL" || ig.type === "TRIAL_REEL" || fb.type === "REEL" || nets.includes("tiktok") || nets.includes("youtube") || (Array.isArray(p.media) && p.media.some(u => /\.(mp4|mov|webm)(\?|$)/i.test(u)));
-          const done = provs.length > 0 && provs.every(x => x.status === "PUBLISHED"), d = ((p.publicationDate && p.publicationDate.dateTime) || "").slice(0, 10);
+        // Une même publication est souvent créée une fois par réseau dans Metricool : on ne compte que le réseau principal (Instagram, sinon Facebook)
+        const posts = arr.filter(p => !p.draft && !((p.instagramData || {}).type === "STORY" || (p.facebookData || {}).type === "STORY"));
+        const nets = p => (Array.isArray(p.providers) ? p.providers : []).map(x => x.network), main = posts.some(p => nets(p).includes("instagram")) ? "instagram" : posts.some(p => nets(p).includes("facebook")) ? "facebook" : "";
+        posts.forEach(p => { const prov = (Array.isArray(p.providers) ? p.providers : []).find(x => !main || x.network === main); if (!prov) return;
+          const ig = p.instagramData || {}, fb = p.facebookData || {}, t = main === "facebook" ? fb.type : ig.type;
+          const vid = t === "REEL" || t === "TRIAL_REEL" || (!t && Array.isArray(p.media) && p.media.some(u => /\.(mp4|mov|webm)(\?|$)/i.test(u)));
+          const done = prov.status === "PUBLISHED", d = ((p.publicationDate && p.publicationDate.dateTime) || "").slice(0, 10);
           if (vid) done ? out.vidDone++ : out.vidSched++; else done ? out.statDone++ : out.statSched++;
           if (!done && d >= today && (!out.next || d < out.next)) out.next = d; });
       } catch (e) { out.err = "Metricool injoignable"; }
