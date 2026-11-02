@@ -2338,11 +2338,21 @@ function pmField(label, type, value, ac){ const l = el("label","pm-f"); l.append
 async function reloadUsers(){ try { const r = await GC.api("GET","/api/g-users"); S.users = r.users; } catch(e){ toast(e.message); if (!S.users) S.users = []; } render(); }
 
 function vParametres(root){
-  const tabs = [["compte","Mon compte"],["notif","Notifications"]].concat(S.role === "owner" ? [["equipe","Équipe et accès"],["codes","Codes clients"]] : []).concat([["cgu","Conditions"]]);
+  const tabs = [["compte","Mon compte"],["notif","Notifications"]].concat(S.role === "owner" ? [["equipe","Équipe et accès"],["codes","Codes clients"],["liaisons","Liaisons"]] : []).concat([["cgu","Conditions"]]);
   const tab = tabs.some(t => t[0] === S.ui.pmTab) ? S.ui.pmTab : (S.secours ? "equipe" : "compte");
   root.appendChild(head("Paramètres", "Ton compte, tes notifications, l’équipe et les règles de l’application.", [segm(tabs, tab, v => { S.ui.pmTab = v; remember(); render(); })]));
   const w = el("div","pm"); root.appendChild(w);
-  ({compte:pmCompte, notif:pmNotif, equipe:pmEquipe, codes:pmCodes, cgu:pmCgu})[tab](w);
+  ({compte:pmCompte, notif:pmNotif, equipe:pmEquipe, codes:pmCodes, cgu:pmCgu, liaisons:pmLiaisons})[tab](w);
+}
+/* Liaisons : la clé Metricool se colle ici, le serveur la garde et ne la renvoie jamais */
+function pmLiaisons(w){
+  const c = pmCard("Metricool", "Sert à remplir Publications et « La com de Gab » en direct. Dans Metricool (compte agencegacolet@gmail.com) : Paramètres du compte, puis API, copie le jeton et colle-le ici.");
+  const st = el("p","note", "Vérification…"); c.appendChild(st);
+  GC.api("GET","/api/g-keys").then(r => { st.textContent = r.metricool ? "Relié : une clé est enregistrée sur le serveur. Tu peux la remplacer ci-dessous." : "Pas encore relié."; st.style.color = r.metricool ? "var(--ok, #9BD85C)" : ""; }).catch(() => { st.textContent = ""; });
+  const f = el("div","form"); const lab = el("label",null,"Clé API Metricool"); const inp = el("input"); inp.type = "password"; inp.autocomplete = "off"; inp.placeholder = "Colle la clé ici"; lab.appendChild(inp); f.appendChild(lab); c.appendChild(f);
+  const a = el("div","pm-actions"); const b = btn("Enregistrer la clé","lemon", async () => { const v = inp.value.trim(); if (!v) return toast("Colle d’abord la clé.");
+    b.disabled = true; try { await GC.api("PUT","/api/g-keys/metricool",{ token: v }); inp.value = ""; toast("Metricool relié."); S.pubs = {}; pubAt = {}; render(); } catch(x){ toast(x.message || "Enregistrement impossible."); b.disabled = false; } });
+  a.appendChild(b); c.appendChild(a); w.appendChild(c);
 }
 
 function pmCompte(w){
