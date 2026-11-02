@@ -875,6 +875,20 @@ module.exports = function (app, { db, wrap, root }) {
     add(reels, "reels"); add(stories, "stories");
     const data = { ok: true, at: Date.now(), days }; comCache = { at: Date.now(), data }; res.json(data);
   }));
+  // Liaisons : clé API Metricool collée par un propriétaire dans Paramètres, gardée dans le fichier .env du serveur (jamais renvoyée au navigateur)
+  app.get("/api/g-keys", auth, ownerOnly, (req, res) => res.json({ metricool: !!process.env.METRICOOL_USER_TOKEN }));
+  app.put("/api/g-keys/metricool", auth, ownerOnly, wrap(async (req, res) => {
+    const tok = String((req.body || {}).token || "").trim();
+    if (!/^[A-Za-z0-9_\-.]{10,300}$/.test(tok)) return res.status(400).json({ error: "Cette clé ne ressemble pas à une clé Metricool." });
+    try { const q = new URLSearchParams({ blogId: "6874994", userId: process.env.METRICOOL_USER_ID || "4634230", start: "2026-11-01T00:00:00", end: "2026-11-02T23:59:59", timezone: "Europe/Paris" });
+      const r = await fetch("https://app.metricool.com/api/v2/scheduler/posts?" + q, { headers: { "X-Mc-Auth": tok, Accept: "application/json" } });
+      if (r.status === 401 || r.status === 403) return res.status(400).json({ error: "Metricool refuse cette clé (" + r.status + "). Vérifie qu'elle est complète." });
+    } catch (e) { /* Metricool injoignable : on enregistre quand même */ }
+    const ENV = path.join(root, ".env"); let txt = ""; try { txt = fs.readFileSync(ENV, "utf8"); } catch (e) {}
+    txt = txt.split("\n").filter(l => l && !/^METRICOOL_USER_TOKEN=/.test(l)).join("\n") + "\nMETRICOOL_USER_TOKEN='" + tok + "'\n";
+    fs.writeFileSync(ENV, txt.replace(/^\n+/, ""), { mode: 0o600 }); process.env.METRICOOL_USER_TOKEN = tok; pubCache.clear(); comCache = null;
+    res.json({ ok: true });
+  }));
   app.get("/api/g-game", auth, wrap(async (req, res) => {
     const u = req.user, me = await gProfile(u);
     const allT = (await db.all("SELECT id, data FROM docs WHERE col = 'tasks' AND deleted = 0")).map(r => { try { return Object.assign({ id: r.id }, JSON.parse(r.data || "{}")); } catch (e) { return { id: r.id }; } });
