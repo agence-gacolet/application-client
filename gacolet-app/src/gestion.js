@@ -6,7 +6,7 @@ const fs = require("fs");
 const crypto = require("crypto");
 const multer = require("multer");
 
-const COLLS = ["events", "tasks", "commercial", "campaigns", "rushes", "publications", "clients", "cevents", "keydates", "posts", "edtodo", "meta", "messages", "formations", "msheets", "idees", "pilotage", "ca", "finance"];
+const COLLS = ["events", "tasks", "commercial", "campaigns", "rushes", "publications", "clients", "cevents", "keydates", "posts", "edtodo", "meta", "messages", "formations", "msheets", "idees", "pilotage", "ca", "finance", "strategies"];
 const ROLES = ["owner", "member", "commercial"];
 const ACCESS = {
   member: {
@@ -22,7 +22,7 @@ const ACCESS = {
    modifiables par les propriétaires (interrupteurs dans Paramètres), plus des pages données à une personne, pour toujours ou pour un temps. */
 const VIEW_COLLS = { agenda: ["events", "tasks", "cevents", "keydates", "posts"], taches: ["tasks"], messagerie: ["messages"], vocal: [], focus: [], formation: ["formations"],
   commercial: ["commercial"], clients: ["clients", "cevents", "keydates"], montage: ["rushes"], publications: ["publications", "posts", "edtodo"],
-  campagnes: ["campaigns", "meta", "msheets"], fiches: ["clients"], idees: ["idees"] };
+  campagnes: ["campaigns", "meta", "msheets"], fiches: ["clients"], idees: ["idees"], strategie: ["strategies", "clients"] };
 const DEFAULT_VIEWS = { member: ["agenda", "taches", "messagerie", "vocal", "focus", "formation"],
   commercial: ["agenda", "taches", "messagerie", "vocal", "focus", "commercial", "clients", "montage", "publications", "idees", "campagnes", "formation"] };
 const SEED = [["Gabriel", "gabriel"], ["Matis", "matis"], ["Clara", "clara"]];
