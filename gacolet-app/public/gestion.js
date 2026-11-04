@@ -19,9 +19,9 @@ const DAYS = ["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"]
 const DEFAULT_COLORS = {"Agence Gacolet":"#1D1D1B","AR Climatisation":"#E8833A","Bonobo":"#2E9E5B","Delta Sud Formation":"#D6334A","Domaine Pagezi":"#7A1F3D","Flora Design":"#C25CC9","France Étanchéité":"#2F6FE4","Gaufrement Bon":"#E3B505","Hugo Maître Nageur":"#1BA6C9","Insolent":"#5C5C57","KR Thermolaquage":"#8C6239","La Vie La Construction":"#F06A1D","Le Petit Mas":"#6E8B3D","Locamex":"#E2559C","Meyer-Pic":"#3D4FB5","Only Clean":"#17A398","Paillotte Bassamoise":"#F2A93B","SOS Pare-Brise Codognan":"#9B2226","SOS Pare-Brise Vendargues":"#4A6C8C","Sport Défense":"#8E44AD","The New Me Montpellier":"#D98BA5","Total Habitat 360":"#6C7A2E"};
 const VIEWS = [
   ["accueil","Accueil"],["agenda","Agenda"],["taches","Tâches"],["messagerie","Messagerie"],["vocal","Vocal"],["commercial","Commercial"],["clients","Calendrier clients"],
-  ["montage","Rushs"],["publications","Publications"],["campagnes","Campagnes"],["formation","Formation"],["parametres","Paramètres"],["fiches","Tableau clients"],["idees","Idées clients"],["focus","Focus"],["finance","Finance"],["chalet","Chalet"]
+  ["montage","Rushs"],["publications","Publications"],["campagnes","Campagnes"],["formation","Formation"],["parametres","Paramètres"],["fiches","Tableau clients"],["strategie","Stratégie"],["idees","Idées clients"],["focus","Focus"],["finance","Finance"],["chalet","Chalet"]
 ];
-const NAV_GROUPS = [["",["accueil"]],["Au quotidien",["agenda","taches","montage","messagerie","vocal","focus"]],["Gestion",["fiches","commercial","publications","idees"]],["Meta",["campagnes"]],["Finance",["finance","chalet"]],["Ressources",["formation"]],["Compte",["parametres"]]];
+const NAV_GROUPS = [["",["accueil"]],["Au quotidien",["agenda","taches","montage","messagerie","vocal","focus"]],["Gestion",["fiches","strategie","commercial","publications","idees"]],["Meta",["campagnes"]],["Finance",["finance","chalet"]],["Ressources",["formation"]],["Compte",["parametres"]]];
 /* Onglets fusionnés : le calendrier clients vit dans l’agenda, le montage dans les tâches. */
 const MERGED = { clients: ["agenda","agHub"] };
 /* Rôles : ce que chaque siège voit. Le serveur applique les mêmes limites aux données. */
@@ -34,7 +34,7 @@ const ROLE_VIEWS = {
   commercial: ["accueil","agenda","taches","messagerie","vocal","focus","commercial","clients","montage","publications","idees","campagnes","formation","parametres"]
 };
 const canSee = k => (k === "finance" || k === "chalet") ? DUO.includes(S.me) : !S.role || S.role === "owner" || (Array.isArray(S.views) ? S.views : ["accueil","parametres"].concat(ROLE_VIEWS[S.role] || [])).includes(k);
-const COLLS = ["events","tasks","commercial","campaigns","rushes","publications","clients","cevents","keydates","posts","edtodo","meta","messages","formations","msheets","idees","pilotage","ca","finance"];
+const COLLS = ["events","tasks","commercial","campaigns","rushes","publications","clients","cevents","keydates","posts","edtodo","meta","messages","formations","msheets","idees","pilotage","ca","finance","strategies"];
 const DUO = ["Matis","Gabriel"];
 
 /* ---------- Outils ---------- */
@@ -1111,6 +1111,127 @@ function vMontage(root){
 }
 
 /* ---------- Publications ---------- */
+/* ---------- Stratégie : une fiche par client (reprise des fichiers CLIENT_Strategie.md de Clara), objectifs suivis, plans A, B, C ---------- */
+// Règles (Clara, 03/11/2026) : trajectoire en ligne droite du départ à l'échéance ; plan B sous 60 % de la progression attendue ;
+// accélérer au-dessus de 120 % ; plan C en fin de cycle sous 50 % ; observation pendant les 4 premières semaines ; relevé à refaire après 10 jours.
+const STRATS = () => (S.d.strategies || []).slice().sort((a, b) => (a.client || "").localeCompare(b.client || "", "fr"));
+const sxNum = s => { const m = String(s || "").replace(/[\u00a0\u202f]/g, " ").match(/-?\d[\d ]*(?:[.,]\d+)?/); return m ? Number(m[0].replace(/ /g, "").replace(",", ".")) : null; };
+const sxDate = s => { const m = String(s || "").match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? m[3] + "-" + m[2] + "-" + m[1] : ""; };
+const sxUnesc = t => String(t || "").replace(/\\([\\#\-_*|>\[\]().!+`~])/g, "$1").replace(/[ \t]+\n/g, "\n").replace(/\r/g, "");
+function sxParse(raw){
+  const lines = String(raw || "").split("\n"), out = { title: "", head: {}, sections: [] }; let cur = null;
+  lines.forEach(l => { const h1 = l.match(/^#\s+(.*)/), h2 = l.match(/^##\s+(.*)/);
+    if (h2){ cur = { title: h2[1].trim(), md: [] }; out.sections.push(cur); return; }
+    if (h1 && !out.title){ out.title = h1[1].replace(/^Stratégie\s*:\s*/i, "").trim(); return; }
+    if (cur) cur.md.push(l); else { const kv = l.match(/^(Dernière mise à jour|Code Metricool|Plan en cours)\s*:\s*(.*)$/i); if (kv) out.head[kv[1].toLowerCase()] = kv[2].trim(); } });
+  out.sections.forEach(s => s.md = s.md.join("\n").trim());
+  const plan = out.head["plan en cours"] || "", cyc = (plan.match(/du (\d{2}\/\d{2}\/\d{4}) au (\d{2}\/\d{2}\/\d{4})/) || []);
+  const obj = out.sections.find(s => /^Objectifs/i.test(s.title)), per = obj ? (obj.md.match(/du (\d{2}\/\d{2}\/\d{4}) au (\d{2}\/\d{2}\/\d{4})/) || obj.md.match(/(\d{2}\/\d{2}\/\d{4}) au (\d{2}\/\d{2}\/\d{4})/) || []) : [];
+  out.start = sxDate(per[1] || cyc[1] || ""); out.end = sxDate(per[2] || cyc[2] || "");
+  out.plan = (plan.match(/^\s*([ABC])\b/) || [])[1] || (/accél/i.test(plan) ? "Accélérer" : "");
+  out.goals = [];
+  if (obj) obj.md.split("\n").filter(l => /^\|/.test(l) && !/^\|\s*-/.test(l)).slice(1).forEach(l => { const c = l.split("|").slice(1, -1).map(x => x.trim()); if (c.length < 5) return;
+    const g = { volet: c[0], ind: c[1], depTxt: c[2], cibTxt: c[3], echTxt: c[4], src: c[5] || "" };
+    g.dep = sxNum(c[2]); g.cib = sxNum(c[3]); g.t0 = sxDate(c[2]) || out.start; g.t1 = sxDate(c[4]) || out.end;
+    if (/non mesur/i.test(c[2])) g.dep = null; out.goals.push(g); });
+  return out; }
+function sxState(st, g){
+  const reads = (st.reads || []).filter(r => r.ind === g.ind).sort((a, b) => (a.date || "").localeCompare(b.date || "")), last = reads[reads.length - 1] || null, t = today();
+  const r = { last, expected: null, seuilB: null, accel: null, ratio: null, label: "", cls: "" };
+  if (g.dep == null || g.cib == null || !g.t0 || !g.t1 || g.t1 <= g.t0){ r.label = g.dep == null ? "À mesurer" : "Suivi libre"; r.cls = "l1"; return r; }
+  const span = diffDays(g.t0, g.t1), at = Math.max(0, Math.min(span, diffDays(g.t0, t))), f = at / span, d = g.cib - g.dep;
+  r.expected = g.dep + d * f; r.seuilB = g.dep + d * f * 0.6; r.accel = g.dep + d * f * 1.2;
+  if (!last){ r.label = "Aucun relevé"; r.cls = "l2"; return r; }
+  const fL = Math.max(0, Math.min(span, diffDays(g.t0, last.date))) / span, expL = g.dep + d * fL;
+  r.ratio = expL === g.dep ? null : (Number(last.val) - g.dep) / (expL - g.dep);
+  if (diffDays(g.t0, last.date) < 28) { r.label = "Observation"; r.cls = "l1"; }
+  else if (r.ratio != null && r.ratio < (g.t1 <= t ? 0.5 : 0.6)) { r.label = g.t1 <= t ? "Plan C" : "Plan B"; r.cls = "l3"; }
+  else if (r.ratio != null && r.ratio > 1.2) { r.label = "Accélérer"; r.cls = "ok"; }
+  else { r.label = "Sur la trajectoire"; r.cls = "ok"; }
+  if (diffDays(last.date, t) > 10) r.stale = true;
+  return r; }
+const sxFmt = n => n == null || !isFinite(n) ? "" : Math.round(n).toLocaleString("fr-FR");
+/* Rendu Markdown simple : titres, listes, tableaux, gras */
+function sxMd(md){
+  const box = el("div","sx-md"), lines = String(md || "").split("\n"); let i = 0;
+  const inline = (node, txt) => { String(txt).split(/(\*\*[^*]+\*\*)/).forEach(p => { if (/^\*\*.+\*\*$/.test(p)) node.appendChild(el("b", null, p.slice(2, -2))); else if (p) node.appendChild(document.createTextNode(p)); }); return node; };
+  while (i < lines.length){ const l = lines[i];
+    if (/^\s*\|/.test(l)){ const rows = []; while (i < lines.length && /^\s*\|/.test(lines[i])) rows.push(lines[i++]); const cells = rows.filter(r => !/^\s*\|\s*:?-/.test(r)).map(r => r.trim().split("|").slice(1, -1).map(x => x.trim()));
+      const w = el("div","tw"), t = el("table","t"); cells.forEach((c, k) => { const tr = el("tr"); c.forEach(x => tr.appendChild(inline(el(k ? "td" : "th"), x))); t.appendChild(tr); }); w.appendChild(t); box.appendChild(w); continue; }
+    if (/^\s*([-*]|\d+\.)\s+/.test(l)){ const ul = el(/^\s*\d+\./.test(l) ? "ol" : "ul"); while (i < lines.length && /^\s*([-*]|\d+\.)\s+/.test(lines[i])){ const li = el("li"); if (/^\s{2,}/.test(lines[i])) li.style.marginLeft = "18px"; inline(li, lines[i].replace(/^\s*([-*]|\d+\.)\s+/, "")); ul.appendChild(li); i++; } box.appendChild(ul); continue; }
+    if (/^###\s+/.test(l)){ box.appendChild(el("h4", null, l.replace(/^###\s+/, ""))); i++; continue; }
+    if (l.trim()) box.appendChild(inline(el("p"), l)); i++; }
+  return box; }
+function sxClientOf(file, title){ const key = norm(String(file || "").replace(/_Strategie.*$/i, "")).replace(/[^a-z0-9]/g, ""), names = clientNames();
+  return names.find(n => norm(n).replace(/[^a-z0-9]/g, "") === key) || names.find(n => norm(title || "").replace(/[^a-z0-9]/g, "") === norm(n).replace(/[^a-z0-9]/g, "")) || (title ? title.charAt(0) + title.slice(1).toLowerCase() : key); }
+async function sxImport(files){ let n = 0;
+  for (const f of files){ const raw = sxUnesc(await f.text()), p = sxParse(raw); if (!p.sections.length){ toast(f.name + " : pas une fiche stratégie."); continue; }
+    const client = sxClientOf(f.name, p.title), ex = (S.d.strategies || []).find(s => s.file === f.name || s.client === client);
+    await save("strategies", ex ? ex.id : null, Object.assign(ex ? strip(ex) : { reads: [], points: [] }, { client, file: f.name, raw, importedAt: today(), importedBy: S.me || "" })); n++; }
+  toast(plural(n, "fiche importée", "fiches importées") + "."); }
+function sxSetSection(raw, title, fn){ const L = String(raw).split("\n"), h = L.findIndex(l => /^##\s+/.test(l) && l.replace(/^##\s+/, "").trim() === title);
+  if (h < 0) return String(raw).replace(/\s*$/, "") + "\n\n## " + title + "\n" + fn("");
+  let e = h + 1; while (e < L.length && !/^##\s+/.test(L[e])) e++;
+  const body = L.slice(h + 1, e).join("\n"), nb = fn(body).replace(/\s*$/, "") + (e < L.length ? "\n" : "");
+  return L.slice(0, h + 1).concat(nb.split("\n"), L.slice(e)).join("\n"); }
+function sxReading(st, g){ const p = sxParse(st.raw), goals = g ? [g] : p.goals.filter(x => x.dep != null || x.cib != null);
+  openForm({ key:"sxr", title: g ? "Relevé, " + g.ind : "Point de la semaine, " + st.client, intro: g ? st.client : "Une valeur par indicateur (laisse vide ce que tu n'as pas relevé), et une note si besoin.",
+    values: Object.assign({ date: today() }, ...goals.map((x, k) => ({ ["v" + k]: "" }))),
+    fields: [{k:"date",label:"Relevé le",type:"date",half:true,req:"Indique la date."}].concat(goals.map((x, k) => ({ k: "v" + k, label: x.ind + (x.cib != null ? " (cible " + sxFmt(x.cib) + ")" : ""), type: "number" })), g ? [] : [{k:"note",label:"Note du point",type:"textarea",rows:3}]),
+    onSave: o => { const reads = (st.reads || []).slice(); goals.forEach((x, k) => { const v = o["v" + k]; if (v !== "" && v != null) reads.push({ date: o.date, ind: x.ind, val: Number(v), by: S.me || "" }); });
+      const points = (st.points || []).slice(); if (!g) points.push({ date: o.date, by: S.me || "", note: o.note || "" });
+      return patch("strategies", st.id, { reads, points }); } }); }
+function sxPlan(st){ const p = sxParse(st.raw), opts = ["A","B"].concat(S.me === "Gabriel" ? ["C"] : []);
+  openForm({ key:"sxp", title: "Changer de plan, " + st.client, intro: "Plan actuel : " + ((p.head["plan en cours"] || "non précisé")) + ". Une ligne datée est ajoutée dans « Ce qui change ». Le plan C est décidé par Gabriel.",
+    values: { plan: p.plan === "B" ? "A" : "B", why: "" }, fields: [{k:"plan",label:"Nouveau plan",type:"select",options:opts,half:true},{k:"why",label:"Pourquoi, et sur quoi",type:"textarea",rows:3,req:"Explique en une phrase."}],
+    onSave: o => { const d = fmtFR(today()); const cyc = ((p.head["plan en cours"] || "").match(/Cycle[^.]*\./) || [""])[0]; let raw = st.raw.replace(/^(Plan en cours\s*:\s*).*$/m, (m, h) => h + o.plan + " (depuis le " + d + "). " + cyc);
+      raw = sxSetSection(raw, "Ce qui change", body => "- " + d + " : passage au plan " + o.plan + " (" + (S.me || "") + "). " + o.why.replace(/\n+/g, " ") + "\n" + body.replace(/^\n+/, ""));
+      return patch("strategies", st.id, { raw }); } }); }
+function sxEdit(st, sec){ const p = sxParse(st.raw), s = sec ? p.sections.find(x => x.title === sec) : null;
+  openForm({ key:"sxe", title: sec ? sec + ", " + st.client : "Modifier la fiche, " + st.client, intro: "Texte au format des fichiers de Clara (Markdown : « - » pour une liste, « | » pour un tableau).",
+    values: { md: sec ? (s ? s.md : "") : st.raw }, fields: [{k:"md",label: sec || "Fiche complète",type:"textarea",rows:18}],
+    onDelete: sec ? null : () => remove("strategies", st.id),
+    onSave: o => { let raw = sec ? sxSetSection(st.raw, sec, () => o.md.trim() + "\n") : o.md; raw = raw.replace(/^(Dernière mise à jour\s*:\s*).*$/m, "$1" + fmtFR(today())); return patch("strategies", st.id, { raw }); } }); }
+function sxPick(){ const inp = el("input"); inp.type = "file"; inp.accept = ".md,text/markdown,text/plain"; inp.multiple = true; inp.onchange = () => { if (inp.files.length) sxImport([...inp.files]).catch(x => toast(x.message || "Import impossible.")); }; inp.click(); }
+function vStrategie(root){
+  const all = STRATS(), cur = all.find(s => s.id === S.ui.sxId) || null;
+  const sel = el("select","pick"); [["","Vue d’ensemble"]].concat(all.map(s => [s.id, s.client])).forEach(([v, l]) => { const o = el("option", null, l); o.value = v; sel.appendChild(o); }); sel.value = cur ? cur.id : ""; sel.onchange = () => { S.ui.sxId = sel.value; remember(); render(); };
+  root.appendChild(head("Stratégie", "Une fiche par client, reprise des stratégies de Clara : objectifs suivis sur leur trajectoire, plans A, B et C. Document interne, jamais soumis au client.", [sel, addBtn("Importer des fichiers .md", sxPick)]));
+  if (!all.length){ root.appendChild(el("p","empty","Aucune fiche pour l’instant. Importe les fichiers CLIENT_Strategie.md du dossier 10_STRATEGIE-CONTENUS > clients.")); return; }
+  if (!cur){
+    const g = el("div","pb-grid");
+    all.forEach(st => { const p = sxParse(st.raw), card = el("article","pb-card"); card.style.cursor = "pointer"; card.onclick = () => { S.ui.sxId = st.id; remember(); render(); window.scrollTo(0, 0); };
+      const h = el("div","pb-h"); h.append(el("h3", null, shortName(st.client)), el("span","pill " + (p.plan === "C" ? "l3" : p.plan === "B" ? "l2" : "l1"), "Plan " + (p.plan || "?"))); card.appendChild(h);
+      card.appendChild(el("p","pb-note", ["mise à jour le " + (p.head["dernière mise à jour"] || "?"), p.end ? "cycle jusqu’au " + fmtFR(p.end) : ""].filter(Boolean).join(", ")));
+      const ul = el("ul","sx-goals"); p.goals.slice(0, 5).forEach(gl => { const s = sxState(st, gl), li = el("li"); li.append(el("span", null, gl.ind), el("span","pill " + s.cls, s.label + (s.last ? " (" + sxFmt(s.last.val) + ")" : ""))); ul.appendChild(li); }); card.appendChild(ul);
+      const lastPt = (st.points || []).slice().sort((a, b) => (b.date || "").localeCompare(a.date || ""))[0];
+      card.appendChild(el("p","pb-note" + (!lastPt || diffDays(lastPt.date, today()) > 7 ? " pb-due" : ""), lastPt ? "Dernier point le " + fmtFR(lastPt.date) : "Pas encore de point de la semaine"));
+      g.appendChild(card); });
+    root.appendChild(g); return; }
+  const p = sxParse(cur.raw), bar = el("div","fin-btns");
+  bar.append(btn("‹ Vue d’ensemble","sm", () => { S.ui.sxId = ""; remember(); render(); }), btn("Point de la semaine","sm lemon", () => sxReading(cur)), btn("Changer de plan","sm", () => sxPlan(cur)), btn("Modifier la fiche","sm", () => sxEdit(cur)));
+  root.appendChild(bar);
+  const facts = el("div","fin-kpis"); [[p.plan ? "Plan " + p.plan : "?", p.head["plan en cours"] || "plan en cours"], [p.head["dernière mise à jour"] || "?", "dernière mise à jour"], [p.head["code metricool"] || "?", "code Metricool"], [p.end ? fmtFR(p.end) : "?", "fin du cycle" + (p.start ? ", commencé le " + fmtFR(p.start) : "")]]
+    .forEach(([n, l]) => { const c = el("div","fin-kpi"); c.append(el("b", null, n), el("span", null, l)); facts.appendChild(c); }); root.appendChild(facts);
+  root.appendChild(el("h2","fin-h","Objectifs suivis"));
+  { const {w, tb} = table(["Indicateur","Départ","Cible","Attendu aujourd’hui","Seuil plan B","Dernier relevé","État"]);
+    p.goals.forEach(gl => { const s = sxState(cur, gl), tr = el("tr","row" + (s.cls === "l3" ? " r2" : "")); tr.onclick = () => sxReading(cur, gl);
+      const c0 = el("div"); c0.append(el("div","ttl", gl.ind), el("div","note", gl.volet + (gl.src ? ", " + gl.src : ""))); td(tr, c0, "w");
+      td(tr, el("div","note", gl.depTxt)); td(tr, el("div","note", gl.cibTxt + (gl.echTxt ? ", " + gl.echTxt : "")));
+      td(tr, s.expected != null ? sxFmt(s.expected) : "—","nw"); td(tr, s.seuilB != null ? "sous " + sxFmt(s.seuilB) : "—","nw");
+      td(tr, s.last ? sxFmt(s.last.val) + ", " + fmtD(s.last.date) + (s.stale ? " (à refaire)" : "") : "—","nw");
+      td(tr, el("span","pill " + s.cls, s.label),"nw"); tr.title = "Cliquer pour noter un relevé"; tb.appendChild(tr); });
+    root.appendChild(p.goals.length ? w : el("p","empty","Pas de tableau d’objectifs dans la fiche.")); }
+  const pts = (cur.points || []).slice().sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  if (pts.length){ root.appendChild(el("h2","fin-h","Points de la semaine")); const ul = el("ul","sx-pts"); pts.slice(0, 8).forEach(x => ul.appendChild(el("li", null, fmtFR(x.date) + (x.by ? ", " + x.by : "") + (x.note ? " : " + x.note : "")))); root.appendChild(ul); }
+  root.appendChild(el("h2","fin-h","La fiche"));
+  p.sections.forEach((s, k) => { const d = el("details","sx-sec"); if (k < 3 || /^Plans/i.test(s.title)) d.open = true; const sm = el("summary"); sm.append(el("span", null, s.title)); const eb = btn("Modifier","sm", e => { e.preventDefault(); e.stopPropagation(); sxEdit(cur, s.title); }); eb.disabled = !writable(); sm.appendChild(eb); d.append(sm, sxMd(s.md)); root.appendChild(d); });
+  root.appendChild(el("p","note", "Importée de " + (cur.file || "?") + " le " + fmtFR(cur.importedAt || "") + (cur.importedBy ? " par " + cur.importedBy : "") + ". Réimporter le fichier remplace le texte et garde les relevés."));
+}
+(function(){ const st = document.createElement("style"); st.textContent = ".sx-goals{list-style:none;margin:12px 0 4px;padding:0;display:grid;gap:6px}.sx-goals li{display:flex;justify-content:space-between;gap:10px;align-items:center;font-size:13px}.sx-goals li span:first-child{color:var(--muted,#9a9a94)}"
+  + ".sx-sec{border:1px solid var(--line-2);border-radius:14px;margin:10px 0;padding:0 16px;background:var(--card)}.sx-sec summary{cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:14px 0;font-weight:700;list-style:none}.sx-sec summary::-webkit-details-marker{display:none}.sx-sec[open] summary{border-bottom:1px solid var(--line-2);margin-bottom:10px}"
+  + ".sx-md{padding-bottom:12px;font-size:14px;line-height:1.55}.sx-md p{margin:6px 0}.sx-md ul,.sx-md ol{margin:6px 0;padding-left:20px}.sx-md li{margin:3px 0}.sx-md .tw{margin:10px 0}.sx-md th{text-align:left}.sx-md td,.sx-md th{vertical-align:top;font-size:13px}.sx-pts{margin:6px 0 10px;padding-left:18px;font-size:14px}.sx-pts li{margin:4px 0}"; document.head.appendChild(st); })();
+
 /* Publications : chaque client face à ce qui est prévu au mois (statiques et vidéos Paul Audio), lu en direct dans Metricool */
 let pubAt = {}; function loadPubs(mk, force){ if (!force && Date.now() - (pubAt[mk] || 0) < 3 * 60000) return; pubAt[mk] = Date.now();
   GC.api("GET", "/api/g-pubs?month=" + mk + (force ? "&fresh=1" : "")).then(r => { S.pubs = Object.assign({}, S.pubs, { [mk]: r }); renderSoon(); }).catch(() => {}); }
@@ -2206,7 +2327,7 @@ function vAgendaHub(root){
 function vTachesHub(root){
   vTaches(root);
 }
-const RENDER = {finance:vFinance, chalet:vChalet, fiches:vFiches, parametres:vParametres, accueil:vAccueil, agenda:vAgendaHub, taches:vTachesHub, commercial:vCommercial, campagnes:vMeta, montage:vMontage, publications:vPublications, clients:vClients, messagerie:vMessagerie, vocal:vVocal, formation:vFormation, idees:vIdees, focus:vFocus};
+const RENDER = {finance:vFinance, strategie:vStrategie, chalet:vChalet, fiches:vFiches, parametres:vParametres, accueil:vAccueil, agenda:vAgendaHub, taches:vTachesHub, commercial:vCommercial, campagnes:vMeta, montage:vMontage, publications:vPublications, clients:vClients, messagerie:vMessagerie, vocal:vVocal, formation:vFormation, idees:vIdees, focus:vFocus};
 function go(v){ if (MERGED[v]){ S.ui[MERGED[v][1]] = v; remember(); v = MERGED[v][0]; } if (location.hash !== "#"+v) location.hash = v; else { S.view = v; render(); } }
 function fromHash(){ let h = (location.hash||"").replace("#",""); if (h === "editorial"){ S.ui.agClient = AGENCE; if (!S.ui.agLayers.includes("posts")) S.ui.agLayers = S.ui.agLayers.concat("posts"); h = "agenda"; } if (MERGED[h] && canSee(h)){ S.ui[MERGED[h][1]] = h; h = MERGED[h][0]; } S.view = RENDER[h] && canSee(h) ? h : "accueil"; }
 window.addEventListener("hashchange", () => { const go = () => { fromHash(); render(); window.scrollTo(0,0); }; if (document.startViewTransition && !matchMedia("(prefers-reduced-motion: reduce)").matches) document.startViewTransition(go); else go(); });
@@ -2227,10 +2348,11 @@ const ICONS = {
   vocal:'<path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3.5" y="13.5" width="4" height="6.5" rx="1.5"/><rect x="16.5" y="13.5" width="4" height="6.5" rx="1.5"/>',
   formation:'<rect x="3.5" y="5.5" width="17" height="12" rx="2"/><path d="M10.5 9v5l4-2.5z"/><path d="M8 20.5h8"/>',
   plus:'<path d="M5 7h14M5 12h14M5 17h14"/>',
+  strategie:'<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/>',
   idees:'<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>',
   focus:'<path d="M12 21c-3.6 0-6.5-2.6-6.5-6.2 0-3.4 2.6-5.2 3.6-8.3.9 1.4 1.4 2.7 1.4 4 1.3-1.1 2.3-3.2 2.1-6 3 2.4 5.9 6 5.9 10.3 0 3.6-2.9 6.2-6.5 6.2z"/><path d="M12 21c-1.6 0-2.8-1.2-2.8-2.8 0-1.7 1.6-2.6 2.8-4.2 1.2 1.6 2.8 2.5 2.8 4.2 0 1.6-1.2 2.8-2.8 2.8z"/>'
 };
-const SHORT = {finance:"Finance", chalet:"Chalet", fiches:"Tableau clients", parametres:"Paramètres", accueil:"Accueil", agenda:"Agenda", taches:"Tâches", commercial:"Commercial", campagnes:"Campagnes", montage:"Rushs", publications:"Publications", clients:"Calendrier clients", messagerie:"Messagerie", vocal:"Vocal", formation:"Formation", idees:"Idées clients", focus:"Focus"};
+const SHORT = {finance:"Finance", strategie:"Stratégie", chalet:"Chalet", fiches:"Tableau clients", parametres:"Paramètres", accueil:"Accueil", agenda:"Agenda", taches:"Tâches", commercial:"Commercial", campagnes:"Campagnes", montage:"Rushs", publications:"Publications", clients:"Calendrier clients", messagerie:"Messagerie", vocal:"Vocal", formation:"Formation", idees:"Idées clients", focus:"Focus"};
 const MOBILE_MAIN = ["accueil","agenda","taches","messagerie"];
 const ico = k => { const s = document.createElementNS("http://www.w3.org/2000/svg","svg"); s.setAttribute("viewBox","0 0 24 24"); s.setAttribute("aria-hidden","true"); s.classList.add("ico"); s.innerHTML = ICONS[k] || ""; return s; };
 function renderTabs(){
@@ -2636,7 +2758,7 @@ function pmEquipe(w){
 }
 /* Pages par rôle : un interrupteur par page et par rôle. Le serveur applique les mêmes règles aux données. */
 const PAGE_LIST = [["agenda","Agenda"],["taches","Tâches"],["messagerie","Messagerie"],["vocal","Vocal"],["focus","Focus"],["clients","Calendrier clients"],["montage","Rushs"],
-  ["fiches","Tableau clients"],["commercial","Commercial"],["publications","Publications"],["idees","Idées clients"],["campagnes","Campagnes Meta"],["formation","Formation"]];
+  ["fiches","Tableau clients"],["strategie","Stratégie"],["commercial","Commercial"],["publications","Publications"],["idees","Idées clients"],["campagnes","Campagnes Meta"],["formation","Formation"]];
 function swEl(on, fn, label, locked){ const l = el("label","sw" + (locked ? " locked" : "")); const i = el("input"); i.type = "checkbox"; i.checked = !!on; i.disabled = !!locked || !writable(); i.setAttribute("aria-label", label); i.onchange = () => fn(i.checked); l.append(i, el("span")); return l; }
 async function loadAccess(){ try { S.access = await GC.api("GET","/api/g-access"); } catch(e){ S.access = { roles: {}, people: {} }; } render(); }
 async function saveAccess(msg){ try { await GC.api("PUT","/api/g-access", { roles: S.access.roles, people: S.access.people }); if (msg) toast(msg); } catch(e){ toast(e.message); loadAccess(); } }
