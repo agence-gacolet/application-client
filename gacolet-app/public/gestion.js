@@ -1485,8 +1485,9 @@ function cgOf(k){ return (S.cgroups || []).find(g => g.ch === k); }
 async function loadCgroups(){ try { const r = await GC.api("GET","/api/g-cgroups"); S.cgroups = r.groups || []; renderSoon(); } catch(e){} }
 const cliShown = () => { const acc = new Set((S.cgroups || []).map(g => norm(g.name))); return clientNames().filter(n => n !== AGENCE && (acc.has(norm(n)) || (S.d.messages || []).some(m => m.ch === "c:" + n || m.ch === "tg:c:" + n))); };
 function msgChannels(mode){ const pre = mode === "shoot" ? "tg:" : ""; return CHANNELS.map(c => pre + c[0]).concat(mode === "shoot" ? [] : dmChannels()).concat(mode === "shoot" ? cgChannels().map(k => "tg:" + k) : cgChannels().concat(cdmChannels())).concat(cliShown().map(n => pre + "c:" + n)); }
+function lastSeenAt(k){ let t = new Date().toISOString(); (S.d.messages || []).forEach(m => { if (m.ch === k && (m.at || "") > t) t = m.at; }); return t; }
 function seenKey(k){ return "seen_" + (S.me || "Gabriel") + "_" + k; }
-function unreadIn(k){ const me = S.me || "Gabriel", s = S.ui[seenKey(k)] || ""; return S.d.messages.filter(m => m.ch === k && m.who !== me && (m.at || "") > s).length; }
+function unreadIn(k){ const me = S.me || "Gabriel", a = S.ui[seenKey(k)] || "", b = ((window.GC_LIVE || {}).mine || {})[k] || "", s = a > b ? a : b; return S.d.messages.filter(m => m.ch === k && m.who !== me && (m.at || "") > s).length; }
 function unreadMode(mode){ return msgChannels(mode).reduce((n, k) => n + unreadIn(k), 0); }
 function unreadRole(){ return ["main","shoot"].reduce((n, m) => n + unreadMode(m), 0); }
 function shootLabel(e){ return fmtD(e.date) + ", " + e.client; }
@@ -1808,10 +1809,12 @@ function vcControls(){ const c = el("div","vc-ctl");
     vcBtn("leave", "Quitter le salon", false, () => vcLeave(), "end"));
   return c; }
 /* Plein écran et image principale : partage d’écran en grand, caméras en petit sur le côté */
-function vcIsFull(){ const f = document.fullscreenElement || document.webkitFullscreenElement; return !!(f && f.id === "vc-stage"); }
+function vcIsFull(){ const f = document.fullscreenElement || document.webkitFullscreenElement; return !!(f && (f.id === "vc-stage" || (f === document.documentElement && VC.full))); }
 function vcFull(){ const st = document.getElementById("vc-stage"); if (!st) return;
   if (vcIsFull()){ (document.exitFullscreen || document.webkitExitFullscreen).call(document); return; }
-  const go = st.requestFullscreen || st.webkitRequestFullscreen; if (go){ try { const r = go.call(st); if (r && r.catch) r.catch(() => {}); } catch(e){} } }
+  const d = document.documentElement, go = d.requestFullscreen || d.webkitRequestFullscreen; if (!go) return; VC.full = true;
+  try { const r = go.call(d); if (r && r.catch) r.catch(() => { VC.full = false; toast("Plein écran refusé par le navigateur."); }); } catch(e){ VC.full = false; } }
+function vcFsChange(){ if (!(document.fullscreenElement || document.webkitFullscreenElement)) VC.full = false; document.documentElement.classList.toggle("vc-full", vcIsFull()); if (vcIsFull()) vcStage(); else render(); }
 function vcHasV(stream){ return !!(stream && stream.getVideoTracks().some(x => x.readyState === "live" && !x.muted)); }
 function vcMain(){
   if (VC.focus === "grid") return "";
@@ -1826,8 +1829,8 @@ function vcToggleSpot(){
   else { let m = ""; VC.peers.forEach((P, k) => { if (!m) m = k; }); VC.focus = m || "me"; }
   vcStage();
 }
-document.addEventListener("fullscreenchange", () => vcStage());
-document.addEventListener("webkitfullscreenchange", () => vcStage());
+document.addEventListener("fullscreenchange", vcFsChange);
+document.addEventListener("webkitfullscreenchange", vcFsChange);
 /* Barre d’appel flottante, visible dans tous les onglets pendant un appel */
 function vcRender(){
   let bar = document.getElementById("vc-bar");
@@ -1943,7 +1946,7 @@ function liveFill(){
   if (sv){ const at = sv.dataset.at || "", r = (L.reads || {})[ch] || {}; const by = Object.keys(r).filter(n => n !== me && r[n] >= at);
     sv.textContent = by.length ? (ch.startsWith("dm:") ? "Lu" : "Lu par " + by.join(", ")) : "Distribué"; sv.classList.toggle("on", !!by.length); }
 }
-window.addEventListener("gc-live", () => { if (S.view === "messagerie") liveFill(); });
+window.addEventListener("gc-live", () => { if (S.view === "messagerie") liveFill(); if (S.ready && !vcIsFull()) { try { renderTabs(); syncBadge(); } catch(e){} } });
 function vMessagerie(root){
   const me = S.me || "Gabriel";
   const OLD = document.getElementById("chat-list"), OLD_IN = document.getElementById("chat-input");
@@ -1953,7 +1956,7 @@ function vMessagerie(root){
   const pre = mode === "shoot" ? "tg:" : "";
   let ch = mode === "shoot" ? (S.ui.msgShoot || "") : (S.ui.msgCh || "general");
   if (!msgChannels(mode).includes(ch)) ch = mode === "shoot" ? "tg:general" : "general";
-  if (unreadIn(ch) && (S.ui.waConv || !window.matchMedia("(max-width:900px)").matches)){ S.ui[seenKey(ch)] = new Date().toISOString(); remember(); setTimeout(renderTabs, 0); }
+  if (unreadIn(ch) && (S.ui.waConv || !window.matchMedia("(max-width:900px)").matches)){ S.ui[seenKey(ch)] = lastSeenAt(ch); remember(); setTimeout(renderTabs, 0); }
   const sgEl = ((() => { const sg = segm([["main","Principal"],["shoot","Tournage"]], mode, v => { S.ui.msgMode = v; S.ui.waConv = false; remember(); render(); }); [...sg.querySelectorAll("button")].forEach((b, i) => { const n = unreadMode(i ? "shoot" : "main"); if (n) b.appendChild(el("span","cnt",String(n))); }); return sg; })());
   const wrap = el("div","wa " + (S.ui.waConv ? "show-conv" : "show-list"));
 
@@ -1968,7 +1971,7 @@ function vMessagerie(root){
     const tx = el("span","wa-rtx"); const top = el("span","wa-rtop"); top.append(el("b",null,label), el("small",null, lm ? waTime(lm.at) : ""));
     const bot = el("span","wa-rbot"); bot.append(el("span",null, lm ? (lm.who === me ? "Toi : " : String(k).startsWith("dm:") ? "" : lm.who + " : ") + msgPreview(lm) : "Aucun message")); if (un) bot.appendChild(el("span","cnt",String(un)));
     tx.append(top, bot); b.append(chAvatar(k, 44), tx); if (un) b.classList.add("unread");
-    b.onclick = () => { if (mode === "shoot") S.ui.msgShoot = k; else S.ui.msgCh = k; S.ui[seenKey(k)] = new Date().toISOString(); S.ui.waConv = true; remember(); render(); };
+    b.onclick = () => { if (mode === "shoot") S.ui.msgShoot = k; else S.ui.msgCh = k; S.ui[seenKey(k)] = lastSeenAt(k); S.ui.waConv = true; remember(); render(); };
     side.appendChild(b);
   };
   side.appendChild(el("span","wa-lab","Équipe")); CHANNELS.forEach(([k,l]) => row(pre+k, l));
@@ -2810,7 +2813,7 @@ const standalone = () => window.matchMedia("(display-mode: standalone)").matches
 let BADGE_N = -1;
 function syncBadge(){
   if (!S.d || !S.d.messages) return; let n = 0; try { n = unreadRole(); } catch(e){ return; }
-  if (n === BADGE_N) return; BADGE_N = n;
+  BADGE_N = n;
   try { if (navigator.setAppBadge){ n ? navigator.setAppBadge(n) : navigator.clearAppBadge(); } } catch(e){}
   try { navigator.serviceWorker && navigator.serviceWorker.controller && navigator.serviceWorker.controller.postMessage({ type: "badge", n }); } catch(e){}
 }
