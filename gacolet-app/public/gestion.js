@@ -21,7 +21,7 @@ const VIEWS = [
   ["accueil","Accueil"],["agenda","Agenda"],["taches","Tâches"],["messagerie","Messagerie"],["vocal","Vocal"],["commercial","Commercial"],["clients","Calendrier clients"],
   ["montage","Rushs"],["tournage","Feuilles de tournage"],["publications","Publications"],["campagnes","Campagnes"],["formation","Formation"],["parametres","Paramètres"],["fiches","Tableau clients"],["strategie","Stratégie"],["idees","Idées clients"],["focus","Focus"],["finance","Finance"],["chalet","Chalet"]
 ];
-const NAV_GROUPS = [["",["accueil"]],["Au quotidien",["agenda","taches","tournage","montage","messagerie","vocal","focus"]],["Gestion",["fiches","strategie","commercial","publications","idees"]],["Meta",["campagnes"]],["Finance",["finance","chalet"]],["Ressources",["formation"]],["Compte",["parametres"]]];
+const NAV_GROUPS = [["",["accueil"]],["Au quotidien",["agenda","taches","tournage","montage","messagerie","vocal"]],["Gestion",["fiches","strategie","commercial","publications","idees"]],["Meta",["campagnes"]],["Ressources",["formation"]],["Compte",["parametres"]]];
 /* Onglets fusionnés : le calendrier clients vit dans l’agenda, le montage dans les tâches. */
 const MERGED = { clients: ["agenda","agHub"] };
 /* Rôles : ce que chaque siège voit. Le serveur applique les mêmes limites aux données. */
@@ -33,7 +33,8 @@ const ROLE_VIEWS = {
   member: ["accueil","agenda","taches","messagerie","vocal","focus","formation","parametres"],
   commercial: ["accueil","agenda","taches","messagerie","vocal","focus","commercial","clients","montage","publications","idees","campagnes","formation","parametres"]
 };
-const canSee = k => (k === "finance" || k === "chalet") ? DUO.includes(S.me) : !S.role || S.role === "owner" || (Array.isArray(S.views) ? S.views : ["accueil","parametres"].concat(ROLE_VIEWS[S.role] || [])).includes(k);
+const HIDDEN = ["finance","chalet","focus"]; // pages supprimées le 14/11/2026 (Matis)
+const canSee = k => HIDDEN.includes(k) ? false : !S.role || S.role === "owner" || (Array.isArray(S.views) ? S.views : ["accueil","parametres"].concat(ROLE_VIEWS[S.role] || [])).includes(k);
 const COLLS = ["events","tasks","commercial","campaigns","rushes","publications","clients","cevents","keydates","posts","edtodo","meta","messages","formations","msheets","idees","pilotage","ca","finance","strategies","shoots"];
 const DUO = ["Matis","Gabriel"];
 
@@ -632,7 +633,6 @@ function vAccueil(root){
   const s = el("div","w2-tiles");
   tiles.forEach(([n, l, f], i) => { const t = el("button","w2-tile" + (n ? "" : " zero")); t.style.animationDelay = (0.45 + i*0.08) + "s"; t.append(el("b",null,String(n)), el("span",null,l)); if (!n) t.appendChild(el("i",null,"C’est calé")); t.onclick = f; s.appendChild(t); });
   W.appendChild(s);
-  boardInto(W);
   /* Le Hameau : le jeu de l’agence, sur ordinateur */
   if (matchMedia("(pointer:fine)").matches && innerWidth >= 900){ const g = el("a","w2-game"); g.href = "/jeu"; g.append(el("b",null,"Entrer dans le Hameau"), el("span",null,"Tes tâches deviennent des quêtes")); W.appendChild(g); }
   root.appendChild(W);
@@ -1483,7 +1483,8 @@ function cdmChannels(){ const me = S.me || "Gabriel"; const set = new Set((S.ui.
 function cdmClient(k){ const g = (S.cgroups || []).find(x => x.id === Number(String(k).slice(4).split("|")[0])); return g ? g.name : "Client"; }
 function cgOf(k){ return (S.cgroups || []).find(g => g.ch === k); }
 async function loadCgroups(){ try { const r = await GC.api("GET","/api/g-cgroups"); S.cgroups = r.groups || []; renderSoon(); } catch(e){} }
-function msgChannels(mode){ const pre = mode === "shoot" ? "tg:" : ""; return CHANNELS.map(c => pre + c[0]).concat(mode === "shoot" ? [] : dmChannels()).concat(mode === "shoot" ? cgChannels().map(k => "tg:" + k) : cgChannels().concat(cdmChannels())).concat(clientNames().filter(n => n !== AGENCE).map(n => pre + "c:" + n)); }
+const cliShown = () => { const acc = new Set((S.cgroups || []).map(g => norm(g.name))); return clientNames().filter(n => n !== AGENCE && (acc.has(norm(n)) || (S.d.messages || []).some(m => m.ch === "c:" + n || m.ch === "tg:c:" + n))); };
+function msgChannels(mode){ const pre = mode === "shoot" ? "tg:" : ""; return CHANNELS.map(c => pre + c[0]).concat(mode === "shoot" ? [] : dmChannels()).concat(mode === "shoot" ? cgChannels().map(k => "tg:" + k) : cgChannels().concat(cdmChannels())).concat(cliShown().map(n => pre + "c:" + n)); }
 function seenKey(k){ return "seen_" + (S.me || "Gabriel") + "_" + k; }
 function unreadIn(k){ const me = S.me || "Gabriel", s = S.ui[seenKey(k)] || ""; return S.d.messages.filter(m => m.ch === k && m.who !== me && (m.at || "") > s).length; }
 function unreadMode(mode){ return msgChannels(mode).reduce((n, k) => n + unreadIn(k), 0); }
@@ -1976,8 +1977,8 @@ function vMessagerie(root){
   const cgShown = cgChannels().filter(k => k === ch.replace(/^tg:/, "") || lastOf[pre + k] || ((cgOf(k) || {}).people || []).length).map(k => pre + k);
   if (cgShown.length){ side.appendChild(el("span","wa-lab","Groupes avec les clients"));
     cgShown.map(k => [k, chName(k)]).sort((a, b) => ((lastOf[b[0]] || {}).at || "").localeCompare((lastOf[a[0]] || {}).at || "") || a[1].localeCompare(b[1])).forEach(([k, n]) => row(k, n)); }
-  side.appendChild(el("span","wa-lab","Clients, entre nous"));
-  clientNames().filter(n => n !== AGENCE).map(n => [pre+"c:"+n, n]).sort((a, b) => ((lastOf[b[0]] || {}).at || "").localeCompare((lastOf[a[0]] || {}).at || "") || a[1].localeCompare(b[1])).forEach(([k, n]) => row(k, n));
+  if (cliShown().length) side.appendChild(el("span","wa-lab","Clients, entre nous"));
+  cliShown().map(n => [pre+"c:"+n, n]).sort((a, b) => ((lastOf[b[0]] || {}).at || "").localeCompare((lastOf[a[0]] || {}).at || "") || a[1].localeCompare(b[1])).forEach(([k, n]) => row(k, n));
 
   /* Conversation */
   const main = el("section","wa-conv");
@@ -2602,7 +2603,7 @@ function vAgendaHub(root){
 function vTachesHub(root){
   vTaches(root);
 }
-const RENDER = {finance:vFinance, strategie:vStrategie, chalet:vChalet, fiches:vFiches, parametres:vParametres, accueil:vAccueil, agenda:vAgendaHub, taches:vTachesHub, commercial:vCommercial, campagnes:vMeta, montage:vMontage, tournage:vTournage, publications:vPublications, clients:vClients, messagerie:vMessagerie, vocal:vVocal, formation:vFormation, idees:vIdees, focus:vFocus};
+const RENDER = {strategie:vStrategie, fiches:vFiches, parametres:vParametres, accueil:vAccueil, agenda:vAgendaHub, taches:vTachesHub, commercial:vCommercial, campagnes:vMeta, montage:vMontage, tournage:vTournage, publications:vPublications, clients:vClients, messagerie:vMessagerie, vocal:vVocal, formation:vFormation, idees:vIdees};
 function go(v){ if (MERGED[v]){ S.ui[MERGED[v][1]] = v; remember(); v = MERGED[v][0]; } if (location.hash !== "#"+v) location.hash = v; else { S.view = v; render(); } }
 function fromHash(){ let h = (location.hash||"").replace("#",""); if (h === "editorial"){ S.ui.agClient = AGENCE; if (!S.ui.agLayers.includes("posts")) S.ui.agLayers = S.ui.agLayers.concat("posts"); h = "agenda"; } if (MERGED[h] && canSee(h)){ S.ui[MERGED[h][1]] = h; h = MERGED[h][0]; } S.view = RENDER[h] && canSee(h) ? h : "accueil"; }
 window.addEventListener("hashchange", () => { const go = () => { fromHash(); render(); window.scrollTo(0,0); }; if (document.startViewTransition && !matchMedia("(prefers-reduced-motion: reduce)").matches) document.startViewTransition(go); else go(); });
@@ -2873,19 +2874,30 @@ function pmCodes(w){
   if (!S.codes){ w.appendChild(el("p","empty","Chargement des clients…")); reloadCodes(); return; }
   const c = pmCard("Codes clients", "Un code par client. Toute personne qui s’inscrit avec ce code est rattachée à ce client et ne voit que ses informations : pour un associé, donne-lui le même code. Renouveler un code bloque les nouvelles inscriptions avec l’ancien, sans déconnecter les personnes déjà inscrites.");
   const top = el("div","pm-actions"); const q = el("input","search"); q.type = "search"; q.id = "cd-q"; q.placeholder = "Chercher un client"; q.value = S.ui.cdQ || ""; q.oninput = () => { S.ui.cdQ = q.value; renderSoon(); };
-  top.append(q, btn("Nouveau client","lemon", () => editCode({}))); c.appendChild(top);
+  top.append(q); c.appendChild(top);
   const t = norm(S.ui.cdQ), rows = S.codes.filter(x => !t || norm(x.name + " " + x.code).includes(t)).sort((a, b) => (b.active - a.active) || a.name.localeCompare(b.name, "fr"));
-  const {w: tw, tb} = table(["Client","Code","~Services","Personnes",""]);
+  const {w: tw, tb} = table(["Client","Accès client","~Services","Personnes","Discussions",""]);
+  const openCh = k => { S.ui.msgMode = "main"; S.ui.msgCh = k; remember(); go("messagerie"); };
+  const links = (name, id) => { const d = el("div","cd-act");
+    d.appendChild(btn("Interne","sm", e => { e.stopPropagation(); openCh("c:" + name); }));
+    if (id) d.appendChild(btn("Client","sm", e => { e.stopPropagation(); openCh("cg:" + id); })); return d; };
+  const withAcc = new Set(S.codes.map(x => norm(x.name)));
+  clientNames().filter(n => n !== AGENCE && !withAcc.has(norm(n)) && (!t || norm(n).includes(t))).sort((a, b) => a.localeCompare(b, "fr")).forEach(n => {
+    const tr = el("tr","row"); tr.onclick = () => editCode({ name: n });
+    td(tr, n,"ttl"); td(tr, el("span","muted","Pas d’accès"),"nw"); td(tr, "","nw hm"); td(tr, "","nw"); td(tr, links(n),"nw");
+    td(tr, btn("Créer l’accès","sm lemon", e => { e.stopPropagation(); editCode({ name: n }); }),"nw"); tb.appendChild(tr); });
   rows.forEach(x => { const tr = el("tr","row" + (x.active ? "" : " done")); tr.onclick = () => editCode(x);
     td(tr, x.name,"ttl"); td(tr, el("code","cd-code", x.code),"nw"); td(tr, MOD_LABEL[x.modules] || x.modules,"nw hm");
     td(tr, x.people.length ? x.people.length + (x.people.length > 1 ? " personnes" : " personne") : el("span","muted","Personne"),"nw");
+    td(tr, links(x.name, x.id),"nw");
     const a = el("div","cd-act");
+    const ap = btn("Aperçu","sm", async e => { e.stopPropagation(); const win = window.open("about:blank","_blank"); try { const r = await GC.api("POST","/api/g-preview-client",{ clientId: x.id }); win.location = r.url; } catch(err){ win.close(); toast(err.message); } }); a.appendChild(ap);
     const cp = btn("Copier","sm", e => { e.stopPropagation(); copyCode(x.code); });
     const rn = btn("Renouveler","sm", async e => { e.stopPropagation(); if (!rn.classList.contains("armed")){ rn.classList.add("armed"); rn.textContent = "Confirmer"; setTimeout(() => { rn.classList.remove("armed"); rn.textContent = "Renouveler"; }, 3000); return; }
       try { const r = await GC.api("PATCH","/api/g-codes/" + x.id, { renew: true }); toast("Nouveau code pour " + x.name + " : " + r.code); } catch(err){ toast(err.message); } reloadCodes(); });
     const fb = btn("Facturation","sm", e => { e.stopPropagation(); billingForm(x); });
     a.append(fb, cp, rn); if (!x.active) a.appendChild(el("span","pill l2","Désactivé")); td(tr, a,"nw"); tb.appendChild(tr); });
-  c.appendChild(rows.length ? tw : el("p","empty", t ? "Aucun client ne correspond." : "Aucun client pour l’instant."));
+  c.appendChild(tb.children.length ? tw : el("p","empty", t ? "Aucun client ne correspond." : "Aucun client pour l’instant."));
   w.appendChild(c);
 }
 /* Facturation d’un client : échéancier, contrats et factures, visibles dans son espace (page Prélèvements) */
@@ -2955,11 +2967,12 @@ async function billingForm(x){
 function editCode(x){
   const isNew = !x.id;
   openModal(m => {
-    const h = el("h3",null, isNew ? "Nouveau client" : x.name); h.id = "mtitle"; m.appendChild(h);
+    const h = el("h3",null, isNew ? "Créer l’accès de " + x.name : x.name); h.id = "mtitle"; m.appendChild(h);
     if (!isNew){ const r = el("div","cd-big"); r.append(el("code","cd-code", x.code), btn("Copier","sm", () => copyCode(x.code))); m.appendChild(r); }
     const f = el("form","form cd-form"); f.noValidate = true;
     const fld = (label, inp, half) => { const l = el("label", half ? null : "full"); l.appendChild(el("span",null,label)); l.appendChild(inp); f.appendChild(l); return inp; };
-    const iN = fld("Nom du client", Object.assign(el("input"), { value: x.name || "", required: true }));
+    const iN = fld("Nom du client", Object.assign(el("input"), { value: x.name || "", required: true, readOnly: isNew }));
+    if (isNew) m.appendChild(el("p","muted","Le code, le groupe de discussion avec le client et la discussion interne seront rattachés à ce client. Avant d’envoyer le code, clique sur Aperçu pour voir son espace."));
     const iM = el("select"); Object.entries(MOD_LABEL).forEach(([v, l]) => { const o = el("option",null,l); o.value = v; iM.appendChild(o); }); iM.value = x.modules || "com"; fld("Services de l’espace client", iM, true);
     const iF = fld("Formule", Object.assign(el("input"), { value: x.formula || "", placeholder: "Ex. Pack réseaux" }), true);
     const iG = fld("Objectif de contacts par mois (Meta)", Object.assign(el("input"), { type: "number", min: 0, value: x.contacts_goal || "" }), true);
@@ -2978,7 +2991,7 @@ function editCode(x){
     act.append(btn("Annuler","", () => closeModal()), btn(isNew ? "Créer et générer le code" : "Enregistrer","lemon", async () => {
       if (!iN.value.trim()){ iN.focus(); toast("Indique le nom du client."); return; }
       const body = { name: iN.value.trim(), modules: iM.value.split(","), formula: iF.value.trim(), goal: Number(iG.value) || 0, qualifiedDef: iQ.value.trim() };
-      try { if (isNew){ const r = await GC.api("POST","/api/g-codes", body); toast("Code créé : " + r.code); copyCode(r.code); } else { body.active = iA.value === "1"; await GC.api("PATCH","/api/g-codes/" + x.id, body); toast("Client enregistré."); } closeModal(); reloadCodes(); S.meta = null; } catch(e){ toast(e.message); } }));
+      try { if (isNew){ const r = await GC.api("POST","/api/g-codes", body); toast("Code créé : " + r.code); copyCode(r.code); } else { body.active = iA.value === "1"; await GC.api("PATCH","/api/g-codes/" + x.id, body); toast("Client enregistré."); } closeModal(); reloadCodes(); loadCgroups(); S.meta = null; } catch(e){ toast(e.message); } }));
     m.appendChild(act);
   });
 }
