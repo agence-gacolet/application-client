@@ -24,8 +24,10 @@ const VIEWS = [
 const NAV_GROUPS = [["",["accueil"]],["Au quotidien",["agenda","taches","tournage","montage","messagerie","vocal"]],["Gestion",["fiches","strategie","commercial","publications","idees"]],["Meta",["campagnes"]],["Ressources",["formation"]],["Compte",["parametres"]]];
 /* Onglets fusionnés : le calendrier clients vit dans l’agenda, le montage dans les tâches. */
 const MERGED = { clients: ["agenda","agHub"] };
-/* Rôles : ce que chaque siège voit. Le serveur applique les mêmes limites aux données. */
-const ROLE_LABEL = {owner:"Propriétaire", member:"Membre", commercial:"Commercial"};
+/* Pages par défaut d’un compte sans réglage par prénom. Le serveur applique les mêmes limites aux données. */
+const ROLE_LABEL = {owner:"Accès complet", member:"Accès par page", commercial:"Accès par page"};
+/* Plus de rôles affichés (Matis, 14/11/2026) : les accès se règlent prénom par prénom. */
+const fullNames = () => { const n = (S.team || S.users || []).filter(t => t.role === "owner" && !t.disabled).map(t => t.name); return n.length ? n.join(", ").replace(/, ([^,]*)$/, " et $1") : "l’agence"; };
 /* Poste : le métier de la personne (affiché), distinct du rôle (les droits). */
 const POSTES = ["Directeur","Direction","Responsable communication","Responsable vidéo","Commercial","Vidéaste","Monteur","Community manager","Graphiste","Chargé de communication","Photographe","Alternant","Stagiaire"];
 function posteInput(id, value){ const i = el("input"); i.id = id; i.value = value || ""; i.placeholder = "Ex. Vidéaste"; i.maxLength = 60; const dl = el("datalist"); dl.id = id + "-l"; POSTES.forEach(x => { const o = el("option"); o.value = x; dl.appendChild(o); }); i.setAttribute("list", dl.id); return [i, dl]; }
@@ -516,7 +518,7 @@ function netLinks(c, big){
   return box;
 }
 function vFiches(root){
-  root.appendChild(head("Tableau clients", "Réservé aux propriétaires : depuis quand, quels services, la formule et ce qu’il faut penser.", [addBtn("Nouveau client", () => editClient({}))]));
+  root.appendChild(head("Tableau clients", "Réservé à " + fullNames() + " : depuis quand, quels services, la formule et ce qu’il faut penser.", [addBtn("Nouveau client", () => editClient({}))]));
   const f = el("div","filters ag-f"); const g = el("div","fgroup"); const lb = el("label","flabel","Service"); lb.htmlFor = "fi-sv"; const sel = el("select","pick"); sel.id = "fi-sv";
   [["","Tous les services"],["com","Réseaux sociaux"],["meta","Publicité Meta"],["both","Réseaux sociaux et Meta"]].forEach(([v,l]) => { const o = el("option",null,l); o.value = v; sel.appendChild(o); }); sel.value = S.ui.fiSv || ""; sel.onchange = () => { S.ui.fiSv = sel.value; remember(); render(); };
   g.append(lb, sel); f.appendChild(g); root.appendChild(f);
@@ -609,7 +611,7 @@ function vAccueil(root){
   const t14 = addDays(t0, 14), t7 = addDays(t0, 7);
   const myTasks = openTasks().filter(t => t.who === me && (!isISO(t.date) || t.date <= t7)).length;
   const tiles = [];
-  if (S.role && S.role !== "owner"){ if (S.role === "commercial") tiles.push([S.d.commercial.filter(c => isISO(c.nextDate) && c.nextDate <= t0).length, "relances", () => go("commercial")]); }
+  if (S.role && S.role !== "owner"){ if (canSee("commercial")) tiles.push([S.d.commercial.filter(c => isISO(c.nextDate) && c.nextDate <= t0).length, "relances", () => go("commercial")]); }
   else if (me === "Matis"){
     tiles.push([S.d.rushes.filter(r => r.kind !== "reel" && !rushReady(r) && r.status !== "Posté" && (r.editor === "Matis" || !r.editor)).length, "montages", () => go("montage")]);
     tiles.push([S.d.events.filter(e => e.type === "Tournage" && e.status === "Prévu" && e.date >= t0 && e.date <= t7).length, "tournages cette semaine", () => go("agenda")]);
@@ -1648,7 +1650,7 @@ function profileCard(name){
     const big = avatarEl(name, 132); big.classList.add("pf-av");
     if (t.avatar){ big.classList.add("av-click"); big.title = "Voir en grand"; big.onclick = () => window.open(t.avatar, "_blank", "noopener"); }
     const h = el("h3",null,name); h.id = "mtitle";
-    m.append(big, h, el("p","pf-role", [t.poste, ROLE_LABEL[t.role]].filter(Boolean).join(", ")));
+    m.append(big, h, el("p","pf-role", t.poste || ""));
     const dl = el("dl","pf-dl");
     if (t.email){ const a = el("a",null,t.email); a.href = "mailto:" + t.email; dl.append(el("dt",null,"Courriel"), (() => { const d = el("dd"); d.appendChild(a); return d; })()); }
     if (t.tel){ const a = el("a",null,t.tel); a.href = "tel:" + t.tel.replace(/\s/g, ""); dl.append(el("dt",null,"Téléphone"), (() => { const d = el("dd"); d.appendChild(a); return d; })()); }
@@ -1666,7 +1668,7 @@ function newDm(){
     const t = el("h3",null,"Nouvelle conversation privée"); t.id = "mtitle"; m.appendChild(t);
     m.appendChild(el("p","muted","Visible uniquement par vous deux."));
     const l = el("div","dm-list");
-    (S.team || []).filter(x => x.name !== me).forEach(x => { const b = el("button","wa-row"); b.type = "button"; const tx = el("span","wa-rtx"); tx.append(el("b",null,x.name), el("small",null,ROLE_LABEL[x.role] || ""));
+    (S.team || []).filter(x => x.name !== me).forEach(x => { const b = el("button","wa-row"); b.type = "button"; const tx = el("span","wa-rtx"); tx.append(el("b",null,x.name), el("small",null,x.poste || ""));
       b.append(avatarEl(x.name, 40), tx); b.onclick = () => { const k = dmKey(me, x.name); S.ui.dmOpen = [...new Set((S.ui.dmOpen || []).concat(k))]; S.ui.msgMode = "main"; S.ui.msgCh = k; S.ui.waConv = true; remember(); closeModal(); go("messagerie"); render(); }; l.appendChild(b); });
     if (!l.children.length) l.appendChild(el("p","muted","Personne d’autre dans l’équipe pour l’instant."));
     m.appendChild(l);
@@ -1901,7 +1903,7 @@ function vVocal(root){
       r.append(tx, a); sec.appendChild(r); });
     root.appendChild(sec);
   }
-  if (S.role === "owner" || S.role === "commercial"){
+  if (S.role === "owner" || canSee("commercial")){
     if (!S.invites && !S.invLoading){ S.invLoading = true; GC.api("GET","/api/rtc/invites").then(r => { S.invites = r.invites; }).catch(() => { S.invites = []; }).finally(() => { S.invLoading = false; render(); }); }
     const sec = el("section","vx-inv"); const top = el("div","vx-invh"); const tt = el("div"); tt.append(el("h2",null,"Rendez-vous avec des prospects"), el("p","muted","Un lien à envoyer : la personne entre son nom et rejoint la visio, sans compte. Elle n’a accès qu’à ce salon."));
     top.append(tt, btn("Inviter un prospect","lemon", () => newInvite())); sec.appendChild(top);
@@ -2684,7 +2686,7 @@ function render(){
   if (S.failed){ root.appendChild(head("Gestionnaire", "")); root.appendChild(el("p","empty",S.failed)); return; }
   if (!S.ready){ root.appendChild(head(VIEWS.find(v => v[0] === S.view)[1], "Chargement des données de l’agence…")); root.appendChild(el("p","empty","Les tâches, le commercial, les campagnes, les calendriers et l’agenda s’affichent dans un instant.")); return; }
   try { RENDER[S.view](root); cardLabels(root); } catch(x){ root.appendChild(el("p","err","Affichage impossible : "+(x && x.message))); console.error(x); }
-  if (S.preview){ const b = el("div","pv-bar"); b.append(el("span",null,"Aperçu : tu vois l’application comme "+S.me+" ("+(ROLE_LABEL[S.role]||S.role)+"). Lecture seule.")); b.appendChild(btn("Quitter l’aperçu","sm", () => { GC.setAs(""); location.hash = "#parametres"; location.reload(); })); root.insertBefore(b, root.firstChild); }
+  if (S.preview){ const b = el("div","pv-bar"); b.append(el("span",null,"Aperçu : tu vois l’application comme "+S.me+". Lecture seule.")); b.appendChild(btn("Quitter l’aperçu","sm", () => { GC.setAs(""); location.hash = "#parametres"; location.reload(); })); root.insertBefore(b, root.firstChild); }
   else if (S.canWrite === false) root.insertBefore(el("p","status","Consultation seule."), root.firstChild);
   if (focusId){ const f = document.getElementById(focusId); if (f){ f.focus(); try { if (caret != null) f.setSelectionRange(caret, caret); } catch(e){} } }
   { const n = S.ready ? unreadRole() : 0; document.title = (n ? "(" + n + ") " : "") + "Gacolet"; }
@@ -2706,7 +2708,7 @@ function applyMe(r){
   const lab = document.querySelector(".me"); if (lab) lab.hidden = !S.secours;
   if (S.secours){ meSel.textContent = ""; PEOPLE.forEach(p => { const o = el("option",null,p); o.value = p; meSel.appendChild(o); }); if (S.me) meSel.value = S.me; }
   const ac = $("#acct");
-  if (ac && !S.secours){ ac.hidden = false; const ov = ac.querySelector(".av"); if (ov) ov.remove(); ac.prepend(avatarEl(u.name, 34, { src: (u.info || {}).avatar || "" })); $("#acct-name").textContent = u.name; $("#acct-role").textContent = ((u.info || {}).poste || ROLE_LABEL[u.role] || "") + (S.preview ? ", aperçu" : ""); }
+  if (ac && !S.secours){ ac.hidden = false; const ov = ac.querySelector(".av"); if (ov) ov.remove(); ac.prepend(avatarEl(u.name, 34, { src: (u.info || {}).avatar || "" })); $("#acct-name").textContent = u.name; $("#acct-role").textContent = ((u.info || {}).poste || "") + (S.preview ? ", aperçu" : ""); }
   const toAcct = () => { S.ui.pmTab = "compte"; remember(); go("parametres"); };
   if (ac){ ac.onclick = toAcct; ac.title = "Mon compte"; ac.setAttribute("role","button"); ac.tabIndex = 0; ac.onkeydown = e => { if (e.key === "Enter") toAcct(); }; }
   const mn = $("#me-name"); if (mn && !S.secours) mn.onclick = toAcct;
@@ -2776,7 +2778,7 @@ function pmCompte(w){
   if (info.avatar) pa.appendChild(btn("Retirer la photo","", async () => { try { await setAv(""); toast("Photo retirée."); } catch(x){ toast(x.message); } }));
   pr.appendChild(pa); cp.appendChild(pr); w.appendChild(cp);
   const c1 = pmCard("Mon profil"); const dl = el("dl","pm-dl");
-  [["Prénom", u.name], ["Poste", info.poste || "À renseigner"], ["Identifiant", u.username], ["Rôle", ROLE_LABEL[u.role] || u.role]].forEach(([k, v]) => dl.append(el("dt",null,k), el("dd",null,v || ""))); c1.appendChild(dl); w.appendChild(c1);
+  [["Prénom", u.name], ["Poste", info.poste || "À renseigner"], ["Identifiant", u.username], ["Accès", u.role === "owner" ? "Complet" : "Pages ouvertes à ton prénom"]].forEach(([k, v]) => dl.append(el("dt",null,k), el("dd",null,v || ""))); c1.appendChild(dl); w.appendChild(c1);
 
   const c2 = pmCard("Poste et coordonnées", "Ton métier à l’agence, et comment l’équipe peut te joindre.");
   const f2 = el("form"); const g2 = el("div","pm-grid");
@@ -2873,7 +2875,7 @@ const MOD_LABEL = { "com":"Réseaux sociaux", "meta":"Publicité Meta", "com,met
 async function reloadCodes(){ try { const r = await GC.api("GET","/api/g-codes"); S.codes = r.clients; } catch(e){ toast(e.message); if (!S.codes) S.codes = []; } render(); }
 function copyCode(code){ (navigator.clipboard ? navigator.clipboard.writeText(code) : Promise.reject()).then(() => toast("Code " + code + " copié."), () => toast(code)); }
 function pmCodes(w){
-  if (S.role !== "owner"){ w.appendChild(pmCard("Codes clients", "Réservé aux propriétaires.")); return; }
+  if (S.role !== "owner"){ w.appendChild(pmCard("Codes clients", "Réservé à " + fullNames() + ".")); return; }
   if (!S.codes){ w.appendChild(el("p","empty","Chargement des clients…")); reloadCodes(); return; }
   const c = pmCard("Codes clients", "Un code par client. Toute personne qui s’inscrit avec ce code est rattachée à ce client et ne voit que ses informations : pour un associé, donne-lui le même code. Renouveler un code bloque les nouvelles inscriptions avec l’ancien, sans déconnecter les personnes déjà inscrites.");
   const top = el("div","pm-actions"); const q = el("input","search"); q.type = "search"; q.id = "cd-q"; q.placeholder = "Chercher un client"; q.value = S.ui.cdQ || ""; q.oninput = () => { S.ui.cdQ = q.value; renderSoon(); };
@@ -2999,13 +3001,13 @@ function editCode(x){
   });
 }
 function pmEquipe(w){
-  if (S.role !== "owner"){ w.appendChild(pmCard("Équipe et accès", "Réservé aux propriétaires.")); return; }
+  if (S.role !== "owner"){ w.appendChild(pmCard("Équipe et accès", "Réservé à " + fullNames() + ".")); return; }
   if (!S.users){ w.appendChild(el("p","empty","Chargement des comptes…")); reloadUsers(); return; }
-  if (S.secours) w.appendChild(el("p","pv-note","Accès de secours : définis le mot de passe de chaque propriétaire, puis reconnectez-vous chacun avec votre identifiant."));
+  if (S.secours) w.appendChild(el("p","pv-note","Accès de secours : définis le mot de passe de chaque personne, puis reconnectez-vous chacun avec votre identifiant."));
   const us = S.users, act = us.filter(u => !u.disabled);
-  const c = pmCard("Sièges", act.length + " siège" + (act.length > 1 ? "s" : "") + " actif" + (act.length > 1 ? "s" : "") + " : " + ["owner","member","commercial"].map(r => act.filter(u => u.role === r).length + " " + (ROLE_LABEL[r] || r).toLowerCase() + (act.filter(u => u.role === r).length > 1 ? "s" : "")).join(", ") + ".");
-  const top = el("div","pm-actions"); top.appendChild(addBtn("Ajouter un siège", () => seatForm())); c.appendChild(top);
-  const { w: tw, tb } = table(["Nom","Poste","Identifiant","Rôle","Mot de passe","Statut",""]);
+  const c = pmCard("Équipe", act.length + " compte" + (act.length > 1 ? "s" : "") + " actif" + (act.length > 1 ? "s" : "") + " : " + act.map(u => u.name).join(", ") + ". Les pages de chacun se règlent dans le tableau « Accès par prénom » plus bas.");
+  const top = el("div","pm-actions"); top.appendChild(addBtn("Ajouter une personne", () => seatForm())); c.appendChild(top);
+  const { w: tw, tb } = table(["Prénom","Poste","Identifiant","Accès complet","Mot de passe","Statut",""]);
   us.forEach(u => {
     const tr = el("tr","row" + (u.disabled ? " done" : ""));
     td(tr, u.name + (S.user && u.id === S.user.id ? " (toi)" : ""), "nw");
@@ -3013,16 +3015,14 @@ function pmEquipe(w){
       const saveP = async () => { const v = pi.value.trim(); if (v === last) return; last = v; try { await GC.api("PATCH","/api/g-users/"+u.id,{ poste: v }); u.poste = v; const t = (S.team || []).find(x => x.name === u.name); if (t) t.poste = v; toast("Poste de " + u.name + " enregistré."); } catch(x){ toast(x.message); } };
       pi.onchange = saveP; pi.onkeydown = e => { if (e.key === "Enter"){ e.preventDefault(); pi.blur(); } }; const c = el("div"); c.append(pi, pdl); td(tr, c); }
     td(tr, u.username, "nw");
-    const sel = el("select","inl"); Object.entries(ROLE_LABEL).forEach(([k, l]) => { const o = el("option",null,l); o.value = k; sel.appendChild(o); }); sel.value = u.role; sel.disabled = !writable();
-    sel.onchange = async () => { try { await GC.api("PATCH","/api/g-users/"+u.id,{ role: sel.value }); toast(u.name + " passe " + (ROLE_LABEL[sel.value] || "").toLowerCase() + "."); } catch(x){ toast(x.message); } reloadUsers(); };
-    td(tr, sel);
+    td(tr, swEl(u.role === "owner", async on => { try { await GC.api("PATCH","/api/g-users/"+u.id,{ role: on ? "owner" : "member" }); toast(u.name + (on ? " a maintenant l’accès complet." : " passe en accès page par page.")); } catch(x){ toast(x.message); } reloadUsers(); loadAccess(); }, "Accès complet, " + u.name));
     td(tr, u.hasPassword ? "Défini" : el("span","pm-tag","À définir"), "nw");
     td(tr, u.disabled ? "Suspendu" : "Actif", "nw");
     const a = el("div","pm-row-a");
     a.appendChild(btn(u.hasPassword ? "Nouveau mot de passe" : "Définir le mot de passe","sm", () => pwForm(u)));
     a.appendChild(btn(u.disabled ? "Réactiver" : "Suspendre","sm", async () => { try { await GC.api("PATCH","/api/g-users/"+u.id,{ disabled: !u.disabled }); } catch(x){ toast(x.message); } reloadUsers(); }));
     if (!(S.user && u.id === S.user.id)){ const rm = el("button","btn sm rmb","Retirer"); rm.type = "button"; let armed = false;
-      rm.onclick = async () => { if (!armed){ armed = true; rm.textContent = "Confirmer"; setTimeout(() => { armed = false; rm.textContent = "Retirer"; }, 3000); return; } try { await GC.api("DELETE","/api/g-users/"+u.id); toast("Siège retiré."); } catch(x){ toast(x.message); } reloadUsers(); };
+      rm.onclick = async () => { if (!armed){ armed = true; rm.textContent = "Confirmer"; setTimeout(() => { armed = false; rm.textContent = "Retirer"; }, 3000); return; } try { await GC.api("DELETE","/api/g-users/"+u.id); toast(u.name + " retiré."); } catch(x){ toast(x.message); } reloadUsers(); };
       a.appendChild(rm); }
     if (u.role !== "owner") a.insertBefore(btn("Pages","sm", () => pagesForm(u)), a.firstChild);
     td(tr, a);
@@ -3030,14 +3030,14 @@ function pmEquipe(w){
   });
   c.appendChild(tw); w.appendChild(c);
 
-  w.appendChild(rolesCard());
+  w.appendChild(peopleCard());
 
   const p = pmCard("Aperçu", "Pour vérifier les réglages : l’application s’ouvre exactement comme la voit la personne choisie, en lecture seule.");
   const g = el("div","pm-grid");
   const others = us.filter(u => !(S.user && u.id === S.user.id) && !u.disabled);
-  const s1 = el("select","pick"); others.forEach(u => { const o = el("option",null,u.name + ", " + (ROLE_LABEL[u.role] || "").toLowerCase()); o.value = u.id; s1.appendChild(o); });
-  const b1 = btn("Voir comme ce membre","lemon", () => { if (!s1.value) return; GC.setAs(s1.value); location.hash = "#accueil"; location.reload(); });
-  const box1 = el("div","pm-f"); box1.append(el("span",null,"Membre de l’agence"), s1, b1);
+  const s1 = el("select","pick"); others.forEach(u => { const o = el("option",null,u.name); o.value = u.id; s1.appendChild(o); });
+  const b1 = btn("Voir comme cette personne","lemon", () => { if (!s1.value) return; GC.setAs(s1.value); location.hash = "#accueil"; location.reload(); });
+  const box1 = el("div","pm-f"); box1.append(el("span",null,"Prénom"), s1, b1);
   const s2 = el("select","pick"); (S.pvClients || []).forEach(x => { const o = el("option",null,x.name); o.value = x.id; s2.appendChild(o); });
   if (!S.pvClients && !S.pvLoading){ S.pvLoading = true; GC.api("GET","/api/g-preview-clients").then(r => { S.pvClients = r.clients; render(); }).catch(() => { S.pvClients = []; }); }
   const b2 = btn("Voir l’espace de ce client","lemon", async () => { if (!s2.value) return; const win = window.open("about:blank","_blank"); try { const r = await GC.api("POST","/api/g-preview-client",{ clientId: Number(s2.value) }); if (win) win.location = r.url; else location.href = r.url; } catch(x){ if (win) win.close(); toast(x.message); } });
@@ -3045,7 +3045,7 @@ function pmEquipe(w){
   b3.title = "Ouvre l’espace du client avec un compte « Test Agence » : valider, écrire, envoyer des idées et rejoindre la visio fonctionnent vraiment.";
   const box2 = el("div","pm-f"); box2.append(el("span",null,"Client"), s2, b2, b3);
   g.append(box1, box2); p.appendChild(g);
-  if (!others.length) p.appendChild(el("p","pm-note","Ajoute d’abord un siège pour pouvoir l’ouvrir en aperçu."));
+  if (!others.length) p.appendChild(el("p","pm-note","Ajoute d’abord une personne pour pouvoir l’ouvrir en aperçu."));
   w.appendChild(p);
 }
 /* Pages par rôle : un interrupteur par page et par rôle. Le serveur applique les mêmes règles aux données. */
@@ -3054,43 +3054,47 @@ const PAGE_LIST = [["agenda","Agenda"],["taches","Tâches"],["messagerie","Messa
 function swEl(on, fn, label, locked){ const l = el("label","sw" + (locked ? " locked" : "")); const i = el("input"); i.type = "checkbox"; i.checked = !!on; i.disabled = !!locked || !writable(); i.setAttribute("aria-label", label); i.onchange = () => fn(i.checked); l.append(i, el("span")); return l; }
 async function loadAccess(){ try { S.access = await GC.api("GET","/api/g-access"); } catch(e){ S.access = { roles: {}, people: {} }; } render(); }
 async function saveAccess(msg){ try { await GC.api("PUT","/api/g-access", { roles: S.access.roles, people: S.access.people }); if (msg) toast(msg); } catch(e){ toast(e.message); loadAccess(); } }
-function rolesCard(){
-  const r = pmCard("Pages par rôle", "Coche ce que chaque rôle voit. Le changement s’applique tout de suite, à la prochaine ouverture de l’application.");
+/* Accès par prénom : une colonne par personne, un interrupteur par page. Le serveur applique les mêmes règles aux données. */
+function basePages(u){ const mine = (S.access.people || {})[u.name] || {}; return mine["*"] ? [] : (S.access.roles[u.role] || S.access.roles.member || []); }
+function hasPage(u, k){ const mine = (S.access.people || {})[u.name] || {}, until = mine[k]; return basePages(u).includes(k) || (until !== undefined && (!until || until > Date.now())); }
+function setPage(u, k, on, until){
+  const mine = Object.assign({}, (S.access.people || {})[u.name] || {});
+  if (!mine["*"]){ basePages(u).forEach(p => { if (mine[p] === undefined) mine[p] = 0; }); mine["*"] = 1; }
+  if (on) mine[k] = until || 0; else delete mine[k];
+  S.access.people = Object.assign({}, S.access.people, { [u.name]: mine });
+}
+function peopleCard(){
+  const r = pmCard("Accès par prénom", "Coche ce que chaque personne voit. Le changement s’applique à sa prochaine ouverture de l’application.");
   if (!S.access){ r.appendChild(el("p","muted","Chargement…")); loadAccess(); return r; }
-  const { w: tw, tb } = table(["Page","Propriétaire","Membre","Commercial"]); tw.classList.add("ax-tw");
-  PAGE_LIST.forEach(([k, l]) => { const tr = el("tr","row");
-    td(tr, l, "nw"); td(tr, swEl(true, () => {}, l + ", propriétaire", true));
-    ["member","commercial"].forEach(role => { const list = S.access.roles[role] || [];
-      td(tr, swEl(list.includes(k), on => { const set = new Set(S.access.roles[role] || []); on ? set.add(k) : set.delete(k); S.access.roles[role] = [...set]; saveAccess((ROLE_LABEL[role] || role) + (on ? " : " + l + " ajouté." : " : " + l + " retiré.")); }, l + ", " + (ROLE_LABEL[role] || role).toLowerCase())); });
+  const ppl = (S.users || []).filter(u => !u.disabled);
+  const { w: tw, tb } = table(["Page"].concat(ppl.map(u => u.name))); tw.classList.add("ax-tw");
+  PAGE_LIST.filter(([k]) => !HIDDEN.includes(k)).forEach(([k, l]) => { const tr = el("tr","row"); td(tr, l, "nw");
+    ppl.forEach(u => { const full = u.role === "owner";
+      td(tr, swEl(full || hasPage(u, k), on => { setPage(u, k, on); saveAccess(l + (on ? " ouvert à " : " retiré à ") + u.name + "."); }, l + ", " + u.name, full)); });
     tb.appendChild(tr); });
   r.appendChild(tw);
-  r.appendChild(el("p","pm-note","Accueil et Paramètres restent toujours visibles. Le propriétaire voit tout. Pour donner une page à une seule personne, utilise son bouton Pages dans le tableau des sièges, et retire-la quand elle n’en a plus besoin."));
+  r.appendChild(el("p","pm-note","Accueil et Paramètres restent toujours visibles. Avec l’accès complet (tableau Équipe), la personne voit tout et gère les comptes et les codes clients. Pour ouvrir une page pour un temps seulement, utilise le bouton Pages de la personne."));
   return r;
 }
 function pagesForm(u){
   if (!S.access){ loadAccess().then(() => pagesForm(u)); return; }
-  const role = S.access.roles[u.role] || [], mine = Object.assign({}, (S.access.people || {})[u.name] || {}), now = Date.now();
   openModal(m => {
     const t = el("h3",null,"Pages de " + u.name); t.id = "mtitle"; m.appendChild(t);
-    m.appendChild(el("p","muted","En plus de son rôle (" + (ROLE_LABEL[u.role] || u.role).toLowerCase() + "). Active une page pour lui donner l’accès, désactive pour le retirer."));
-    const list = el("div","ax-list");
-    PAGE_LIST.forEach(([k, l]) => { const inRole = role.includes(k), until = mine[k], active = until !== undefined && (!until || until > now);
+    m.appendChild(el("p","muted","Active une page pour l’ouvrir à " + u.name + ", désactive pour la retirer."));
+    const list = el("div","ax-list"), now = Date.now(), mine = (S.access.people || {})[u.name] || {};
+    PAGE_LIST.filter(([k]) => !HIDDEN.includes(k)).forEach(([k, l]) => { const on = hasPage(u, k), until = mine[k];
       const row = el("div","ax-row"); const tx = el("div"); tx.appendChild(el("b",null,l));
-      tx.appendChild(el("small",null, inRole ? "Inclus dans son rôle" : active ? "Accès donné" : "Pas d’accès"));
-      row.append(tx, swEl(inRole || active, on => {
-        if (on) mine[k] = 0; else delete mine[k];
-        S.access.people = Object.assign({}, S.access.people, { [u.name]: mine }); if (!Object.keys(mine).length) delete S.access.people[u.name];
-        saveAccess(l + (on ? " ouvert à " : " retiré à ") + u.name + "."); closeModal(); pagesForm(u);
-      }, l, inRole));
+      tx.appendChild(el("small",null, !on ? "Pas d’accès" : until && until > now ? "Jusqu’au " + new Date(until).toLocaleDateString("fr-FR") : "Accès ouvert"));
+      row.append(tx, swEl(on, v => { setPage(u, k, v); saveAccess(l + (v ? " ouvert à " : " retiré à ") + u.name + "."); closeModal(); pagesForm(u); }, l));
       list.appendChild(row); });
     m.appendChild(list);
     const a = el("div","actions"); a.appendChild(btn("Fermer","", closeModal)); m.appendChild(a);
   });
 }
 function seatForm(){
-  openForm({ key:"seat", title:"Nouveau siège", intro:"Choisis le rôle et un mot de passe provisoire à transmettre à la personne. Elle pourra le changer dans Paramètres.", okLabel:"Créer le siège", done:"Siège créé.",
+  openForm({ key:"seat", title:"Nouvelle personne", intro:"Choisis un mot de passe provisoire à transmettre à la personne (elle pourra le changer dans Paramètres), puis règle ses pages dans « Accès par prénom ».", okLabel:"Créer le compte", done:"Compte créé.",
     fields:[{k:"name",label:"Prénom",req:"Indique le prénom.",half:true},{k:"username",label:"Identifiant",req:"Choisis un identifiant.",half:true,ph:"ex. lea"},
-      {k:"poste",label:"Poste",list:POSTES,ph:"Ex. Vidéaste",half:true},{k:"role",label:"Rôle (droits d’accès)",type:"select",half:true,options:[["member","Membre"],["commercial","Commercial"],["owner","Propriétaire"]]},
+      {k:"poste",label:"Poste",list:POSTES,ph:"Ex. Vidéaste",half:true},{k:"role",label:"Accès complet",type:"select",half:true,options:[["member","Non, page par page"],["owner","Oui, tout voir et gérer"]]},
       {k:"password",label:"Mot de passe provisoire",type:"password",ph:"8 caractères au moins",req:"Indique un mot de passe provisoire."}],
     onSave: async out => { try { await GC.api("POST","/api/g-users",out); } catch(x){ toast(x.message); throw x; } reloadUsers(); } });
 }
@@ -3104,11 +3108,11 @@ const CGU = [
   ["Objet", "L’application Gacolet est l’outil de travail de l’Agence Gacolet : organisation, messagerie, suivi des clients et, pour sa partie client, espace où chaque client suit ses contenus et ses résultats. Ces conditions s’appliquent à toute personne à qui l’agence ouvre un accès. Utiliser l’application vaut acceptation de ces conditions."],
   ["Éditeur et hébergement", "Éditeur : Agence Gacolet, Nîmes (Gard) [forme juridique, adresse et numéro SIRET à compléter]. Contact : [adresse de contact à compléter]. Hébergement : Infomaniak Network SA, Genève, Suisse."],
   ["Accès et comptes", "L’accès se fait uniquement sur invitation de l’agence. Chaque compte est personnel : l’identifiant et le mot de passe ne se partagent pas. La personne est responsable de ce qui est fait depuis son compte et prévient l’agence sans attendre en cas de perte ou de doute. L’agence peut suspendre ou retirer un accès à tout moment, notamment à la fin d’une collaboration."],
-  ["Rôles", "Chaque compte a un rôle (propriétaire, membre ou commercial) qui détermine les parties visibles. Toute tentative d’accéder à une partie non autorisée, de contourner une limite ou d’utiliser le compte d’une autre personne est interdite."],
+  ["Accès", "Chaque compte a ses propres accès, réglés prénom par prénom par l’agence, qui déterminent les parties visibles. Toute tentative d’accéder à une partie non autorisée, de contourner une limite ou d’utiliser le compte d’une autre personne est interdite."],
   ["Règles d’utilisation", "L’application sert à un usage professionnel. Sont interdits : les contenus illicites, injurieux, discriminatoires ou portant atteinte à la vie privée ; la diffusion hors de l’agence d’informations sur les clients, les prix, les devis ou la stratégie ; l’enregistrement ou la diffusion de la voix d’une personne sans son accord ; l’envoi de fichiers malveillants ; toute action qui perturbe le fonctionnement de l’application."],
   ["Confidentialité", "Les informations consultées dans l’application (clients, contrats, tarifs, contenus en préparation, échanges internes) sont confidentielles. Cette obligation s’applique pendant la collaboration et après sa fin."],
   ["Propriété intellectuelle", "L’application, son code, son nom, son logo et sa présentation appartiennent à l’Agence Gacolet. Ils ne peuvent être copiés, reproduits ou réutilisés sans accord écrit. Les droits sur les contenus réalisés pour les clients suivent les contrats signés avec eux."],
-  ["Données personnelles", "Responsable du traitement : Agence Gacolet. Données traitées : prénom, identifiant, coordonnées facultatives (courriel, téléphone), mot de passe (stocké sous forme chiffrée, jamais lisible), messages écrits et vocaux, fichiers envoyés, tâches et éléments d’organisation ; pour les clients, l’identité, l’entreprise, les coordonnées, les réponses au questionnaire et les validations de contenus. Finalités : faire fonctionner l’application, organiser le travail de l’agence et échanger avec les clients. Bases légales : l’exécution du contrat (de travail, de collaboration ou de prestation) et l’intérêt légitime de l’agence à organiser son activité. Destinataires : les membres de l’agence selon leur rôle et l’hébergeur. Les données ne sont ni vendues ni utilisées à des fins publicitaires. Durée de conservation : le temps de l’accès, puis suppression dans les [3 mois, à valider] suivant la fin de la collaboration, sauf obligation légale de conservation."],
+  ["Données personnelles", "Responsable du traitement : Agence Gacolet. Données traitées : prénom, identifiant, coordonnées facultatives (courriel, téléphone), mot de passe (stocké sous forme chiffrée, jamais lisible), messages écrits et vocaux, fichiers envoyés, tâches et éléments d’organisation ; pour les clients, l’identité, l’entreprise, les coordonnées, les réponses au questionnaire et les validations de contenus. Finalités : faire fonctionner l’application, organiser le travail de l’agence et échanger avec les clients. Bases légales : l’exécution du contrat (de travail, de collaboration ou de prestation) et l’intérêt légitime de l’agence à organiser son activité. Destinataires : les personnes de l’agence selon les accès ouverts à leur prénom, et l’hébergeur. Les données ne sont ni vendues ni utilisées à des fins publicitaires. Durée de conservation : le temps de l’accès, puis suppression dans les [3 mois, à valider] suivant la fin de la collaboration, sauf obligation légale de conservation."],
   ["Sécurité", "Connexion chiffrée, mots de passe chiffrés, accès limités par rôle, sauvegardes assurées par l’hébergeur. Aucune mesure n’offre une sécurité absolue : chacun contribue en gardant son mot de passe secret et en se déconnectant sur un appareil partagé."],
   ["Vos droits", "Chaque personne peut demander l’accès à ses données, leur rectification, leur effacement, la limitation ou l’opposition au traitement et leur portabilité, en écrivant à l’agence [adresse de contact à compléter]. En cas de désaccord, une réclamation peut être déposée auprès de la CNIL (cnil.fr)."],
   ["Stockage sur l’appareil", "L’application garde sur l’appareil la session de connexion et quelques préférences (filtres, messages lus, notifications). Elle n’utilise ni cookie publicitaire ni outil de mesure d’audience."],
@@ -3118,7 +3122,7 @@ const CGU = [
 ];
 function pmCgu(w){
   const c = pmCard("Conditions générales d’utilisation et protection des données", "Version 1, octobre 2026.");
-  if (S.role === "owner") c.appendChild(el("p","pv-note","Visible des propriétaires seulement : les mentions entre crochets sont à compléter, et le texte est à faire relire par un professionnel du droit avant de le présenter aux clients."));
+  if (S.role === "owner") c.appendChild(el("p","pv-note","Visible de " + fullNames() + " seulement : les mentions entre crochets sont à compléter, et le texte est à faire relire par un professionnel du droit avant de le présenter aux clients."));
   const box = el("div","pm-legal");
   CGU.forEach(([t, x], i) => { box.appendChild(el("h3",null,(i + 1) + ". " + t)); box.appendChild(el("p",null,x)); });
   c.appendChild(box); w.appendChild(c);

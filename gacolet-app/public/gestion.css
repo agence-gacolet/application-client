@@ -1660,3 +1660,6 @@ html.tg-lock,html.tg-lock body{overflow:hidden}
 .wa-bub .vw-bars{min-width:0;max-width:170px;overflow:hidden}
 .wa-bub .vw-play{width:32px;height:32px}
 .wa-bub .vw-time{color:var(--im-txt2)}
+
+/* Bouton de suppression armé lisible (14/11/2026) */
+.btn.danger.armed,.btn.danger.armed:hover{background:#FF5A4E;border-color:#FF5A4E;color:#0E0E0D;font-weight:700}
