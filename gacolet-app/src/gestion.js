@@ -37,6 +37,7 @@ module.exports = function (app, { db, wrap, root }) {
   // Crée les tables si besoin, puis les trois comptes propriétaires (sans mot de passe) au premier démarrage.
   let ready = null;
   const ensure = () => ready || (ready = (async () => {
+    setTimeout(async () => { try { for (const r of await db.all("SELECT id, data FROM docs WHERE col = '_reads'")) LIVE.reads.set(r.id, Object.assign(JSON.parse(r.data || "{}"), LIVE.reads.get(r.id) || {})); } catch (e) {} }, 0);
     await db.run("CREATE TABLE IF NOT EXISTS docs (col VARCHAR(40) NOT NULL, id VARCHAR(120) NOT NULL, data MEDIUMTEXT NOT NULL, deleted INT NOT NULL DEFAULT 0, updated_at VARCHAR(30) NOT NULL, PRIMARY KEY (col, id))");
     await db.run("CREATE TABLE IF NOT EXISTS gusers (id VARCHAR(40) NOT NULL PRIMARY KEY, username VARCHAR(60) NOT NULL, name VARCHAR(80) NOT NULL, role VARCHAR(20) NOT NULL, pass VARCHAR(200) NOT NULL DEFAULT '', pv INT NOT NULL DEFAULT 0, disabled INT NOT NULL DEFAULT 0, info VARCHAR(2000) NOT NULL DEFAULT '', created_at VARCHAR(30) NOT NULL)");
     if (!(await db.one("SELECT id FROM gusers LIMIT 1"))) {
@@ -555,7 +556,7 @@ module.exports = function (app, { db, wrap, root }) {
     const now = Date.now(), typing = {};
     LIVE.typing.forEach((m, ch) => { m.forEach((ts, n) => { if (now - ts > 6000) m.delete(n); else if (n !== u.name && visible(u, "messages", { ch })) (typing[ch] = typing[ch] || []).push(n); }); });
     const reads = {}; LIVE.reads.forEach((m, n) => { if (n === u.name) return; Object.keys(m).forEach(ch => { if (visible(u, "messages", { ch })) (reads[ch] = reads[ch] || {})[n] = m[ch]; }); });
-    return { v: LIVE.v, typing, reads };
+    return { v: LIVE.v, typing, reads, mine: LIVE.reads.get(u.name) || {} };
   }
   app.post("/api/g-typing", auth, wrap(async (req, res) => {
     const ch = String((req.body || {}).ch || "").slice(0, 200); if (!ch || req.user.preview) return res.json({ ok: true });
@@ -566,7 +567,10 @@ module.exports = function (app, { db, wrap, root }) {
   }));
   app.post("/api/g-seen", auth, wrap(async (req, res) => {
     const b = req.body || {}, ch = String(b.ch || "").slice(0, 200), at = String(b.at || "").slice(0, 40); if (!ch || !at || req.user.preview) return res.json({ ok: true });
-    const m = LIVE.reads.get(req.user.name) || {}; if ((m[ch] || "") < at) { m[ch] = at; LIVE.reads.set(req.user.name, m); bump(); }
+    const m = LIVE.reads.get(req.user.name) || {}; if ((m[ch] || "") < at) { m[ch] = at; LIVE.reads.set(req.user.name, m); bump();
+      // gardé en base : le « lu » suit la personne sur tous ses appareils et survit au redémarrage du serveur
+      await db.run("DELETE FROM docs WHERE col = ? AND id = ?", ["_reads", req.user.name]);
+      await db.run("INSERT INTO docs (col, id, data, deleted, updated_at) VALUES (?,?,?,0,?)", ["_reads", req.user.name, JSON.stringify(m), stamp()]); }
     res.json({ ok: true });
   }));
   // Réaction sur un message (n’importe qui peut réagir, sans pouvoir modifier le texte des autres)
@@ -593,6 +597,7 @@ module.exports = function (app, { db, wrap, root }) {
       : await db.all("SELECT col, id, data, deleted, updated_at FROM docs WHERE deleted = 0");
     const docs = [];
     for (const r of rows) {
+      if (r.col.startsWith("_")) continue;
       if (!canRead(u, r.col) || r.col === "game" || r.col === "gmail") continue;
       if (Number(r.deleted)) { docs.push({ col: r.col, id: r.id, deleted: true, data: null }); continue; }
       const d = JSON.parse(r.data || "{}");
