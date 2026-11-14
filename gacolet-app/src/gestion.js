@@ -149,7 +149,6 @@ module.exports = function (app, { db, wrap, root }) {
     if (col === "messages" && String(d.ch || "").startsWith("cdm:")) return String(d.ch).split("|")[1] === u.name;
     if (u.role === "owner") return true;
     if (col === "tasks") return d.who === u.name;
-    if (col === "events") return Array.isArray(d.who) && d.who.includes(u.name);
     return true;
   }
   // before : document actuel (ou null), after : document voulu (ou null pour une suppression), keys : champs modifiés
