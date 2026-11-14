@@ -1641,6 +1641,22 @@ html.tg-lock,html.tg-lock body{overflow:hidden}
 .wa-line:hover .wa-time{display:block;position:absolute;bottom:2px;font-size:10px;margin:0;white-space:nowrap;color:var(--im-txt2)}
 .wa-line:not(.mine):hover .wa-time{right:-44px}
 .wa-line.mine:hover .wa-time{left:-44px;color:var(--im-txt2)}
-.wa-bub>.wa-img,.wa-bub>.wa-vid{margin:-3px -8px -4px;border-radius:14px}
 .wa-line .av{width:26px!important;height:26px!important;font-size:11px}
 @media (max-width:900px){ .wa-line{max-width:80%} .wa-line:hover .wa-time{display:none} }
+/* Vocal des autres : bleu, plus de citron */
+.wa .vw-play{background:var(--im-blue);color:#fff}
+.wa .vw-bars span.on{background:var(--im-blue)}
+.wa-line.mine .vw-play{background:#fff;color:var(--im-blue)}
+.wa-line.mine .vw-bars span.on{background:#fff}
+/* Photo / vidéo seule : sans cadre de bulle, le prénom au-dessus, comme Messages */
+.wa-bub:has(>.wa-img),.wa-bub:has(>.wa-vid){background:none!important;padding:0;gap:3px}
+.wa-bub:has(>.wa-img) .wa-name,.wa-bub:has(>.wa-vid) .wa-name{padding:0 6px}
+.wa-bub>.wa-img,.wa-bub>.wa-vid{border-radius:16px;max-width:260px}
+.wa-bub:has(>.wa-img) .wa-txt,.wa-bub:has(>.wa-vid) .wa-txt{padding:7px 12px 8px;border-radius:18px;background:var(--im-bub);align-self:flex-start}
+.wa-line.mine .wa-bub:has(>.wa-img) .wa-txt,.wa-line.mine .wa-bub:has(>.wa-vid) .wa-txt{background:var(--im-blue);align-self:flex-end}
+/* Vocal dans une bulle : un seul fond, rien qui dépasse */
+.wa-msgs{overflow-x:hidden}
+.wa-bub .vw,.wa-line.mine .wa-bub .vw{background:none;border:0;padding:1px 2px;margin:0;gap:10px;width:auto;max-width:100%;min-width:0}
+.wa-bub .vw-bars{min-width:0;max-width:170px;overflow:hidden}
+.wa-bub .vw-play{width:32px;height:32px}
+.wa-bub .vw-time{color:var(--im-txt2)}
