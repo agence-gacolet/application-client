@@ -135,9 +135,10 @@ module.exports = function (app, { db, wrap, root }) {
     if (u.role === "owner") return Object.keys(VIEW_COLLS).concat(["accueil", "parametres"]);
     const c = await accCfg(), base = (c.roles && Array.isArray(c.roles[u.role])) ? c.roles[u.role] : (DEFAULT_VIEWS[u.role] || DEFAULT_VIEWS.member);
     const extra = ((c.people || {})[u.name]) || {}, now = Date.now();
-    return [...new Set(["accueil", "parametres"].concat(base, Object.keys(extra).filter(k => !extra[k] || extra[k] > now)))].filter(v => v === "accueil" || v === "parametres" || VIEW_COLLS[v]);
+    // « * » : les pages de la personne sont réglées prénom par prénom, sans pages par défaut.
+    return [...new Set(["accueil", "parametres"].concat(extra["*"] ? [] : base, Object.keys(extra).filter(k => k !== "*" && (!extra[k] || extra[k] > now))))].filter(v => v === "accueil" || v === "parametres" || VIEW_COLLS[v]);
   }
-  const ownerOnly = (req, res, next) => req.user && req.user.role === "owner" ? next() : res.status(403).json({ error: "Réservé aux propriétaires." });
+  const ownerOnly = (req, res, next) => req.user && req.user.role === "owner" ? next() : res.status(403).json({ error: "Réservé aux personnes qui ont l’accès complet." });
 
   // ---------- Droits par rôle ----------
   const viewColls = u => (u.views || []).flatMap(v => VIEW_COLLS[v] || []);
@@ -163,12 +164,12 @@ module.exports = function (app, { db, wrap, root }) {
       return "";
     }
     if (u.role === "owner") return "";
-    if (!canWriteCol(u, col)) return "Ton rôle ne permet pas de modifier cette partie.";
+    if (!canWriteCol(u, col)) return "Tes accès ne permettent pas de modifier cette partie.";
     if (col === "tasks") {
       if ((before && before.who !== u.name) || (after && after.who !== u.name)) return "Tu ne peux gérer que tes propres tâches.";
     }
     if (col === "formations") {
-      if (!before || !after || !keys || keys.some(k => k !== "seenBy")) return "Seuls les propriétaires modifient les formations.";
+      if (!before || !after || !keys || keys.some(k => k !== "seenBy")) return "Les formations se modifient avec l’accès complet.";
     }
     return "";
   }
@@ -185,8 +186,8 @@ module.exports = function (app, { db, wrap, root }) {
     if (u && !Number(u.disabled) && u.pass && checkPw(pw, u.pass)) { tries.delete(ip); return res.json({ key: makeToken(u) }); }
     if (process.env.ADMIN_PASSWORD && pw === process.env.ADMIN_PASSWORD) { tries.delete(ip); return res.json({ key: legacyKey(), secours: true }); }
     t.n++; tries.set(ip, t);
-    if (u && Number(u.disabled)) return res.status(401).json({ error: "Ce compte est suspendu. Vois avec un propriétaire." });
-    if (u && !u.pass) return res.status(401).json({ error: "Ce compte n’a pas encore de mot de passe. Un propriétaire doit le définir dans Paramètres." });
+    if (u && Number(u.disabled)) return res.status(401).json({ error: "Ce compte est suspendu. Vois avec Gabriel ou Matis." });
+    if (u && !u.pass) return res.status(401).json({ error: "Ce compte n’a pas encore de mot de passe. Gabriel ou Matis doit le définir dans Paramètres." });
     res.status(401).json({ error: "Identifiant ou mot de passe incorrect." });
   }));
   const infoOf = u => { try { return JSON.parse(u.info || "{}"); } catch (e) { return {}; } };
@@ -196,7 +197,7 @@ module.exports = function (app, { db, wrap, root }) {
   app.put("/api/g-access", auth, ownerOnly, wrap(async (req, res) => {
     const b = req.body || {}, ok = v => Object.prototype.hasOwnProperty.call(VIEW_COLLS, v);
     const roles = {}; ["member", "commercial"].forEach(r => { if (Array.isArray((b.roles || {})[r])) roles[r] = [...new Set(b.roles[r].filter(ok))]; });
-    const people = {}; Object.entries(b.people || {}).forEach(([n, m]) => { const o = {}; Object.entries(m || {}).forEach(([v, t]) => { if (ok(v)) o[v] = Number(t) || 0; }); if (Object.keys(o).length) people[String(n).slice(0, 80)] = o; });
+    const people = {}; Object.entries(b.people || {}).forEach(([n, m]) => { const o = {}; Object.entries(m || {}).forEach(([v, t]) => { if (ok(v)) o[v] = Number(t) || 0; else if (v === "*") o[v] = 1; }); if (Object.keys(o).length) people[String(n).slice(0, 80)] = o; });
     ACC = { roles, people }; await put("cfg", "access", ACC);
     res.json({ ok: true });
   }));
@@ -322,7 +323,7 @@ module.exports = function (app, { db, wrap, root }) {
   }));
 
   // ---------- Meta : suivi des contacts par client (tables de l’espace client) ----------
-  const metaRole = (req, res, next) => req.user && (req.user.role === "owner" || req.user.role === "commercial") ? next() : res.status(403).json({ error: "Réservé aux propriétaires et aux commerciaux." });
+  const metaRole = (req, res, next) => req.user && (req.user.role === "owner" || (req.user.views || []).includes("campagnes")) ? next() : res.status(403).json({ error: "Accès non ouvert pour ton prénom." });
   app.get("/api/g-meta", auth, metaRole, wrap(async (req, res) => {
     const cl = (await db.all("SELECT id, name, modules, contacts_goal, qualified_definition, active FROM clients ORDER BY name")).filter(c => c.active && String(c.modules || "").split(",").includes("meta"));
     const ids = cl.map(c => c.id);
@@ -449,7 +450,7 @@ module.exports = function (app, { db, wrap, root }) {
     if (!inv || inv.exp < Date.now()) return res.status(410).json({ error: "Ce lien a expiré. Demandez-en un nouveau à l’agence." });
     req.inv = inv; req.user = { id: "g:" + d.r, name: "", guest: true, room: d.r }; next();
   }).catch(e => res.status(500).json({ error: "Base indisponible.", detail: String(e.message || e).slice(0, 200) }));
-  const staffOnly = (req, res, next) => req.user && (req.user.role === "owner" || req.user.role === "commercial") ? next() : res.status(403).json({ error: "Réservé aux propriétaires et aux commerciaux." });
+  const staffOnly = (req, res, next) => req.user && (req.user.role === "owner" || (req.user.views || []).includes("commercial")) ? next() : res.status(403).json({ error: "Accès non ouvert pour ton prénom." });
   const guestRoom = (req, res, next) => { if (req.user.guest) { const r = String((req.body && req.body.room) || req.query.room || ""); if (r !== req.user.room) return res.status(403).json({ error: "Salon non autorisé." }); } next(); };
   const hJoin = (req, res) => {
     const room = String((req.body || {}).room || ""); if (!okRoom(room)) return res.status(400).json({ error: "Salon inconnu." });
@@ -905,7 +906,7 @@ module.exports = function (app, { db, wrap, root }) {
     const rows = await Promise.all(plan.map(one)); const data = { ok: true, at: Date.now(), month: mk, rows }; pubCache.set(mk, { at: Date.now(), data }); res.json(data);
   }));
   app.get("/api/g-com", auth, wrap(async (req, res) => {
-    if (req.user.role !== "owner") return res.status(403).json({ error: "Réservé aux propriétaires." });
+    if (req.user.role !== "owner") return res.status(403).json({ error: "Réservé aux personnes qui ont l’accès complet." });
     const token = process.env.METRICOOL_USER_TOKEN; if (!token) return res.json({ ok: false, reason: "no-token" });
     if (comCache && Date.now() - comCache.at < 10 * 60000) return res.json(comCache.data);
     const blogId = process.env.METRICOOL_GAB_BLOG_ID || "6875110", userId = process.env.METRICOOL_GAB_USER_ID || process.env.METRICOOL_USER_ID || "4634230";
