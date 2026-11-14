@@ -6,7 +6,7 @@ const fs = require("fs");
 const crypto = require("crypto");
 const multer = require("multer");
 
-const COLLS = ["events", "tasks", "commercial", "campaigns", "rushes", "publications", "clients", "cevents", "keydates", "posts", "edtodo", "meta", "messages", "formations", "msheets", "idees", "pilotage", "ca", "finance", "strategies"];
+const COLLS = ["events", "tasks", "commercial", "campaigns", "rushes", "publications", "clients", "cevents", "keydates", "posts", "edtodo", "meta", "messages", "formations", "msheets", "idees", "pilotage", "ca", "finance", "strategies", "shoots"];
 const ROLES = ["owner", "member", "commercial"];
 const ACCESS = {
   member: {
@@ -21,7 +21,7 @@ const ACCESS = {
 /* Pages : chaque page donne accès aux données dont elle a besoin. Les rôles ont des pages par défaut,
    modifiables par les propriétaires (interrupteurs dans Paramètres), plus des pages données à une personne, pour toujours ou pour un temps. */
 const VIEW_COLLS = { agenda: ["events", "tasks", "cevents", "keydates", "posts"], taches: ["tasks"], messagerie: ["messages"], vocal: [], focus: [], formation: ["formations"],
-  commercial: ["commercial"], clients: ["clients", "cevents", "keydates"], montage: ["rushes"], publications: ["publications", "posts", "edtodo"],
+  commercial: ["commercial"], clients: ["clients", "cevents", "keydates"], montage: ["rushes"], tournage: ["shoots", "rushes", "events", "clients"], publications: ["publications", "posts", "edtodo"],
   campagnes: ["campaigns", "meta", "msheets"], fiches: ["clients"], idees: ["idees"], strategie: ["strategies", "clients"] };
 const DEFAULT_VIEWS = { member: ["agenda", "taches", "messagerie", "vocal", "focus", "formation"],
   commercial: ["agenda", "taches", "messagerie", "vocal", "focus", "commercial", "clients", "montage", "publications", "idees", "campagnes", "formation"] };
@@ -614,6 +614,36 @@ module.exports = function (app, { db, wrap, root }) {
   const current = async (col, id) => { const r = await db.one("SELECT data FROM docs WHERE col = ? AND id = ? AND deleted = 0", [col, id]); return r ? JSON.parse(r.data || "{}") : null; };
   const refuse = (res, msg) => res.status(403).json({ error: msg });
 
+  // Tâche avec une date de publication (postDate) : le post apparaît tout seul dans le calendrier éditorial du client
+  // (agenda, type Éditorial, filtre Client). Un post par tâche (id « post-<id de la tâche> ») ; date retirée ou tâche supprimée = post annulé.
+  const isoDay = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ""));
+  const postTitle = t => { const x = String(t || "").trim().replace(/^(monter|faire|pr[ée]parer|cr[ée]er|r[ée]aliser|tourner|[ée]crire|r[ée]diger|exporter|finir|terminer|finaliser)\s+(le |la |les |l[’']|un |une |des |du )?/i, "");
+    return "Publication : " + ((x.charAt(0).toUpperCase() + x.slice(1)) || "à préciser"); };
+  async function syncPost(taskId, t, by) {
+    const evId = "post-" + taskId;
+    if (!okId(evId)) return;
+    const ev = await current("events", evId), now = stamp();
+    if (t && isoDay(t.postDate) && String(t.client || "").trim()) {
+      const keep = ev || {};
+      await put("events", evId, Object.assign({}, keep, {
+        client: String(t.client).trim(), type: "Éditorial", title: postTitle(t.title), date: t.postDate,
+        time: keep.time || "", who: t.who && t.who !== "À attribuer" ? [t.who] : (keep.who || []),
+        status: keep.status && keep.status !== "Annulé" ? keep.status : "Prévu", place: keep.place || "",
+        note: keep.note || ("Date de publication fixée dans la tâche" + (t.date ? " (à rendre le " + t.date.split("-").reverse().join("/") + ")" : "") + "."),
+        files: keep.files || [], fromTask: taskId,
+        createdAt: keep.createdAt || now, createdBy: keep.createdBy || by || "", updatedAt: now, updatedBy: by || "" }));
+    } else if (ev && ev.status !== "Annulé") {
+      await put("events", evId, Object.assign({}, ev, { status: "Annulé", updatedAt: now, updatedBy: by || "" }));
+    }
+  }
+  // Et dans l'autre sens : le post déplacé dans l'agenda remet sa date dans la tâche.
+  async function syncTaskDate(ev, by) {
+    if (!ev || !ev.fromTask || !isoDay(ev.date) || ev.status === "Annulé") return;
+    const t = await current("tasks", ev.fromTask);
+    if (t && t.postDate !== ev.date) await put("tasks", ev.fromTask, Object.assign({}, t, { postDate: ev.date, updatedAt: stamp(), updatedBy: by || "" }));
+  }
+  const afterTask = (col, id, d, u) => (col === "tasks" ? syncPost(id, d, u && u.name) : col === "events" ? syncTaskDate(d, u && u.name) : Promise.resolve()).catch(e => console.error("syncPost", e));
+
   // Créer ou remplacer
   app.put("/api/g/:col/:id", auth, wrap(async (req, res) => {
     const { col, id } = req.params;
@@ -622,6 +652,7 @@ module.exports = function (app, { db, wrap, root }) {
     const before = await current(col, id);
     const no = allowed(req.user, col, before, data, null); if (no) return refuse(res, no);
     await put(col, id, data);
+    await afterTask(col, id, data, req.user);
     res.json({ ok: true, id });
     if (col === "messages" && !before) pushMsg(data).catch(() => {});
   }));
@@ -632,6 +663,7 @@ module.exports = function (app, { db, wrap, root }) {
     const no = allowed(req.user, col, null, data, null); if (no) return refuse(res, no);
     const id = newId();
     await put(col, id, data);
+    await afterTask(col, id, data, req.user);
     res.json({ ok: true, id });
     if (col === "messages") pushMsg(data).catch(() => {});
   }));
@@ -645,6 +677,7 @@ module.exports = function (app, { db, wrap, root }) {
     const next = Object.assign({}, cur, patch);
     const no = allowed(req.user, col, cur, next, Object.keys(patch)); if (no) return refuse(res, no);
     await put(col, id, next);
+    await afterTask(col, id, next, req.user);
     res.json({ ok: true });
   }));
   app.delete("/api/g/:col/:id", auth, wrap(async (req, res) => {
@@ -653,6 +686,7 @@ module.exports = function (app, { db, wrap, root }) {
     const cur = await current(col, id);
     if (cur) { const no = allowed(req.user, col, cur, null, null); if (no) return refuse(res, no); }
     await db.run("UPDATE docs SET deleted = 1, data = '{}', updated_at = ? WHERE col = ? AND id = ?", [stamp(), col, id]);
+    if (cur) await afterTask(col, id, null, req.user);
     res.json({ ok: true }); bump();
   }));
 
