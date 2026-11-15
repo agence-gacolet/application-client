@@ -726,6 +726,67 @@ module.exports = function (app, { db, wrap, root }) {
     res.json({ ok: true, id });
     if (col === "messages") pushMsg(data).catch(() => {});
   }));
+  // ---------- Listes d'appels du Commercial ----------
+  // Recherche d'entreprises dans l'annuaire public de l'État (recherche-entreprises.api.gouv.fr, gratuit, sans clé) :
+  // activité (codes NAF), zone (départements ou codes postaux), taille ; les entreprises déjà dans l'appli sont écartées.
+  const nk = s => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\([^)]*\)/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+  app.get("/api/g-callsearch", auth, wrap(async (req, res) => {
+    const no = allowed(req.user, "commercial", null, { kind: "Appel", owner: req.user.name }, null); if (no) return refuse(res, no);
+    const naf = String(req.query.naf || "").split(",").map(x => x.trim()).filter(x => /^\d{2}\.\d{2}[A-Z]$/.test(x)).slice(0, 12).join(",");
+    const q = String(req.query.q || "").trim().slice(0, 60), zone = String(req.query.zone || "").split(/[\s,;]+/).filter(Boolean).slice(0, 10);
+    const deps = zone.filter(z => /^(\d{2}|2[AB]|97\d)$/i.test(z)), cps = zone.filter(z => /^\d{5}$/.test(z));
+    const want = Math.max(1, Math.min(150, Number(req.query.n) || 30)), size = String(req.query.size || "");
+    if (!naf && !q) return res.status(400).json({ error: "Choisis un domaine ou un mot-clé." });
+    if (!deps.length && !cps.length) return res.status(400).json({ error: "Indique la zone : un département (30) ou des codes postaux (30000, 30900)." });
+    const sizes = { "1": "01,02,03,11,12,21,22,31,32", "3": "02,03,11,12,21,22,31,32", "10": "11,12,21,22,31,32", "0": "" }[size] || "";
+    const known = new Set((await db.all("SELECT data FROM docs WHERE col IN ('commercial','clients') AND deleted = 0")).map(r => { try { const d = JSON.parse(r.data); return nk(d.company || d.name); } catch (e) { return ""; } }).filter(Boolean));
+    const out = [], seen = new Set(); let page = 1, pages = 1, total = 0;
+    while (out.length < want && page <= pages && page <= 12) {
+      const p = new URLSearchParams({ per_page: "25", page: String(page), etat_administratif: "A" });
+      if (naf) p.set("activite_principale", naf); if (q) p.set("q", q); if (deps.length) p.set("departement", deps.join(",")); if (cps.length) p.set("code_postal", cps.join(","));
+      if (sizes) { p.set("tranche_effectif_salarie", sizes); p.set("caractere_employeur", "O"); }
+      const r = await fetch("https://recherche-entreprises.api.gouv.fr/search?" + p, { headers: { Accept: "application/json" } });
+      if (r.status === 429) { await new Promise(ok => setTimeout(ok, 1200)); continue; }
+      if (!r.ok) return res.status(502).json({ error: "L’annuaire des entreprises ne répond pas (" + r.status + "). Réessaie dans un instant." });
+      const j = await r.json(); pages = j.total_pages || 1; total = j.total_results || 0; page++;
+      for (const e of j.results || []) {
+        const et = (e.matching_etablissements || []).find(x => x.etat_administratif === "A" && (!deps.length || deps.some(d => String(x.code_postal || "").startsWith(d))) && (!cps.length || cps.includes(String(x.code_postal || "")))) || null;
+        if (!et) continue;
+        const name = ((et.liste_enseignes || [])[0] || e.nom_raison_sociale || e.nom_complet || "").replace(/\s+/g, " ").trim(), key = nk(name);
+        if (!name || known.has(key) || seen.has(key)) continue; seen.add(key);
+        const dir = (e.dirigeants || []).find(d => d.type_dirigeant === "personne physique");
+        const cap = t => String(t || "").toLowerCase().replace(/(^|[\s'-])\S/g, m => m.toUpperCase());
+        out.push({ company: cap(name), city: cap(et.libelle_commune), address: cap(et.adresse), cp: et.code_postal || "", contact: dir ? cap(String(dir.prenoms || "").split(" ")[0] + " " + (dir.nom || "")) + (dir.qualite ? " (" + dir.qualite + ")" : "") : "",
+          activity: et.activite_principale || e.activite_principale || "", siren: e.siren || "", staff: e.tranche_effectif_salarie || "", since: e.date_creation || "" });
+        if (out.length >= want) break;
+      }
+    }
+    res.json({ total, rows: out });
+  }));
+  // Créer une liste (lignes « Appel » du Commercial), changer son commercial, la renommer ou la supprimer, en une fois
+  app.post("/api/g-calllist", auth, wrap(async (req, res) => {
+    const b = req.body || {}, name = String(b.name || "").trim().slice(0, 80), full = req.user.role === "owner";
+    const owner = full ? String(b.owner || req.user.name).trim().slice(0, 40) : req.user.name;
+    const no = allowed(req.user, "commercial", null, { kind: "Appel", owner }, null); if (no) return refuse(res, no);
+    if (!name) return res.status(400).json({ error: "Donne un nom à la liste." });
+    const mine = async () => (await db.all("SELECT id, data FROM docs WHERE col = 'commercial' AND deleted = 0")).map(r => { let d = {}; try { d = JSON.parse(r.data); } catch (e) {} return { id: r.id, d }; })
+      .filter(x => x.d.kind === "Appel" && x.d.list === name && (full || x.d.owner === req.user.name));
+    const act = String(b.action || "create");
+    if (act === "create") {
+      const rows = (Array.isArray(b.rows) ? b.rows : []).slice(0, 300); let n = 0; const st = String(b.stamp || "").slice(0, 40);
+      const S2 = (v, k) => String(v == null ? "" : v).trim().slice(0, k);
+      for (const r of rows) { const company = S2(r.company, 120); if (!company) continue;
+        await put("commercial", newId(), { kind: "Appel", list: name, owner, company, phone: S2(r.phone, 40), city: S2(r.city, 80), address: S2(r.address, 200), contact: S2(r.contact, 120), activity: S2(r.activity, 20), siren: S2(r.siren, 12), notes: S2(r.notes, 1000), target: S2(b.target, 300), callStatus: "", createdAt: stamp(), createdBy: req.user.name, order: 999 }); n++; }
+      bump(); return res.json({ ok: true, n });
+    }
+    const list = await mine(); if (!list.length) return res.status(404).json({ error: "Liste vide ou introuvable." });
+    for (const x of list) {
+      if (act === "delete") await db.run("UPDATE docs SET deleted = 1, data = '{}', updated_at = ? WHERE col = 'commercial' AND id = ?", [stamp(), x.id]);
+      else if (act === "owner") await put("commercial", x.id, Object.assign(x.d, { owner }));
+      else if (act === "rename") { const nn = String(b.to || "").trim().slice(0, 80); if (!nn) return res.status(400).json({ error: "Nouveau nom vide." }); await put("commercial", x.id, Object.assign(x.d, { list: nn })); }
+    }
+    bump(); res.json({ ok: true, n: list.length });
+  }));
   // Modifier quelques champs
   app.patch("/api/g/:col/:id", auth, wrap(async (req, res) => {
     const { col, id } = req.params;

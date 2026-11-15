@@ -1073,13 +1073,18 @@ function vCommercial(root){
   const q = norm(S.ui.coQ), me = S.me || "Gabriel", full = S.role === "owner";
   const who = full ? (["Tous"].concat(SALES).includes(S.ui.coWho) ? S.ui.coWho : (SALES.includes(me) ? me : "Tous")) : me;
   const base = S.d.commercial.filter(c => who === "Tous" || coOwner(c) === who);
-  const all = base.filter(c => (S.ui.coKind === "Tous" || c.kind === (S.ui.coKind === "Clients" ? "Client" : "Prospect")) && (!q || norm([c.company,c.stage,c.notes,c.contact,c.nextAction].join(" ")).includes(q)));
+  if (S.ui.coKind === "Appels"){ root.appendChild(head(full ? "Commercial" : "Mes prospects", "Listes d’appels : génère une liste d’entreprises à appeler, appelle, et passe en prospect celles qui sont intéressées.", [addBtn("Générer une liste", () => callGen())]));
+    const f0 = el("div","filters");
+    if (full){ const cnt = Object.fromEntries(SALES.map(p => [p, S.d.commercial.filter(c => c.kind === "Appel" && coOwner(c) === p).length])); cnt.Tous = S.d.commercial.filter(c => c.kind === "Appel").length; f0.appendChild(chipBar(SALES.concat(["Tous"]).map(p => [p, p]), who, v => { S.ui.coWho = v; remember(); render(); }, cnt)); }
+    f0.appendChild(segm([["Tous","Tous"],["Clients","Clients"],["Prospects","Prospects"],["Appels","Listes d’appels"]], S.ui.coKind, v => { S.ui.coKind = v; remember(); render(); })); root.appendChild(f0);
+    return vCalls(root, base.filter(c => c.kind === "Appel"), who, full); }
+  const all = base.filter(c => c.kind !== "Appel" && (S.ui.coKind === "Tous" || c.kind === (S.ui.coKind === "Clients" ? "Client" : "Prospect")) && (!q || norm([c.company,c.stage,c.notes,c.contact,c.nextAction].join(" ")).includes(q)));
   const due = base.filter(c => isISO(c.nextDate) && c.nextDate <= today()).length;
   root.appendChild(head(full ? "Commercial" : "Mes prospects", plural(due,"action due","actions dues")+" aujourd’hui ou en retard, rythme de relance J+3, J+7, J+14, J+30", [addBtn("Nouveau prospect", () => editCommercial({}))]));
   const f = el("div","filters");
-  if (full){ const cnt = Object.fromEntries(SALES.map(p => [p, S.d.commercial.filter(c => coOwner(c) === p).length])); cnt.Tous = S.d.commercial.length;
+  if (full){ const cnt = Object.fromEntries(SALES.map(p => [p, S.d.commercial.filter(c => c.kind !== "Appel" && coOwner(c) === p).length])); cnt.Tous = S.d.commercial.filter(c => c.kind !== "Appel").length;
     f.appendChild(chipBar(SALES.concat(["Tous"]).map(p => [p, p]), who, v => { S.ui.coWho = v; remember(); render(); }, cnt)); }
-  f.appendChild(segm([["Tous","Tous"],["Clients","Clients"],["Prospects","Prospects"]], S.ui.coKind, v => { S.ui.coKind = v; remember(); render(); }));
+  f.appendChild(segm([["Tous","Tous"],["Clients","Clients"],["Prospects","Prospects"],["Appels","Listes d’appels"]], S.ui.coKind, v => { S.ui.coKind = v; remember(); render(); }));
   const s = el("input","search"); s.id = "co-q"; s.type = "search"; s.placeholder = "Chercher une entreprise"; s.value = S.ui.coQ; s.oninput = () => { S.ui.coQ = s.value; renderSoon(); };
   f.appendChild(s); root.appendChild(f);
   const showWho = full && who === "Tous";
@@ -1097,6 +1102,91 @@ function vCommercial(root){
   else root.appendChild(w);
   root.appendChild(el("p","status","Ouvre une ligne pour appliquer un compte rendu : pas de réponse, devis envoyé, date donnée, pas intéressé ou signé."));
 }
+
+/* ---------- Listes d'appels ----------
+   Lignes « Appel » du Commercial : une liste = un nom commun. On appelle, on note le résultat, et un bouton fait passer la ligne en prospect.
+   Génération : annuaire public des entreprises (activité, zone, taille), sans les entreprises déjà connues. Import : coller une liste (Claude, Sheets, fichier). */
+const CALL_DOMAINS = [["Plombiers, chauffagistes, climatisation","43.22A,43.22B"],["Électriciens","43.21A"],["Maçons, gros œuvre","43.99C,41.20A,41.20B"],["Menuisiers, charpentiers","43.32A,43.32B,43.91A"],
+  ["Couvreurs, étanchéité","43.91B,43.99A"],["Peintres, plâtriers, carreleurs","43.34Z,43.31Z,43.33Z"],["Paysagistes, jardins","81.30Z"],["Piscines, travaux spécialisés","43.99D,43.99E"],
+  ["Restaurants","56.10A,56.10C"],["Bars, cafés","56.30Z"],["Boulangeries, pâtisseries","10.71C,10.71D"],["Coiffeurs, instituts de beauté","96.02A,96.02B"],["Garages, réparation auto","45.20A,45.20B"],
+  ["Vente de voitures","45.11Z"],["Agences immobilières","68.31Z"],["Salles de sport, coachs","93.13Z,93.12Z,85.51Z"],["Boutiques de vêtements","47.71Z"],["Nettoyage, propreté","81.21Z,81.22Z"],
+  ["Organismes de formation","85.59A,85.59B"],["Santé, bien-être","86.90E,86.90F"],["Hôtels, hébergement","55.10Z,55.20Z,55.30Z"],["Location de matériel","77.32Z,77.39Z"],["Commerce de gros","46.90Z,46.73A,46.69B"],["Autre (mot-clé seul)",""]];
+const CALL_ST = [["","À appeler"],["rappeler","À rappeler"],["absent","Pas de réponse"],["non","Pas intéressé"]];
+const callFind = c => "https://www.google.com/search?q=" + encodeURIComponent([c.company, c.city, "téléphone"].filter(Boolean).join(" "));
+function vCalls(root, rows, who, full){
+  const lists = [...new Set(rows.map(c => c.list || "Sans nom"))].sort((a, b) => a.localeCompare(b, "fr"));
+  if (!rows.length){ const e = el("div","empty"); e.append(el("p", null, "Aucune liste d’appels pour l’instant."), btn("Générer une liste","lemon", () => callGen()), document.createTextNode(" "), btn("Coller une liste","", () => callImport())); root.appendChild(e); return; }
+  const cur = lists.includes(S.ui.clList) ? S.ui.clList : lists[0];
+  const bar = el("div","filters"); bar.appendChild(chipBar(lists.map(l => [l, l]), cur, v => { S.ui.clList = v; remember(); render(); }, Object.fromEntries(lists.map(l => [l, rows.filter(c => (c.list || "Sans nom") === l && c.callStatus !== "non").length]))));
+  bar.appendChild(btn("Coller une liste","sm", () => callImport())); root.appendChild(bar);
+  const L = rows.filter(c => (c.list || "Sans nom") === cur), st = CALL_ST.some(x => x[0] === S.ui.clSt) ? S.ui.clSt : "";
+  const acts = el("div","fin-btns");
+  acts.appendChild(segm(CALL_ST.map(([k, l]) => [k, l + " " + L.filter(c => (c.callStatus || "") === k).length]), st, v => { S.ui.clSt = v; remember(); render(); }));
+  if (full){ const sel = el("select","inl"); [["","Donner toute la liste à…"]].concat(SALES.map(p => [p, p])).forEach(([v, l]) => { const o = el("option", null, l); o.value = v; sel.appendChild(o); });
+    sel.onchange = async () => { if (!sel.value) return; try { await GC.api("POST","/api/g-calllist", { name: cur, action: "owner", owner: sel.value }); toast("Liste « " + cur + " » donnée à " + sel.value + "."); } catch(e){ toast(e.message); } }; acts.appendChild(sel); }
+  acts.appendChild(btn("Renommer","sm", () => openForm({ key:"clr", title:"Renommer la liste", values:{ to: cur }, fields:[{k:"to",label:"Nouveau nom",req:"Donne un nom."}], onSave: async o => { await GC.api("POST","/api/g-calllist", { name: cur, action: "rename", to: o.to }); S.ui.clList = o.to; remember(); } })));
+  let armed = false; const del = btn("Supprimer la liste","sm danger", async () => { if (!armed){ armed = true; del.textContent = "Confirmer : supprimer " + L.length + " lignes"; return; } try { await GC.api("POST","/api/g-calllist", { name: cur, action: "delete" }); toast("Liste supprimée (les lignes passées en prospect restent)."); } catch(e){ toast(e.message); } }); acts.appendChild(del);
+  root.appendChild(acts);
+  if (L[0] && L[0].target) root.appendChild(el("p","muted", "Ciblage : " + L[0].target));
+  const show = L.filter(c => (c.callStatus || "") === st).sort((a, b) => (a.city || "").localeCompare(b.city || "", "fr") || a.company.localeCompare(b.company, "fr"));
+  if (!show.length){ root.appendChild(el("p","empty", st === "" ? "Toute la liste est appelée. Bravo." : "Personne dans cette case.")); return; }
+  const {w, tb} = table(["Entreprise","Ville","Téléphone","Résultat","Note"].concat(full ? ["Commercial"] : []).concat([""]));
+  show.forEach(c => { const tr = el("tr","row");
+    const c0 = el("div"); c0.append(el("div","ttl", c.company), el("div","note", c.contact || "")); td(tr, c0, "w"); td(tr, c.city || "", "nw");
+    const ph = el("div","cl-ph"); if (c.phone){ const a = el("a","cl-tel", c.phone); a.href = "tel:" + c.phone.replace(/[^\d+]/g, ""); ph.appendChild(a); }
+    const pi = el("input","inl cl-pin"); pi.type = "tel"; pi.placeholder = c.phone ? "Changer" : "Numéro"; pi.value = ""; pi.onchange = () => { const v = pi.value.trim(); if (v) patch("commercial", c.id, { phone: v }); }; if (!c.phone) ph.appendChild(pi);
+    const fd = el("a","cl-find", c.phone ? "" : "Trouver"); fd.href = callFind(c); fd.target = "_blank"; fd.rel = "noopener"; fd.title = "Chercher le numéro sur Google"; if (!c.phone) ph.appendChild(fd); td(tr, ph, "nw");
+    const ss = el("select","inl"); CALL_ST.forEach(([k, l]) => { const o = el("option", null, l); o.value = k; ss.appendChild(o); }); ss.value = c.callStatus || ""; ss.disabled = !writable();
+    ss.onchange = () => patch("commercial", c.id, { callStatus: ss.value, calledAt: today(), calledBy: S.me || "" }); td(tr, ss, "nw");
+    const ni = el("input","inl"); ni.placeholder = "Note d’appel"; ni.value = c.notes || ""; ni.onchange = () => patch("commercial", c.id, { notes: ni.value.trim() }); td(tr, ni);
+    if (full){ const so = el("select","inl"); SALES.forEach(x => { const o = el("option", null, x); o.value = x; so.appendChild(o); }); so.value = coOwner(c); so.onchange = () => patch("commercial", c.id, { owner: so.value }).then(() => toast(c.company + " : " + so.value + ".")); td(tr, so, "nw"); }
+    const go2 = btn("Prospect →","sm lemon", () => patch("commercial", c.id, { kind: "Prospect", stage: "rendez-vous pris" === c.stage ? c.stage : "à contacter", source: "Prospection directe", j0: today(), fromList: c.list || "", lastContact: (c.notes ? "Appel du " + fmtFR(today()) + " : " + c.notes : "Appel du " + fmtFR(today())), nextAction: "Rappeler", nextDate: addDays(today(), 3) }).then(() => toast(c.company + " passe en prospect (relance dans 3 jours).")));
+    go2.disabled = !writable(); td(tr, go2, "nw"); tb.appendChild(tr); });
+  root.appendChild(w);
+  root.appendChild(el("p","status","Le numéro n’est pas dans l’annuaire public : « Trouver » ouvre la recherche Google, colle le numéro dans la case. Tu peux aussi demander à Claude de compléter les numéros d’une liste."));
+}
+function callGen(){
+  const me = S.me || "Gabriel", full = S.role === "owner";
+  openModal(m => {
+    const t = el("h3", null, "Générer une liste d’appels"); t.id = "mtitle"; m.appendChild(t);
+    m.appendChild(el("p","muted","Entreprises actives trouvées dans l’annuaire public des entreprises. Celles déjà dans l’appli (clients, prospects, listes) sont écartées."));
+    const f = el("div","form"), row = () => { const r = el("div","row2"); f.appendChild(r); return r; }, lab = (txt, inp, r) => { const l = el("label", null, txt); l.appendChild(inp); (r || f).appendChild(l); return inp; };
+    const dom = el("select"); CALL_DOMAINS.forEach(([l, v], i) => { const o = el("option", null, l); o.value = String(i); dom.appendChild(o); }); lab("Domaine", dom);
+    const r1 = row(); const kw = lab("Mot-clé en plus (facultatif)", Object.assign(el("input"), { placeholder: "Ex. piscine, pizza, auto-école" }), r1); const zone = lab("Zone (départements ou codes postaux)", Object.assign(el("input"), { value: "30", placeholder: "30, 34 ou 30000 30900" }), r1);
+    const r2 = row(); const size = el("select"); [["1","Au moins 1 salarié"],["3","3 salariés et plus"],["10","10 salariés et plus"],["0","Toutes, même sans salarié"]].forEach(([v, l]) => { const o = el("option", null, l); o.value = v; size.appendChild(o); }); lab("Taille", size, r2);
+    const n = lab("Nombre", Object.assign(el("input"), { type: "number", value: "30", min: "5", max: "150" }), r2);
+    const r3 = row(); const own = el("select"); (full ? SALES : [me]).forEach(p => { const o = el("option", null, p); o.value = p; own.appendChild(o); }); own.value = SALES.includes(S.ui.coWho) ? S.ui.coWho : SALES.includes(me) ? me : SALES[0]; lab("Commercial qui appelle", own, r3);
+    const name = lab("Nom de la liste", Object.assign(el("input"), { placeholder: "Rempli tout seul" }), r3);
+    const tg = lab("Ciblage (pourquoi cette cible, angle d’appel)", Object.assign(el("textarea"), { rows: 2, placeholder: "Ex. artisans sans réseaux sociaux à jour, proposer le Pack Gestion" }));
+    m.appendChild(f);
+    const res = el("div","cl-res"); m.appendChild(res); const err = el("div","err"); m.appendChild(err);
+    const act = el("div","actions"); const go = btn("Chercher","lemon"); const mk = btn("Créer la liste",""); mk.disabled = true; act.append(btn("Annuler","", closeModal), go, mk); m.appendChild(act);
+    let found = [];
+    const autoName = () => (CALL_DOMAINS[dom.value][1] ? CALL_DOMAINS[dom.value][0].split(",")[0] : (kw.value.trim() || "Liste")) + " " + zone.value.trim().split(/[\s,;]+/).join("-") + " " + fmtD(today());
+    go.onclick = async () => { err.textContent = ""; go.disabled = true; go.textContent = "Recherche…"; res.textContent = "";
+      try { const q = new URLSearchParams({ naf: CALL_DOMAINS[dom.value][1], q: kw.value.trim(), zone: zone.value.trim(), n: n.value, size: size.value });
+        const r = await GC.api("GET","/api/g-callsearch?" + q); found = r.rows.map(x => Object.assign(x, { on: true }));
+        res.appendChild(el("p","muted", found.length + " entreprise" + (found.length > 1 ? "s" : "") + " retenue" + (found.length > 1 ? "s" : "") + " sur " + r.total + " dans l’annuaire. Décoche celles à écarter."));
+        const ul = el("ul","cl-list"); found.forEach(x => { const li = el("li"); const ck = el("input"); ck.type = "checkbox"; ck.checked = true; ck.onchange = () => { x.on = ck.checked; mk.textContent = "Créer la liste (" + found.filter(y => y.on).length + ")"; };
+          const tx = el("div"); tx.append(el("b", null, x.company), el("span","note", " " + [x.city, x.contact].filter(Boolean).join(", "))); li.append(ck, tx); ul.appendChild(li); }); res.appendChild(ul);
+        if (!name.value.trim()) name.value = autoName(); mk.disabled = !found.length; mk.className = "btn solid"; mk.textContent = "Créer la liste (" + found.length + ")";
+      } catch(e){ err.textContent = e.message; } go.disabled = false; go.textContent = "Chercher à nouveau"; };
+    mk.onclick = async () => { const rows = found.filter(x => x.on); if (!rows.length) return; mk.disabled = true;
+      try { const nm = name.value.trim() || autoName(); const r = await GC.api("POST","/api/g-calllist", { name: nm, owner: own.value, target: [CALL_DOMAINS[dom.value][0], kw.value.trim(), zone.value.trim(), tg.value.trim()].filter(Boolean).join(" · "), rows });
+        S.ui.coKind = "Appels"; S.ui.clList = nm; S.ui.clSt = ""; remember(); closeModal(); toast("Liste « " + nm + " » créée : " + r.n + " entreprises pour " + own.value + "."); render(); } catch(e){ err.textContent = e.message; mk.disabled = false; } };
+  });
+}
+function callImport(){
+  const me = S.me || "Gabriel", full = S.role === "owner";
+  openForm({ key:"cli", title:"Coller une liste d’appels", intro:"Une entreprise par ligne : Entreprise ; téléphone ; ville ; contact ; note (le séparateur peut être « ; », une tabulation depuis Google Sheets, ou « | »). Seule l’entreprise est obligatoire. Pratique pour une liste préparée par Claude.",
+    values:{ owner: SALES.includes(S.ui.coWho) ? S.ui.coWho : SALES.includes(me) ? me : SALES[0], name: "Liste du " + fmtD(today()) },
+    fields:[{k:"name",label:"Nom de la liste",half:true,req:"Donne un nom."},{k:"owner",label:"Commercial qui appelle",type:"select",options:full ? SALES : [me],half:true},{k:"target",label:"Ciblage (facultatif)"},{k:"txt",label:"La liste",type:"textarea",rows:10,req:"Colle la liste."}],
+    onSave: async o => { const rows = o.txt.split("\n").map(l => l.trim()).filter(Boolean).map(l => l.split(/\t|\s*[;|]\s*/)).filter(c => c[0] && !/^entreprise$/i.test(c[0])).map(c => ({ company: c[0], phone: c[1] || "", city: c[2] || "", contact: c[3] || "", notes: c.slice(4).join(" ") }));
+      if (!rows.length){ toast("Aucune ligne lisible."); throw new Error("vide"); }
+      const r = await GC.api("POST","/api/g-calllist", { name: o.name, owner: o.owner, target: o.target, rows }); S.ui.coKind = "Appels"; S.ui.clList = o.name; S.ui.clSt = ""; remember(); toast(r.n + " entreprises ajoutées à « " + o.name + " »."); },
+    done: "Liste créée." });
+}
+(function(){ const st = document.createElement("style"); st.textContent = ".cl-ph{display:flex;gap:8px;align-items:center}.cl-tel{color:#C6FF33;font-weight:600;white-space:nowrap}.cl-pin{width:120px}.cl-find{font-size:12px;color:var(--muted,#9a9a94);text-decoration:underline}.cl-res .cl-list{list-style:none;margin:6px 0;padding:0;max-height:38vh;overflow:auto;display:grid;gap:4px}.cl-list li{display:flex;gap:10px;align-items:center;padding:4px 0;border-bottom:1px solid var(--line-2)}"; document.head.appendChild(st); })();
 
 /* ---------- Campagnes ---------- */
 function vCampagnes(root){
