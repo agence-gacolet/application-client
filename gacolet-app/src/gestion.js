@@ -6,7 +6,7 @@ const fs = require("fs");
 const crypto = require("crypto");
 const multer = require("multer");
 
-const COLLS = ["events", "tasks", "commercial", "campaigns", "rushes", "publications", "clients", "cevents", "keydates", "posts", "edtodo", "meta", "messages", "formations", "msheets", "idees", "pilotage", "ca", "finance", "strategies", "shoots"];
+const COLLS = ["events", "tasks", "commercial", "campaigns", "rushes", "publications", "clients", "cevents", "keydates", "posts", "edtodo", "meta", "messages", "formations", "msheets", "idees", "pilotage", "ca", "finance", "strategies", "shoots", "vrooms"];
 const ROLES = ["owner", "member", "commercial"];
 const ACCESS = {
   member: {
@@ -20,7 +20,7 @@ const ACCESS = {
 };
 /* Pages : chaque page donne accès aux données dont elle a besoin. Les rôles ont des pages par défaut,
    modifiables par les propriétaires (interrupteurs dans Paramètres), plus des pages données à une personne, pour toujours ou pour un temps. */
-const VIEW_COLLS = { agenda: ["events", "tasks", "cevents", "keydates", "posts"], taches: ["tasks"], messagerie: ["messages"], vocal: [], focus: [], formation: ["formations"],
+const VIEW_COLLS = { agenda: ["events", "tasks", "cevents", "keydates", "posts"], taches: ["tasks"], messagerie: ["messages"], vocal: ["vrooms"], focus: [], formation: ["formations"],
   commercial: ["commercial"], clients: ["clients", "cevents", "keydates"], montage: ["rushes"], tournage: ["shoots", "rushes", "events", "clients"], publications: ["publications", "posts", "edtodo"],
   campagnes: ["campaigns", "meta", "msheets"], fiches: ["clients"], idees: ["idees"], strategie: ["strategies", "clients"] };
 const DEFAULT_VIEWS = { member: ["agenda", "taches", "messagerie", "vocal", "focus", "formation"],
@@ -148,6 +148,7 @@ module.exports = function (app, { db, wrap, root }) {
     if (!canRead(u, col)) return false;
     if (col === "messages" && String(d.ch || "").startsWith("dm:")) return String(d.ch).slice(3).split("|").includes(u.name);
     if (col === "messages" && String(d.ch || "").startsWith("cdm:")) return String(d.ch).split("|")[1] === u.name;
+    if (col === "vrooms") return (d.members || []).includes(u.name); // salon vocal privé : seulement ses participants, accès complet compris
     if (u.role === "owner") return true;
     if (col === "tasks") return d.who === u.name;
     if (col === "commercial") return (d.owner || "Gabriel") === u.name; // chaque commercial ne voit que ses lignes
@@ -162,6 +163,12 @@ module.exports = function (app, { db, wrap, root }) {
       if (after && String(after.ch || "").startsWith("dm:") && !String(after.ch).slice(3).split("|").includes(u.name)) return "Conversation privée.";
       if (before && !after && String(before.ch || "").startsWith("dm:") && before.who !== u.name) return "Conversation privée.";
       if (after && String(after.ch || "").startsWith("cdm:") && String(after.ch).split("|")[1] !== u.name) return "Conversation privée.";
+      return "";
+    }
+    if (col === "vrooms") {
+      if (before && !(before.members || []).includes(u.name)) return "Salon privé.";
+      if (after && (!(after.members || []).includes(u.name) || !/^sx[a-z]{6,18}$/.test(String(after.room || "")))) return "Salon refusé.";
+      if (!before && after && after.by !== u.name) return "Salon refusé.";
       return "";
     }
     if (u.role === "owner") return "";
@@ -492,11 +499,18 @@ module.exports = function (app, { db, wrap, root }) {
     res.json({ ok: true, at: ev.at });
   };
   const hLeave = (req, res) => { const b = req.body || {}, room = String(b.room || ""); if (peerOf(req, room, b.pid)) dropPeer(room, String(b.pid)); res.json({ ok: true }); };
-  app.get("/api/rtc/state", auth, (req, res) => {
-    const rooms = {}; RTC.forEach((m, room) => { rooms[room] = [...new Set([...m.values()].map(p => p.name))]; });
+  // Salons privés (« sx… ») : seuls leurs participants les voient et peuvent y entrer
+  async function privRooms(u) { const ok = new Set(); for (const r of await db.all("SELECT data FROM docs WHERE col = 'vrooms' AND deleted = 0")) { try { const d = JSON.parse(r.data || "{}"); if ((d.members || []).includes(u.name)) ok.add(d.room); } catch (e) {} } return ok; }
+  app.get("/api/rtc/state", auth, wrap(async (req, res) => {
+    const mine = [...RTC.keys()].some(r => r.startsWith("sx")) ? await privRooms(req.user) : new Set();
+    const rooms = {}; RTC.forEach((m, room) => { if (room.startsWith("sx") && !mine.has(room)) return; rooms[room] = [...new Set([...m.values()].map(p => p.name))]; });
     res.json({ rooms });
-  });
-  app.post("/api/rtc/join", auth, hJoin);
+  }));
+  app.post("/api/rtc/join", auth, wrap(async (req, res) => {
+    const room = String((req.body || {}).room || "");
+    if (room.startsWith("sx") && !(await privRooms(req.user)).has(room)) return res.status(403).json({ error: "Salon privé : tu n’y participes pas." });
+    hJoin(req, res);
+  }));
   app.get("/api/rtc/poll", auth, hPoll);
   app.post("/api/rtc/signal", auth, hSignal);
   app.post("/api/rtc/chat", auth, hChat);
@@ -798,6 +812,55 @@ module.exports = function (app, { db, wrap, root }) {
     await put("messages", newId(), msg); pushMsg(msg, req.cl).catch(() => {});
     res.json({ ok: true });
   }));
+  // ---------- Bilan mensuel d'un client : calculé à partir de ce que l'appli sait déjà, complété par l'agence. INTERNE : sert à Gabriel pour faire le point avec le client, jamais affiché dans l'espace client ----------
+  const { fetchMonth } = require("./metricool");
+  const okMonth = m => /^\d{4}-(0[1-9]|1[0-2])$/.test(String(m || ""));
+  async function bilanData(cid, month) {
+    const c = await db.one("SELECT * FROM clients WHERE id = ?", [cid]); if (!c) return null;
+    const mods = String(c.modules || "com").split(",");
+    let posts = [], postsError = "";
+    if (mods.includes("com") && c.metricool_blog_id) { try { posts = await fetchMonth(c.metricool_blog_id, month); } catch (e) { postsError = "Planning Metricool indisponible."; } }
+    else if (mods.includes("com")) postsError = "Pas de compte Metricool relié à ce client.";
+    const nets = {}; posts.forEach(p => String(p.net || "").split(", ").filter(Boolean).forEach(n => { nets[n] = (nets[n] || 0) + 1; }));
+    const types = {}; posts.forEach(p => { types[p.type] = (types[p.type] || 0) + 1; });
+    const decs = await db.all("SELECT post_id, status FROM decisions WHERE client_id = ? AND post_date LIKE ? ORDER BY id", [cid, month + "%"]);
+    const lastDec = {}; decs.forEach(d => { lastDec[d.post_id] = d.status; });
+    const vals = Object.values(lastDec);
+    let meta = null;
+    if (mods.includes("meta")) {
+      const ls = await db.all("SELECT date, title, qualified FROM leads WHERE client_id = ? AND date LIKE ? ORDER BY date", [cid, month + "%"]);
+      meta = { total: ls.length, qualified: ls.filter(l => Number(l.qualified) === 1).length, rejected: ls.filter(l => Number(l.qualified) === 0).length, goal: Number(c.contacts_goal) || 0, def: c.qualified_definition || "",
+        byWeek: [1, 2, 3, 4, 5].map(w => ls.filter(l => Math.min(5, Math.ceil(Number(l.date.slice(8, 10)) / 7)) === w).length) };
+    }
+    const shoots = (await docsLike("shoots", '"date":"' + month)).filter(s => sameName(s.client, c.name));
+    const vids = shoots.flatMap(s => (s.videos || []).filter(v => v.status === "fait"));
+    const stats = (await db.all("SELECT module, data, source FROM stats WHERE client_id = ? AND period = ?", [cid, month])).map(s => { let d = {}; try { d = JSON.parse(s.data || "{}"); } catch (e) {} return { module: s.module, data: d, source: s.source }; });
+    return { client: { id: c.id, name: c.name, modules: mods }, month,
+      posts: { count: posts.length, published: posts.filter(p => p.published || p.date < new Date().toISOString().slice(0, 10)).length, nets, types, list: posts.slice(0, 40).map(p => ({ date: p.date, type: p.type, net: p.net, title: p.title, url: p.url })), error: postsError },
+      validations: { ok: vals.filter(v => v === "ok").length, mod: vals.filter(v => v === "mod").length },
+      meta, shoots: { count: shoots.length, videos: vids.length, dates: shoots.map(s => s.date).sort() }, stats };
+  }
+  const bilanId = (cid, m) => "c" + cid + "-" + m;
+  app.get("/api/g-bilan/:cid", auth, ownerOnly, wrap(async (req, res) => {
+    const cid = Number(req.params.cid), m = String(req.query.m || ""); if (!cid || !okMonth(m)) return res.status(400).json({ error: "Demande invalide." });
+    const data = await bilanData(cid, m); if (!data) return res.status(404).json({ error: "Client introuvable." });
+    res.json({ data, saved: await current("_bilans", bilanId(cid, m)) });
+  }));
+  app.get("/api/g-bilans", auth, ownerOnly, wrap(async (req, res) => {
+    const m = String(req.query.m || ""); if (!okMonth(m)) return res.status(400).json({ error: "Demande invalide." });
+    const rows = await db.all("SELECT id, data FROM docs WHERE col = '_bilans' AND deleted = 0 AND id LIKE ?", ["%-" + m]);
+    res.json({ bilans: rows.map(r => { let d = {}; try { d = JSON.parse(r.data || "{}"); } catch (e) {} return { cid: d.cid, savedAt: d.savedAt || "", savedBy: d.savedBy || "" }; }) });
+  }));
+  app.put("/api/g-bilan/:cid", auth, ownerOnly, wrap(async (req, res) => {
+    const cid = Number(req.params.cid), b = req.body || {}, m = String(b.m || ""); if (!cid || !okMonth(m)) return res.status(400).json({ error: "Demande invalide." });
+    const data = await bilanData(cid, m); if (!data) return res.status(404).json({ error: "Client introuvable." });
+    const s = (v, n) => String(v == null ? "" : v).trim().slice(0, n), num = v => { const x = Number(String(v == null ? "" : v).replace(",", ".")); return isFinite(x) && x >= 0 ? Math.round(x) : null; };
+    const extra = { avis: num(b.extra && b.extra.avis), note: s(b.extra && b.extra.note, 10), appels: num(b.extra && b.extra.appels), mot: s(b.extra && b.extra.mot, 2000), next: s(b.extra && b.extra.next, 2000) };
+    const doc = { cid, month: m, data, extra, savedAt: new Date().toISOString(), savedBy: req.user.name, };
+    await put("_bilans", bilanId(cid, m), doc);
+    res.json({ ok: true, saved: doc });
+  }));
+
   // ---------- Notifications push de l’équipe : le message s’affiche en entier, comme sur WhatsApp ----------
   const PUSH = require("./push")(db);
   app.get("/api/g-push/key", auth, wrap(async (req, res) => res.json({ key: await PUSH.key() })));

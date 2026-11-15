@@ -70,4 +70,23 @@ function mapPost(p) {
   };
 }
 
-module.exports = { fetchScheduled };
+// Publications d'un mois passé (bilan mensuel) : du premier au dernier jour du mois « AAAA-MM »
+async function fetchMonth(blogId, month) {
+  const key = blogId + ":m:" + month, hit = cache.get(key);
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.posts;
+  let raw;
+  if (!process.env.METRICOOL_USER_TOKEN) raw = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "demo", "metricool-sample.json"), "utf8"));
+  else {
+    const [y, m] = month.split("-").map(Number), last = new Date(y, m, 0).getDate();
+    const q = new URLSearchParams({ blogId, userId: process.env.METRICOOL_USER_ID || "", start: month + "-01T00:00:00", end: month + "-" + String(last).padStart(2, "0") + "T23:59:59", timezone: "Europe/Paris" });
+    const res = await fetch(BASE + PATH_SCHEDULED + "?" + q, { headers: { "X-Mc-Auth": process.env.METRICOOL_USER_TOKEN, Accept: "application/json" } });
+    if (!res.ok) throw new Error("Metricool " + res.status);
+    raw = await res.json();
+  }
+  const arr = Array.isArray(raw) ? raw : Array.isArray(raw.data) ? raw.data : [];
+  const posts = arr.map(mapPost).filter(p => p.date.slice(0, 7) === month && p.label !== "Brouillon").sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+  cache.set(key, { at: Date.now(), posts });
+  return posts;
+}
+
+module.exports = { fetchScheduled, fetchMonth };
