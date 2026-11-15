@@ -614,14 +614,14 @@ const biLines = t => String(t || "").split(/\n+/).map(l => l.trim()).filter(Bool
 const biRange = m => { const [y, mo] = m.split("-").map(Number); const last = new Date(y, mo, 0).getDate(); return "01/" + String(mo).padStart(2, "0") + " au " + last + "/" + String(mo).padStart(2, "0") + "/" + y; };
 function biEvo(label, a, b){ if (a == null || b == null) return null; const d = b - a; if (/abonn|demandes|publications|vidéos|réels|avis|appels|ventes|devis/i.test(label) || Math.abs(a) < 1) return { t: (d > 0 ? "+" : "") + biFmt(d), up: d >= 0 }; const p = Math.round(100 * d / a); return { t: (p > 0 ? "+" : "") + p + " %", up: p >= 0 }; }
 function bilanSlides(d, x){
-  x = x || {}; const W = el("div","bs-deck"); const name = d.client.name, mo = biLabel(d.month), moName = MONTHS[Number(d.month.slice(5, 7)) - 1], pv = d.prev, pvLabel = pv ? biLabel(pv.month) : "";
+  x = x || {}; const W = el("div","bs-deck"); const P = d.period || { isMonth: true, range: biRange(d.month), days: new Date(Number(d.month.slice(0, 4)), Number(d.month.slice(5, 7)), 0).getDate() }, name = d.client.name, moName = P.isMonth ? MONTHS[Number(d.month.slice(5, 7)) - 1] : P.name, inP = P.isMonth ? "en " + moName : P.name, pv = d.prev, pvLabel = pv ? (String(pv.month).length > 7 ? "la période " + pv.label : biLabel(pv.month)) : "", pvIn = pv ? (String(pv.month).length > 7 ? "sur la période précédente" : "en " + MONTHS[Number(pv.month.slice(5, 7)) - 1]) : "";
   const slide = (dark, kick, title) => { const s = el("section","bs" + (dark ? " dark" : "")); if (kick) s.appendChild(el("p","bs-kick", kick)); if (title){ const h = el("h3","bs-h"); h.innerHTML = ""; h.textContent = title; s.appendChild(h); }
     if (!dark){ const f = el("footer","bs-foot"); f.append(el("span", null, name + " · Bilan du mois"), el("span", null, "Agence Gacolet")); s.appendChild(f); } W.appendChild(s); return s; };
   // 1. Couverture
   { const s = slide(true); const top = el("div","bs-top"); top.append(el("span","bs-brand","AGENCE GACOLET"), el("span","bs-cli", name)); s.appendChild(top);
-    const h = el("h2","bs-cover"); h.append(document.createTextNode("Le bilan"), el("br"), document.createTextNode((/^[aeiouyéè]/i.test(moName) ? "d’" : "de ")), el("em", null, moName)); s.appendChild(h);
+    const h = el("h2","bs-cover"); h.append(document.createTextNode("Le bilan"), el("br")); if (P.isMonth) h.appendChild(document.createTextNode((/^[aeiouyéè]/i.test(moName) ? "d’" : "de "))); h.appendChild(el("em", null, moName)); s.appendChild(h);
     s.appendChild(el("p","bs-lead","Les chiffres du mois, ce qui a été livré, ce qui a fonctionné, et ce que l’on propose pour le mois prochain."));
-    s.appendChild(el("p","bs-small","Période du " + biRange(d.month) + (pv ? ", comparée à " + pvLabel + "." : "."))); }
+    s.appendChild(el("p","bs-small","Période du " + P.range + (pv ? ", comparée à " + pvLabel + "." : "."))); }
   // 2. Les chiffres du mois
   { const rows = [];
     if (d.client.modules.includes("com")) { rows.push(["Publications", "sur la période", pv ? pv.posts : null, d.posts.count]); const v = n => (n && (n["Réel"] || 0) + (n["Réel test"] || 0)) || 0; rows.push(["Réels", "vidéos publiées", pv ? v(pv.types) : null, v(d.posts.types)]); }
@@ -632,12 +632,12 @@ function bilanSlides(d, x){
     rows.forEach(([l, sub, a, b]) => { const r = el("div","bs-tr"); const c1 = el("span"); c1.append(el("b", null, l), el("small", null, sub)); const e = biEvo(l, a, b); const ev = el("span"); if (e) ev.appendChild(el("i","bs-evo" + (e.up ? " up" : ""), e.t)); r.append(c1, el("span","bs-a", biFmt(a)), el("span","bs-b", biFmt(b)), ev); t.appendChild(r); });
     const box = el("div","bs-box dark"); box.append(el("p","bs-kick", x.topLabel || "Ce mois-ci"), el("b","bs-big", x.topNum || String(d.posts.count || (d.meta ? d.meta.total : 0))), el("p", null, x.topTxt || (x.topNum ? "" : d.posts.count ? "publications sur la période" : "demandes reçues")));
     g.append(t, box); s.insertBefore(g, s.querySelector(".bs-foot"));
-    s.insertBefore(el("p","bs-src", x.source || ("Source : Metricool (publications) et relevés de l’agence, du " + biRange(d.month) + (pv ? ", comparé à " + pvLabel : "") + ".")), s.querySelector(".bs-foot")); }
+    s.insertBefore(el("p","bs-src", x.source || ("Source : Metricool (publications) et relevés de l’agence, du " + P.range + (pv ? ", comparé à " + pvLabel : "") + ".")), s.querySelector(".bs-foot")); }
   // 3. Demandes Meta
   if (d.meta){ const m = d.meta, pc = m.goal ? Math.round(100 * m.qualified / m.goal) : null, bud = biNum(x.budget), cpl = bud != null && m.total ? bud / m.total : null;
-    const s = slide(false, "Publicité Meta", m.total + " demande" + (m.total > 1 ? "s" : "") + " reçue" + (m.total > 1 ? "s" : "") + " en " + moName); const k = el("div","bs-cards");
+    const s = slide(false, "Publicité Meta", m.total + " demande" + (m.total > 1 ? "s" : "") + " reçue" + (m.total > 1 ? "s" : "") + " " + inP); const k = el("div","bs-cards");
     const card = (n, txt, cls) => { const c = el("div","bs-card " + (cls || "")); c.append(el("b","bs-big", n), el("p", null, txt)); k.appendChild(c); };
-    card(String(m.total), "demandes reçues du " + biRange(d.month) + (pv && pv.meta ? " (" + pv.meta.total + " en " + MONTHS[Number(pv.month.slice(5, 7)) - 1] + ")" : ""));
+    card(String(m.total), "demandes reçues du " + P.range + (pv && pv.meta ? " (" + pv.meta.total + " " + pvIn + ")" : ""));
     card(String(m.qualified), "demande" + (m.qualified > 1 ? "s" : "") + " qualifiée" + (m.qualified > 1 ? "s" : "") + (m.goal ? " pour " + m.goal + " visées" : ""), "dark");
     if (pc != null) card(pc + " %", "de l’objectif de contacts qualifiés atteint");
     if (cpl != null) card(cpl.toFixed(2).replace(".", ",") + " €", "par demande, pour " + biFmt(bud) + " € de budget sur la période", "lemon");
@@ -645,7 +645,7 @@ function bilanSlides(d, x){
     const wk = el("div","bs-bars"); const mx = Math.max(1, ...m.byWeek); m.byWeek.forEach((v, i) => { const r = el("div","bs-bar"); const tr = el("span","bs-track"); const f = el("i"); f.style.width = Math.round(100 * v / mx) + "%"; tr.appendChild(f); r.append(el("span", null, "Semaine " + (i + 1)), tr, el("b", null, v + " demande" + (v > 1 ? "s" : ""))); wk.appendChild(r); });
     s.insertBefore(wk, s.querySelector(".bs-foot"));
     if (m.def) s.insertBefore(el("p","bs-quote","Demande qualifiée : " + m.def), s.querySelector(".bs-foot"));
-    s.insertBefore(el("p","bs-src","Source : demandes saisies par l’agence dans l’appli, du " + biRange(d.month) + (bud != null ? " ; budget relevé dans le gestionnaire de publicités Meta" : "") + "."), s.querySelector(".bs-foot")); }
+    s.insertBefore(el("p","bs-src","Source : demandes saisies par l’agence dans l’appli, du " + P.range + (bud != null ? " ; budget relevé dans le gestionnaire de publicités Meta" : "") + "."), s.querySelector(".bs-foot")); }
   // 4. Ce qui a été livré
   if (d.client.modules.includes("com")){ const s = slide(false, "", "Ce qui a été livré"); const g = el("div","bs-flow");
     const pr = el("div","bs-box light"); pr.append(el("p","bs-kick","Prévu"), el("b","bs-mid", x.prevu ? x.prevu.split("\n")[0] : d.fiche && d.fiche.perMonth ? d.fiche.perMonth + " publications" : "À préciser"), el("p", null, x.prevu ? biLines(x.prevu).slice(1).join(" ") : d.fiche && d.fiche.formula ? d.fiche.formula : "Le rythme prévu se renseigne dans la fiche du client."));
@@ -653,7 +653,7 @@ function bilanSlides(d, x){
     const lv = el("div","bs-box lemon"); const ty = Object.entries(d.posts.types).map(([k, v]) => v + " " + (k === "Réel test" ? "réel" + (v > 1 ? "s" : "") + " test" : k.toLowerCase() + (v > 1 ? "s" : ""))).join(", ");
     lv.append(el("p","bs-kick","Livré"), el("b","bs-mid", d.posts.count + " publication" + (d.posts.count > 1 ? "s" : "")), el("p", null, ty || "Aucune publication sur la période"));
     g.append(pr, ar, lv); s.insertBefore(g, s.querySelector(".bs-foot"));
-    const nDays = new Date(Number(d.month.slice(0, 4)), Number(d.month.slice(5, 7)), 0).getDate(), vids = (d.posts.types["Réel"] || 0) + (d.posts.types["Réel test"] || 0);
+    const nDays = P.days, vids = (d.posts.types["Réel"] || 0) + (d.posts.types["Réel test"] || 0);
     const f3 = el("div","bs-facts"); const fact = (b, t) => { const p = el("p"); p.append(el("b", null, b + " : "), document.createTextNode(t)); f3.appendChild(p); };
     fact("Rythme", d.posts.count + " publications en " + nDays + " jours, soit " + (d.posts.count * 7 / nDays).toFixed(1).replace(".", ",") + " par semaine.");
     if (d.posts.count) fact("Vidéo", vids + " réel" + (vids > 1 ? "s" : "") + " sur " + d.posts.count + " publications, soit " + Math.round(100 * vids / d.posts.count) + " %.");
@@ -672,8 +672,13 @@ function bilanSlides(d, x){
 }
 function vBilans(root){
   // Page volontairement minimale : un client, un mois, un bouton. Le bilan généré s'affiche dessous, prêt à imprimer ou à envoyer.
-  const months = []; { const d = new Date(); d.setDate(1); for (let i = 0; i < 7; i++){ months.push(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0")); d.setMonth(d.getMonth() - 1); } }
-  const m = months.includes(S.ui.biM) ? S.ui.biM : biPrev();
+  // Période libre (client arrivé en cours de mois…) ; par défaut, le mois dernier entier
+  const iso = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  const pm = biPrev(), pmEnd = iso(new Date(Number(pm.slice(0, 4)), Number(pm.slice(5, 7)), 0));
+  const okD = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ""));
+  let from = okD(S.ui.biFrom) ? S.ui.biFrom : pm + "-01", to = okD(S.ui.biTo) ? S.ui.biTo : pmEnd; if (to < from) to = from;
+  const fullMonth = from.slice(8) === "01" && to === iso(new Date(Number(from.slice(0, 4)), Number(from.slice(5, 7)), 0));
+  const m = fullMonth ? from.slice(0, 7) : from + "_" + to;
   if (!BI.cl){ if (!BI.clLoading){ BI.clLoading = true; GC.api("GET","/api/g-bilan-clients").then(r => { BI.cl = r.clients || []; }).catch(() => { BI.cl = (S.cgroups || []).map(c => ({ id: c.id, name: c.name, space: true })); }).then(() => { BI.clLoading = false; render(); }); }
     root.appendChild(el("div","sk sk-page")); return; }
   const cls = BI.cl.filter(c => !/^test/i.test(c.name)).sort((a, b) => a.name.localeCompare(b.name, "fr"));
@@ -683,7 +688,9 @@ function vBilans(root){
   const pick = (id, label, opts, val, on) => { const g = el("div","fgroup"); const lb = el("label","flabel", label); lb.htmlFor = id; const sel = el("select","pick"); sel.id = id;
     opts.forEach(([v, t]) => { const o = el("option", null, t); o.value = String(v); sel.appendChild(o); }); sel.value = String(val); sel.onchange = () => on(sel.value); g.append(lb, sel); f.appendChild(g); };
   pick("bi-c", "Client", cls.map(c => [c.id, c.name]), cur, v => { S.ui.biC = /^b\d+$/.test(v) ? v : Number(v); remember(); render(); });
-  pick("bi-m", "Mois", months.map(x => [x, biLabel(x)]), m, v => { S.ui.biM = v; remember(); render(); });
+  const dateF = (id, label, val, on) => { const g = el("div","fgroup"); const lb = el("label","flabel", label); lb.htmlFor = id; const i = el("input","pick"); i.type = "date"; i.id = id; i.value = val; i.onchange = () => { if (okD(i.value)) on(i.value); }; g.append(lb, i); f.appendChild(g); };
+  dateF("bi-du", "Du", from, v => { S.ui.biFrom = v; if (!okD(S.ui.biTo) || S.ui.biTo < v) S.ui.biTo = to < v ? v : to; remember(); render(); });
+  dateF("bi-au", "Au", to, v => { S.ui.biTo = v; if (!okD(S.ui.biFrom)) S.ui.biFrom = from; remember(); render(); });
   const k = cur + "|" + m, r = BI.data[k];
   const genB = btn(r && r.saved ? "Regénérer le bilan" : "Générer le bilan", "lemon", async () => {
     genB.disabled = true; genB.textContent = "Calcul en cours…";

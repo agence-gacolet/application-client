@@ -995,37 +995,58 @@ module.exports = function (app, { db, wrap, root }) {
   }));
   // ---------- Bilan mensuel d'un client : calculé à partir de ce que l'appli sait déjà, complété par l'agence. INTERNE : sert à Gabriel pour faire le point avec le client, jamais affiché dans l'espace client ----------
   const { fetchMonth } = require("./metricool");
-  const okMonth = m => /^\d{4}-(0[1-9]|1[0-2])$/.test(String(m || ""));
+  // Période d'un bilan : un mois « AAAA-MM », ou des dates libres « AAAA-MM-JJ_AAAA-MM-JJ » (client arrivé en cours de mois, par exemple)
+  const MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+  const isoD = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  const perOf = m => { m = String(m || ""); let from, to, isMonth = false;
+    if (/^\d{4}-(0[1-9]|1[0-2])$/.test(m)) { const [y, mo] = m.split("-").map(Number); from = m + "-01"; to = isoD(new Date(y, mo, 0)); isMonth = true; }
+    else { const r = m.match(/^(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})$/); if (!r) return null; from = r[1]; to = r[2]; }
+    const a = new Date(from + "T12:00:00"), b = new Date(to + "T12:00:00"); if (isNaN(a) || isNaN(b) || b < a) return null;
+    const days = Math.round((b - a) / 864e5) + 1; if (days > 370) return null;
+    // Si les dates couvrent exactement un mois, c'est ce mois
+    if (!isMonth && from.slice(8) === "01" && to === isoD(new Date(a.getFullYear(), a.getMonth() + 1, 0))) { isMonth = true; m = from.slice(0, 7); }
+    const dd = x => x.slice(8, 10) + "/" + x.slice(5, 7), mn = Number(from.slice(5, 7)) - 1;
+    let prev; if (isMonth) { const pa = new Date(a.getFullYear(), a.getMonth() - 1, 1); prev = isoD(pa).slice(0, 7); }
+    else { const pb = new Date(a); pb.setDate(pb.getDate() - 1); const pa = new Date(pb); pa.setDate(pa.getDate() - days + 1); prev = isoD(pa) + "_" + isoD(pb); }
+    const na = new Date(b); na.setDate(na.getDate() + 1);
+    return { key: m, from, to, days, isMonth, prev, month: from.slice(0, 7),
+      name: isMonth ? MOIS[mn] : "du " + dd(from) + " au " + dd(to),          // « octobre » ou « du 15/10 au 14/11 »
+      inL: isMonth ? "en " + MOIS[mn] : "du " + dd(from) + " au " + dd(to),   // « en octobre »
+      range: dd(from) + " au " + dd(to) + "/" + to.slice(0, 4),
+      nextName: MOIS[isMonth ? (mn + 1) % 12 : na.getMonth()] };
+  };
+  const okMonth = m => !!perOf(m);
   const prevMonth = m => { const [y, mo] = m.split("-").map(Number), d = new Date(y, mo - 2, 1); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); };
   async function bilanData(cid, month, noPrev) {
+    const P = perOf(month); if (!P) return null; month = P.key;
     // « b<id> » : client sans espace client, calculé directement à partir de sa marque Metricool
     let c; if (/^b\d+$/.test(String(cid))) { const pp = PUB_PLAN.find(x => x[1] === String(cid).slice(1)); if (!pp) return null; c = { id: cid, name: pp[0], modules: "com", metricool_blog_id: pp[1] }; }
     else c = await db.one("SELECT * FROM clients WHERE id = ?", [cid]); if (!c) return null;
     const mods = String(c.modules || "com").split(",");
     let posts = [], postsError = "";
-    if (mods.includes("com") && c.metricool_blog_id) { try { posts = await fetchMonth(c.metricool_blog_id, month); } catch (e) { postsError = "Planning Metricool indisponible."; } }
+    if (mods.includes("com") && c.metricool_blog_id) { try { posts = await fetchMonth(c.metricool_blog_id, P.isMonth ? P.key : [P.from, P.to]); } catch (e) { postsError = "Planning Metricool indisponible."; } }
     else if (mods.includes("com")) postsError = "Pas de compte Metricool relié à ce client.";
     // Les stories ne comptent pas comme publications du fil (elles restent comptées à part)
     const storyCount = posts.filter(p => p.type === "Story").length; posts = posts.filter(p => p.type !== "Story");
     const nets = {}; posts.forEach(p => String(p.net || "").split(", ").filter(Boolean).forEach(n => { nets[n] = (nets[n] || 0) + 1; }));
     const types = {}; posts.forEach(p => { types[p.type] = (types[p.type] || 0) + 1; });
-    const decs = await db.all("SELECT post_id, status FROM decisions WHERE client_id = ? AND post_date LIKE ? ORDER BY id", [cid, month + "%"]);
+    const decs = await db.all("SELECT post_id, status FROM decisions WHERE client_id = ? AND substr(post_date, 1, 10) BETWEEN ? AND ? ORDER BY id", [cid, P.from, P.to]);
     const lastDec = {}; decs.forEach(d => { lastDec[d.post_id] = d.status; });
     const vals = Object.values(lastDec);
     let meta = null;
     if (mods.includes("meta")) {
-      const ls = await db.all("SELECT date, title, qualified FROM leads WHERE client_id = ? AND date LIKE ? ORDER BY date", [cid, month + "%"]);
+      const ls = await db.all("SELECT date, title, qualified FROM leads WHERE client_id = ? AND substr(date, 1, 10) BETWEEN ? AND ? ORDER BY date", [cid, P.from, P.to]);
       meta = { total: ls.length, qualified: ls.filter(l => Number(l.qualified) === 1).length, rejected: ls.filter(l => Number(l.qualified) === 0).length, goal: Number(c.contacts_goal) || 0, def: c.qualified_definition || "",
-        byWeek: [1, 2, 3, 4, 5].map(w => ls.filter(l => Math.min(5, Math.ceil(Number(l.date.slice(8, 10)) / 7)) === w).length) };
+        byWeek: [1, 2, 3, 4, 5].map(w => ls.filter(l => Math.min(5, Math.floor((new Date(String(l.date).slice(0, 10) + "T12:00:00") - new Date(P.from + "T12:00:00")) / 6048e5) + 1) === w).length) };
     }
-    const shoots = (await docsLike("shoots", '"date":"' + month)).filter(s => sameName(s.client, c.name));
+    const shoots = (await docsLike("shoots", '"date":"')).filter(s => sameName(s.client, c.name) && String(s.date || "") >= P.from && String(s.date || "") <= P.to);
     const vids = shoots.flatMap(s => (s.videos || []).filter(v => v.status === "fait"));
-    const stats = (await db.all("SELECT module, data, source FROM stats WHERE client_id = ? AND period = ?", [cid, month])).map(s => { let d = {}; try { d = JSON.parse(s.data || "{}"); } catch (e) {} return { module: s.module, data: d, source: s.source }; });
+    const stats = (await db.all("SELECT module, data, source FROM stats WHERE client_id = ? AND period = ?", [cid, P.isMonth ? P.key : "-"])).map(s => { let d = {}; try { d = JSON.parse(s.data || "{}"); } catch (e) {} return { module: s.module, data: d, source: s.source }; });
     let prev = null, fiche = {};
-    if (!noPrev) { const pv = await bilanData(cid, prevMonth(month), true); prev = { month: pv.month, posts: pv.posts.count, types: pv.posts.types, meta: pv.meta ? { total: pv.meta.total, qualified: pv.meta.qualified } : null, videos: pv.shoots.videos };
+    if (!noPrev) { const pv = await bilanData(cid, P.prev, true); prev = { month: pv.month, label: pv.period.name, inL: pv.period.inL, posts: pv.posts.count, types: pv.posts.types, meta: pv.meta ? { total: pv.meta.total, qualified: pv.meta.qualified } : null, videos: pv.shoots.videos };
       const f = (await db.all("SELECT data FROM docs WHERE col = 'clients' AND deleted = 0")).map(r => { try { return JSON.parse(r.data || "{}"); } catch (e) { return {}; } }).find(x => sameName(x.name, c.name)) || {};
       fiche = { formula: f.formula || c.formula || "", perMonth: f.perMonth || "" }; }
-    return { client: { id: c.id, name: c.name, modules: mods }, month, prev, fiche,
+    return { client: { id: c.id, name: c.name, modules: mods }, month, period: P, prev, fiche,
       posts: { count: posts.length, stories: storyCount, published: posts.filter(p => p.published || p.date < new Date().toISOString().slice(0, 10)).length, nets, types, list: posts.slice(0, 40).map(p => ({ date: p.date, type: p.type, net: p.net, title: p.title, url: p.url })), error: postsError },
       validations: { ok: vals.filter(v => v === "ok").length, mod: vals.filter(v => v === "mod").length },
       meta, shoots: { count: shoots.length, videos: vids.length, dates: shoots.map(s => s.date).sort() }, stats };
@@ -1073,7 +1094,7 @@ module.exports = function (app, { db, wrap, root }) {
     res.json({ ok: true, saved: doc });
   }));
 
-  require("./bilangen")({ app, auth, ownerOnly, wrap, db, put, bilanData, normName });
+  require("./bilangen")({ app, auth, ownerOnly, wrap, db, put, bilanData, normName, perOf });
 
   // ---------- Notifications push de l’équipe : le message s’affiche en entier, comme sur WhatsApp ----------
   const PUSH = require("./push")(db);
