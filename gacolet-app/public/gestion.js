@@ -772,11 +772,11 @@ function head(title, sub, tools){
   if (sub) l.appendChild(el("p","sub",sub));
   const h1 = el("h1"); if (Array.isArray(title)){ h1.append(document.createTextNode(title[0]+" ")); h1.appendChild(el("span","yr",title[1])); } else h1.textContent = title;
   l.appendChild(h1); h.appendChild(l);
-  if (tools){ const t = el("div","tools"); tools.forEach(x => x && t.appendChild(x)); h.appendChild(t); }
+  if (tools){ const t = el("div","tools"); tools.forEach(x => x && t.appendChild(x)); h.appendChild(t); if (t.querySelector(".btn.add")) h.classList.add("has-add"); if (!t.children.length) t.remove(); }
   return h;
 }
 function btn(label, cls, fn){ const b = el("button","btn "+(cls||""), label); b.onclick = fn; return b; }
-function addBtn(label, fn){ const b = btn(label, "lemon", fn); if (!writable()) b.disabled = true; return b; }
+function addBtn(label, fn){ const b = btn(label, "lemon add", fn); b.setAttribute("aria-label", label); b.title = label; if (!writable()) b.disabled = true; return b; }
 function segm(options, value, onPick){ const s = el("div","seg"); s.setAttribute("role","group"); options.forEach(([v,l]) => { const b = el("button",null,l); b.setAttribute("aria-pressed", String(v === value)); b.onclick = () => onPick(v); s.appendChild(b); }); return s; }
 function chipBar(options, value, onPick, counts){ const c = el("div","chips"); options.forEach(([v,l]) => { const b = el("button","chip",l); if (counts && counts[v] != null) b.appendChild(el("span","c",String(counts[v]))); b.setAttribute("aria-pressed", String(v === value)); b.onclick = () => onPick(v); c.appendChild(b); }); return c; }
 function table(cols){ const w = el("div","tw"); const t = el("table","t"); const th = el("tr"); cols.forEach(c => th.appendChild(el("th", c[0] === "~" ? "hm" : null, c.replace(/^~/,"")))); const thead = el("thead"); thead.appendChild(th); t.appendChild(thead); const tb = el("tbody"); t.appendChild(tb); w.appendChild(t); return {w, tb}; }
@@ -1410,7 +1410,7 @@ function vMontage(root){
   [["","Tous les clients"]].concat(names.map(n => { const a = stock.filter(r => r.client === n).length, b = ready.filter(r => r.client === n).length; return [n, n + (a || b ? " (" + [a ? a + " en stock" : "", b ? b + " prêt" + (b > 1 ? "s" : "") : ""].filter(Boolean).join(", ") + ")" : "")]; })).forEach(([val,l]) => { const o = el("option",null,l); o.value = val; sel.appendChild(o); });
   sel.value = C; sel.onchange = () => { S.ui.ruClient = sel.value; remember(); render(); }; g.appendChild(sel); f.appendChild(g); root.appendChild(f);
   // Deux colonnes : stock à gauche, prêt à poster à droite (l'une sous l'autre sur petit écran)
-  const cols = el("div"); cols.style.cssText = "display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:24px;align-items:start"; const colA = el("section"), colB = el("section"); cols.append(colA, colB); root.appendChild(cols);
+  const cols = el("div"); cols.style.cssText = "display:grid;grid-template-columns:repeat(auto-fit,minmax(min(440px,100%),1fr));gap:24px;align-items:start"; const colA = el("section"), colB = el("section"); cols.append(colA, colB); root.appendChild(cols);
   const rows = stock.filter(inC).sort((a,b) => (a.client||"").localeCompare(b.client||"","fr") || (a.shotAt||"").localeCompare(b.shotAt||""));
   colA.appendChild(el("h2","fin-h","Stock de rushs" + (rows.length ? " (" + rows.length + ")" : "")));
   { const {w, tb} = table(["Client","Rush","Tâche"]);
