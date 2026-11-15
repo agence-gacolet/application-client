@@ -826,6 +826,8 @@ module.exports = function (app, { db, wrap, root }) {
       const rows = (Array.isArray(b.rows) ? b.rows : []).slice(0, 300); let n = 0; const st = String(b.stamp || "").slice(0, 40);
       const S2 = (v, k) => String(v == null ? "" : v).trim().slice(0, k);
       for (const r of rows) { const company = S2(r.company, 120); if (!company) continue;
+        // Numéro manquant (liste de l'annuaire) : cherché sur Google Maps quand la clé est là
+        if (!r.phone && process.env.GOOGLE_PLACES_KEY) { try { const g = await placesSearch(company + " " + (r.address || r.city || ""), 1, new Set()); if (g[0] && g[0].phone) { r.phone = g[0].phone; r.web = r.web || g[0].web; r.rating = r.rating || g[0].rating; } } catch (e) {} }
         await put("commercial", newId(), { kind: "Appel", list: name, owner, company, phone: S2(r.phone, 40), web: S2(r.web, 200), rating: S2(r.rating, 40), city: S2(r.city, 80), address: S2(r.address, 200), contact: S2(r.contact, 120), activity: S2(r.activity, 20), siren: S2(r.siren, 12), notes: S2(r.notes, 1000), target: S2(b.target, 300), callStatus: "", createdAt: stamp(), createdBy: req.user.name, order: 999 }); n++; }
       bump(); return res.json({ ok: true, n });
     }
