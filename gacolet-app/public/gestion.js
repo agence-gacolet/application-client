@@ -3343,7 +3343,9 @@ function openMore(){
   if (document.querySelector(".dr-wrap")) return;
   const me = S.me || "Gabriel", t = (S.team || []).find(x => x.name === me) || {};
   const wrap = el("div","dr-wrap"), pan = el("aside","dr"); pan.setAttribute("role","dialog"); pan.setAttribute("aria-label","Menu"); wrap.appendChild(pan);
-  const close = () => { wrap.classList.remove("open"); setTimeout(() => wrap.remove(), 260); document.removeEventListener("keydown", esc); };
+  const sy = window.scrollY, B = document.body; B.style.position = "fixed"; B.style.top = (-sy) + "px"; B.style.left = "0"; B.style.right = "0"; B.classList.add("dr-lock"); // la page derrière ne défile plus
+  const unlock = () => { B.style.position = B.style.top = B.style.left = B.style.right = ""; B.classList.remove("dr-lock"); window.scrollTo(0, sy); };
+  const close = () => { wrap.classList.remove("open"); setTimeout(() => wrap.remove(), 260); unlock(); document.removeEventListener("keydown", esc); };
   const esc = e => { if (e.key === "Escape") close(); }; document.addEventListener("keydown", esc);
   wrap.onclick = e => { if (e.target === wrap) close(); };
   const top = el("div","dr-top"); const av = avatarEl(me, 64); top.appendChild(av);
@@ -3353,8 +3355,8 @@ function openMore(){
   const mine = openTasks().filter(x => x.who === me).length, unread = unreadRole() || 0;
   const st = el("div","dr-stats"); st.innerHTML = ""; [[mine, mine > 1 ? "tâches" : "tâche"], [unread, unread > 1 ? "messages non lus" : "message non lu"]].forEach(([n, l]) => { const x = el("span"); x.append(el("b", null, String(n)), document.createTextNode(" " + l)); st.appendChild(x); }); pan.appendChild(st);
   const main = S.role && S.role !== "owner" ? ["accueil","agenda","taches","messagerie"] : MOBILE_MAIN;
-  const nav = el("nav","dr-list"); NAV_GROUPS.flatMap(g => g[1]).filter(k => canSee(k) && !main.includes(k) && k !== "parametres").forEach(k => {
-    const a = el("a"); a.href = "#" + k; a.appendChild(ico(k)); a.appendChild(el("span", null, SHORT[k])); if (k === S.view) a.setAttribute("aria-current","page"); a.onclick = () => close(); nav.appendChild(a); });
+  const nav = el("nav","dr-list"); NAV_GROUPS.forEach(([lab, ks]) => { ks = ks.filter(k => canSee(k) && !main.includes(k) && k !== "parametres"); if (!ks.length) return; if (lab) nav.appendChild(el("span","dr-lab",lab));
+    ks.forEach(k => { const a = el("a"); a.href = "#" + k; a.appendChild(ico(k)); a.appendChild(el("span", null, SHORT[k])); if (k === S.view) a.setAttribute("aria-current","page"); a.onclick = () => close(); nav.appendChild(a); }); });
   pan.appendChild(nav);
   if (S.secours || !S.user){ const w = el("div","whobox"); w.appendChild(el("span","flabel","Je suis")); w.appendChild(segm(PEOPLE.map(p => [p,p]), S.me, p => { setMe(p); close(); })); pan.appendChild(w); }
   const sec = el("nav","dr-sec");
@@ -3362,9 +3364,13 @@ function openMore(){
   const a2 = el("button"); a2.type = "button"; a2.innerHTML = '<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M14 4.5H6.5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2H14M10 12h10M16.5 8.5 20 12l-3.5 3.5"/></svg>'; a2.appendChild(el("span", null, "Se déconnecter")); a2.onclick = () => window.GC && GC.logout();
   sec.append(a1, a2); pan.appendChild(sec);
   // Glisser vers la gauche pour fermer
-  let x0 = null; pan.addEventListener("touchstart", e => { x0 = e.touches[0].clientX; }, { passive: true });
-  pan.addEventListener("touchmove", e => { if (x0 == null) return; const dx = Math.min(0, e.touches[0].clientX - x0); pan.style.transform = "translateX(" + dx + "px)"; }, { passive: true });
-  pan.addEventListener("touchend", e => { if (x0 == null) return; const dx = (e.changedTouches[0].clientX - x0); pan.style.transform = ""; x0 = null; if (dx < -70) close(); });
+  // (seulement un vrai geste horizontal : un défilement vertical ne fait plus bouger le menu)
+  let x0 = null, y0 = 0, hz = null; pan.addEventListener("touchstart", e => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; hz = null; }, { passive: true });
+  pan.addEventListener("touchmove", e => { if (x0 == null) return; const dx = e.touches[0].clientX - x0, dy = e.touches[0].clientY - y0;
+    if (hz == null && (Math.abs(dx) > 10 || Math.abs(dy) > 10)) hz = Math.abs(dx) > Math.abs(dy) * 1.5 && dx < 0;
+    if (hz) pan.style.transform = "translateX(" + Math.min(0, dx) + "px)"; }, { passive: true });
+  pan.addEventListener("touchend", e => { if (x0 == null) return; const dx = (e.changedTouches[0].clientX - x0); pan.style.transform = ""; x0 = null; if (hz && dx < -70) close(); hz = null; });
+  wrap.addEventListener("touchmove", e => { if (e.target === wrap) e.preventDefault(); }, { passive: false });
   document.body.appendChild(wrap); requestAnimationFrame(() => wrap.classList.add("open"));
 }
 let rq = 0;
