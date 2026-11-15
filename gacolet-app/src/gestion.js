@@ -750,6 +750,21 @@ module.exports = function (app, { db, wrap, root }) {
   }
   app.get("/api/g-callsearch", auth, wrap(async (req, res) => {
     const no = allowed(req.user, "commercial", null, { kind: "Appel", owner: req.user.name }, null); if (no) return refuse(res, no);
+    // Recherche unique « au mieux » : Google Maps si la clé est là (téléphones, sites, avis), sinon l'annuaire de l'État.
+    // « where » accepte des villes ou des départements, traduits pour chaque source (geo.api.gouv.fr).
+    if (req.query.where != null && !req.query.src) {
+      const parts = String(req.query.where || "").split(/[,;]+/).map(x => x.trim()).filter(Boolean).slice(0, 6);
+      if (!parts.length) return res.status(400).json({ error: "Indique où chercher : une ville ou un département." });
+      const geo = async u => { try { const r = await fetch("https://geo.api.gouv.fr/" + u); return r.ok ? r.json() : null; } catch (e) { return null; } };
+      if (process.env.GOOGLE_PLACES_KEY) {
+        const names = []; for (const x of parts) { if (/^(\d{2}|2[AB])$/i.test(x)) { const d = await geo("departements/" + x.toUpperCase()); names.push(d && d.nom ? d.nom : x); } else if (/^\d{5}$/.test(x)) { const c = await geo("communes?codePostal=" + x + "&fields=nom&limit=1"); names.push(c && c[0] ? c[0].nom : x); } else names.push(x); }
+        req.query.src = "google"; req.query.where = names.join(","); req.query.what = String(req.query.what || req.query.label || "").trim();
+      } else {
+        const zone = []; for (const x of parts) { if (/^(\d{2}|2[AB]|\d{5})$/i.test(x)) zone.push(x); else { const c = await geo("communes?nom=" + encodeURIComponent(x) + "&fields=codesPostaux&boost=population&limit=1"); if (c && c[0]) zone.push(...(c[0].codesPostaux || []).slice(0, 6)); } }
+        if (!zone.length) return res.status(400).json({ error: "Je ne trouve pas « " + parts.join(", ") + " »." });
+        req.query.zone = zone.join(","); req.query.size = req.query.size || "1";
+      }
+    }
     if (req.query.src === "google") {
       const what = String(req.query.what || "").trim().slice(0, 80), where = String(req.query.where || "").split(/[,;]+/).map(x => x.trim()).filter(Boolean).slice(0, 5);
       if (!what || !where.length) return res.status(400).json({ error: "Indique quoi chercher et où (une ou plusieurs villes)." });

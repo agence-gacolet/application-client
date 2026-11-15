@@ -1903,7 +1903,7 @@ html.tg-lock,html.tg-lock body{overflow:hidden}
 @media (max-width:640px){
   .head{position:relative;gap:10px;padding:14px 0 12px;border-bottom:0}
   .head h1{font-size:34px;line-height:1.05;letter-spacing:.2px;overflow-wrap:anywhere}
-  .head .yr{display:block;font-size:22px;margin-top:2px;opacity:.55}
+  .head .yr{opacity:.6}
   .head.has-add>div:first-child{padding-right:52px}
   .head .sub{font-size:var(--fs-s);line-height:1.4;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .head .tools{gap:8px}
