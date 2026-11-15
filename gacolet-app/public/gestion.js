@@ -3256,11 +3256,11 @@ function pmCorbeille(w){
   c.appendChild(el("p","status","En cas de problème plus grave (données abîmées), une copie complète de l’appli est faite chaque jour sur le Mac de Matis, et Infomaniak garde 7 jours de sauvegardes."));
 }
 /* Google Sheets : les tableaux de suivi Meta lus directement par le serveur (compte de service), toutes les 10 minutes */
-function gsScript(key){
+function gsScript(){
   return `// Agence Gacolet : envoie les tableaux de suivi Meta à l'appli, toutes les 10 minutes.
 // Première fois : en haut, choisir « installer » puis cliquer sur Exécuter, et accepter l'autorisation Google.
 const APPLI = "${location.origin}/api/hook/gsheet";
-const CLE = "${key}";
+// Clé : donnée par l'appli au premier envoi (bouton « Jumeler » dans Paramètres > Liaisons), puis gardée dans le script
 const DOSSIER = "1tbY552gBJ2KXeitKQ7our4hVLp0Sda5X"; // dossier des tableaux de suivi Meta
 const IGNORE = /^(mode d|communes?$|listes?$|param)/i;
 
@@ -3278,8 +3278,17 @@ function fichiers(dossier, liste) {
   return liste;
 }
 
+function cle() {
+  var props = PropertiesService.getScriptProperties(), k = props.getProperty("cle");
+  if (k) return k;
+  var r = UrlFetchApp.fetch(APPLI, { method: "post", contentType: "application/json", payload: "{}", muteHttpExceptions: true });
+  var j = JSON.parse(r.getContentText() || "{}");
+  if (!j.pairKey) throw new Error("Jumelage refusé : clique d'abord sur « Jumeler » dans Paramètres > Liaisons de l'appli.");
+  props.setProperty("cle", j.pairKey); return j.pairKey;
+}
+
 function poster(files) {
-  var r = UrlFetchApp.fetch(APPLI, { method: "post", contentType: "application/json", headers: { "X-Gacolet-Key": CLE }, payload: JSON.stringify({ files: files }), muteHttpExceptions: true });
+  var r = UrlFetchApp.fetch(APPLI, { method: "post", contentType: "application/json", headers: { "X-Gacolet-Key": cle() }, payload: JSON.stringify({ files: files }), muteHttpExceptions: true });
   if (r.getResponseCode() !== 200) throw new Error("Appli : " + r.getResponseCode() + " " + r.getContentText().slice(0, 200));
   return JSON.parse(r.getContentText());
 }
@@ -3328,7 +3337,7 @@ function pmGsheets(w){
   } else {
     const ol = el("ol","steps");
     const li1 = el("li"); li1.append(document.createTextNode("Sur le compte agencegacolet@gmail.com, ouvre ")); const a1 = el("a", null, "script.google.com/create"); a1.href = "https://script.google.com/create"; a1.target = "_blank"; a1.rel = "noopener"; li1.appendChild(a1); li1.append(document.createTextNode(" (nouveau projet)."));
-    ol.append(li1, el("li", null, "Efface tout le texte, colle le script (bouton ci-dessous), puis enregistre (Cmd+S)."), el("li", null, "En haut, choisis « installer » dans la liste, clique sur Exécuter et accepte l’autorisation Google (Paramètres avancés > Accéder au projet)."), el("li", null, "Reviens ici : les tableaux apparaissent sous une minute."));
+    ol.append(li1, el("li", null, "Efface tout le texte, colle le script (bouton ci-dessous), puis enregistre (Cmd+S)."), el("li", null, "Clique sur « Jumeler » ci-dessous, puis dans le script choisis « installer », clique sur Exécuter et accepte l’autorisation Google (Paramètres avancés > Accéder au projet)."), el("li", null, "Reviens ici : les tableaux apparaissent sous une minute."));
     c.appendChild(ol);
   }
   const files = Object.entries(cfg.files || {}).sort((a, b) => a[1].name.localeCompare(b[1].name, "fr"));
@@ -3343,8 +3352,9 @@ function pmGsheets(w){
     c.appendChild(tw);
   } else if (G.configured) c.appendChild(el("p","empty","Aucun tableau reçu pour l’instant."));
   const a = el("div","pm-actions");
-  const cp = btn(G.configured ? "Copier le script" : "Copier le script", G.configured ? "" : "lemon", async () => { try { await navigator.clipboard.writeText(gsScript(G.pushKey)); toast("Script copié : colle-le dans script.google.com."); } catch(e){ toast("Copie impossible : " + e.message); } });
+  const cp = btn(G.configured ? "Copier le script" : "Copier le script", G.configured ? "" : "lemon", async () => { try { await navigator.clipboard.writeText(gsScript()); toast("Script copié : colle-le dans script.google.com."); } catch(e){ toast("Copie impossible : " + e.message); } });
   a.appendChild(cp);
+  const pr = btn("Jumeler (15 min)","", async () => { try { await GC.api("POST","/api/g-gsheets/pair"); toast("Jumelage ouvert 15 minutes : lance « installer » dans le script maintenant."); } catch(e){ toast(e.message); } }); a.appendChild(pr);
   if (G.configured){ const b = btn("Tout renvoyer","", async () => { b.disabled = true; try { const r = await GC.api("POST","/api/g-gsheets/run"); toast(r.queued ? "Tout sera renvoyé au prochain passage du script (10 min max)." : r.files + " tableau(x) relu(s)."); S.gs = null; render(); } catch(e){ toast(e.message); b.disabled = false; } }); a.appendChild(b); }
   c.appendChild(a);
 }

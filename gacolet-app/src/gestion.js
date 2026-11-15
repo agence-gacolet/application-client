@@ -646,8 +646,12 @@ module.exports = function (app, { db, wrap, root }) {
   app.get("/api/g-gsheets", auth, ownerOnly, wrap(async (req, res) => { const k = GS.sa(), key = await GS.pushKey(), cfg = await GS.cfg(); delete cfg.pushKey;
     res.json({ configured: !!k || !!cfg.lastPush, email: k ? k.client_email : "", pushKey: key, cfg }); }));
   // Réception du script Google de l'agence (clé générée par l'appli, montrée dans Paramètres > Liaisons)
+  // Jumelage : pendant 15 min après « Jumeler » (Paramètres > Liaisons), le premier appel sans clé reçoit la clé et la garde dans le script
+  let pairUntil = 0;
+  app.post("/api/g-gsheets/pair", auth, ownerOnly, wrap(async (req, res) => { pairUntil = Date.now() + 15 * 60000; res.json({ ok: true, until: new Date(pairUntil).toISOString() }); }));
   app.post("/api/hook/gsheet", wrap(async (req, res) => {
     await ensure(); const key = await GS.pushKey(), got = String(req.get("x-gacolet-key") || req.query.key || "");
+    if (!got && Date.now() < pairUntil) { pairUntil = 0; return res.json({ pairKey: key }); }
     if (got.length !== key.length || !crypto.timingSafeEqual(Buffer.from(got), Buffer.from(key))) return res.status(401).json({ error: "Clé refusée." });
     res.json(await GS.push(req.body));
   }));
