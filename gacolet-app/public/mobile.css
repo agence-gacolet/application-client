@@ -66,16 +66,38 @@
   .seg button{min-height:32px;border-radius:8px;font-size:var(--fs-s)}
 
   /* ---------- Agenda ---------- */
-  .ag-head .tools{display:grid;grid-template-columns:40px auto 40px minmax(0,1fr);gap:8px;align-items:center}
-  .ag-head .tools > .btn.icon{width:40px;padding:0;justify-content:center}
-  .ag-head .tools > .seg{grid-column:1 / -1;grid-row:1;display:grid;grid-template-columns:repeat(3,1fr);overflow:visible;flex-wrap:nowrap}
+  .ag-head .sub{display:none}
+  .ag-head .tools{display:grid;grid-template-columns:34px auto 34px 1fr;gap:6px;align-items:center}
+  .ag-head .tools > .seg{grid-column:1 / -1;grid-row:1;display:grid;grid-template-columns:repeat(3,1fr);margin-bottom:4px}
   .ag-head .tools > .seg button{width:100%}
+  .ag-head .tools > .btn.icon{width:34px;min-height:34px;height:34px;padding:0;justify-content:center;border-radius:50%}
+  .ag-head .tools > .btn:nth-child(2){min-height:34px;height:34px;padding:0 14px;border-radius:999px;font-size:var(--fs-s)}
   .ag-head .tools > .btn:not(.icon):not(.add):not(:nth-child(2)){display:none} /* « En tâches » et « PDF » : réservés à l'ordinateur */
-  .ag-f{display:flex!important;flex-wrap:nowrap;gap:8px;overflow-x:auto;scrollbar-width:none;margin:0 -16px;padding:0 16px 12px}
-  .ag-f::-webkit-scrollbar{display:none}
-  .ag-f .fgroup{flex:none}
+  .ag-f{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:0;padding:0 0 12px;overflow:visible}
+  .ag-f .fgroup{min-width:0}
   .ag-f .flabel{display:none}
-  .ag-f select.pick{width:auto;min-height:34px;padding:0 30px 0 14px;border-radius:999px;font-size:var(--fs-s)}
+  .ag-f select.pick{width:100%;min-width:0;min-height:34px;padding:0 24px 0 10px;border-radius:999px;font-size:var(--fs-xs);text-overflow:ellipsis;white-space:nowrap;overflow:hidden;background-position:right 8px center}
+
+  /* Lignes d'agenda (liste et jour choisi) : barre de couleur, titre, détail, heure à droite */
+  .lrow{grid-template-columns:4px minmax(0,1fr) auto!important;grid-template-areas:"bar txt meta";gap:0 12px!important;padding:11px 14px!important;border-radius:0;background:var(--card);border-bottom:.5px solid var(--line)}
+  .lrow:last-child{border-bottom:0}
+  .lrow:active{background:var(--hover)}
+  .lrow > .sw{grid-area:bar;width:4px!important;height:auto!important;align-self:stretch;border:0!important;border-radius:2px;background:var(--c)}
+  .lrow > span:not(.lm):not(.sw):not(.tag){grid-area:txt;min-width:0}
+  .lrow > .lm{grid-area:meta;align-self:center;font-size:var(--fs-xs)!important;color:var(--muted);white-space:nowrap}
+  .lrow .lt{font-size:var(--fs-m);line-height:1.3}
+  .lrow .lt + .lm{margin-top:2px;font-size:var(--fs-xs)}
+  .lrow .tag{display:none}
+  .litems{gap:0!important;border-radius:14px;overflow:hidden}
+  .lday{grid-template-columns:1fr!important;gap:8px!important;padding:14px 0 4px!important;border-bottom:0!important}
+  .ldate{display:flex;align-items:baseline;gap:8px;padding:0 4px}
+  .ldate b{font-size:var(--fs-xl)!important}
+  .ldate span{font-size:var(--fs-s)}
+  .daypanel .lrow:first-of-type{border-top-left-radius:14px;border-top-right-radius:14px}
+  .daypanel .lrow:has(+ .btn){border-bottom-left-radius:14px;border-bottom-right-radius:14px;border-bottom:0}
+  .daypanel{background:none!important;padding:0!important}
+  .daypanel h2{font-size:var(--fs-xl)!important;padding:0 4px}
+  .daypanel .btn.add{width:100%;justify-content:center;background:none;color:var(--lemon);border:1px dashed rgba(198,255,51,.35);box-shadow:none;min-height:42px}
 
   /* Semaine : un jour par ligne au lieu de 7 colonnes coupées */
   .week{display:flex!important;flex-direction:column;gap:0;overflow:visible;min-width:0;border-radius:14px;background:var(--card);border:0}
@@ -127,13 +149,18 @@
   /* ---------- Menu Plus : catégories, rien ne bouge, la page derrière est bloquée ---------- */
   .dr{overflow-x:hidden;overscroll-behavior:contain;touch-action:pan-y;-webkit-overflow-scrolling:touch}
   .dr-wrap{touch-action:none;overscroll-behavior:none}
-  .dr{left:auto!important;right:0;border-right:0;border-left:1px solid var(--line);transform:translateX(102%);box-shadow:-20px 0 60px rgba(0,0,0,.5)}
-  .dr-wrap.open .dr{transform:none}
   .dr-list{margin:4px 0 6px}
   .dr-lab{display:block;margin:18px 0 4px;font-size:var(--fs-xs);font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
   .dr-list a{gap:16px;padding:10px 0;font-size:var(--fs-xl);font-weight:600}
   .dr-list .ico{width:22px;height:22px}
   body.dr-lock{overflow:hidden}
+
+
+  /* ---------- Conversation ouverte : pas de barre d'onglets, saisie tout en bas (comme WhatsApp / Messages) ---------- */
+  body.chat-full:has(.wa.show-conv) .mtabs{display:none!important}
+  body.chat-full:has(.wa.show-conv) .wa{height:calc(100vh - 0px)!important;height:calc(100dvh - env(safe-area-inset-top,0px))!important}
+  body.chat-full:has(.wa.show-conv) .main,body.chat-full:has(.wa.show-conv) .in{padding-bottom:0!important;margin-bottom:0!important}
+  .wa.show-conv .wa-form{padding-bottom:max(8px,env(safe-area-inset-bottom,0px))}
 
   /* ---------- Fiches / formulaires ---------- */
   .modal{padding-top:10px}

@@ -3334,7 +3334,7 @@ function renderTabs(){
   const more = el("button","morebtn"); more.type = "button"; more.appendChild(ico("plus")); more.appendChild(el("span","lb","Plus"));
   if (!mm.includes(S.view)) more.setAttribute("aria-current","page");
   if (badge.messagerie) more.appendChild(el("span","n",String(badge.messagerie)));
-  more.onclick = openMore; m.appendChild(more);
+  more.onclick = openMore; m.insertBefore(more, m.firstChild); // à gauche, du côté où le menu s’ouvre
   $("#mbar-title").textContent = SHORT[S.view] || "";
   $("#me-name").textContent = me;
 }
@@ -3363,13 +3363,13 @@ function openMore(){
   const a1 = el("a"); a1.href = "#parametres"; a1.innerHTML = '<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.6-2-3.4-2.4.9a7.6 7.6 0 0 0-2.6-1.5L14 2.4h-4l-.4 2.5A7.6 7.6 0 0 0 7 6.4l-2.4-.9-2 3.4 2 1.6a7.6 7.6 0 0 0 0 3l-2 1.6 2 3.4 2.4-.9a7.6 7.6 0 0 0 2.6 1.5l.4 2.5h4l.4-2.5a7.6 7.6 0 0 0 2.6-1.5l2.4.9 2-3.4z"/></svg>'; a1.appendChild(el("span", null, "Paramètres")); a1.onclick = () => close();
   const a2 = el("button"); a2.type = "button"; a2.innerHTML = '<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M14 4.5H6.5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2H14M10 12h10M16.5 8.5 20 12l-3.5 3.5"/></svg>'; a2.appendChild(el("span", null, "Se déconnecter")); a2.onclick = () => window.GC && GC.logout();
   sec.append(a1, a2); pan.appendChild(sec);
-  // Glisser vers la droite pour fermer (le menu arrive par la droite, côté du bouton Plus)
+  // Glisser vers la gauche pour fermer
   // (seulement un vrai geste horizontal : un défilement vertical ne fait plus bouger le menu)
   let x0 = null, y0 = 0, hz = null; pan.addEventListener("touchstart", e => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; hz = null; }, { passive: true });
   pan.addEventListener("touchmove", e => { if (x0 == null) return; const dx = e.touches[0].clientX - x0, dy = e.touches[0].clientY - y0;
-    if (hz == null && (Math.abs(dx) > 10 || Math.abs(dy) > 10)) hz = Math.abs(dx) > Math.abs(dy) * 1.5 && dx > 0;
-    if (hz) pan.style.transform = "translateX(" + Math.max(0, dx) + "px)"; }, { passive: true });
-  pan.addEventListener("touchend", e => { if (x0 == null) return; const dx = (e.changedTouches[0].clientX - x0); pan.style.transform = ""; x0 = null; if (hz && dx > 70) close(); hz = null; });
+    if (hz == null && (Math.abs(dx) > 10 || Math.abs(dy) > 10)) hz = Math.abs(dx) > Math.abs(dy) * 1.5 && dx < 0;
+    if (hz) pan.style.transform = "translateX(" + Math.min(0, dx) + "px)"; }, { passive: true });
+  pan.addEventListener("touchend", e => { if (x0 == null) return; const dx = (e.changedTouches[0].clientX - x0); pan.style.transform = ""; x0 = null; if (hz && dx < -70) close(); hz = null; });
   wrap.addEventListener("touchmove", e => { if (e.target === wrap) e.preventDefault(); }, { passive: false });
   document.body.appendChild(wrap); requestAnimationFrame(() => wrap.classList.add("open"));
 }
