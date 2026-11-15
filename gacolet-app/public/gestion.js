@@ -1637,7 +1637,7 @@ function prodDrop(clients, host, opts){ opts = opts || {};
     try { const r = await GC.api("GET","/api/g-prod/slots?client=" + encodeURIComponent(client) + "&n=" + items.length);
     const used = new Set(items.filter(x => x.date).map(x => x.date)); const free = r.slots.filter(s => !used.has(s.date)); need.forEach(x => { const s = free.shift(); if (s){ x.date = s.date; x.time = s.time; x.reco = s.why || true; } }); draw(); } catch(e){ toast(e.message); } };
   const build = m => { m0 = m; m.classList.add(host ? "pd-page" : "pd-modal");
-    if (!host){ const t = el("h3", null, "Déposer des vidéos"); t.id = "mtitle"; m.appendChild(t); }
+    if (!host){ const t = el("h3", null, "Déposer des fichiers"); t.id = "mtitle"; m.appendChild(t); }
     m.appendChild(el("p","muted","Les dates suivent le rythme de la formule du client, après ce qui est déjà programmé. Tout est modifiable avant l’envoi." + (host ? "" : " Tu peux fermer cette fenêtre et faire autre chose : Claude continue, et tu retrouves tout ici en la rouvrant.")));
     const f = el("div","form"); const l = el("label", null, "Client"); const sel = el("select"); if (!client){ const o0 = el("option", null, "Choisir le client…"); o0.value = ""; sel.appendChild(o0); } clients.forEach(n => { const o = el("option", null, n + (PD.count(n) ? " (" + plural(PD.count(n), "fichier") + " en cours)" : "")); o.value = n; sel.appendChild(o); }); sel.value = client;
     sel.onchange = () => { client = sel.value; if (!client) return; const z = sel.querySelector("option[value='']"); if (z) z.remove(); S.ui.prodC = client; remember(); items = PD.list(client); next = {}; loadNext(); slots(); draw(); }; l.appendChild(sel); f.appendChild(l);
@@ -1714,9 +1714,9 @@ function vDepot(root){
   const mk = monthKey(); loadPubs(mk); const R = (S.pubs || {})[mk];
   const clients = R && (R.rows || R.plan) ? ["Agence Gacolet","Gabriel"].concat((R.rows || R.plan).filter(r => r.blogId).map(r => r.client)) : [];
   const launch = c => prodDrop(clients, null, { client: c });
-  root.appendChild(head("Dépôt", "Dépose les vidéos et visuels d’un client, puis ferme la fenêtre : Claude transcrit, propose la date et trois descriptions pendant que tu fais autre chose. Tu peux enchaîner plusieurs clients. Chaque fichier en cours apparaît ici.", [addBtn("Déposer des vidéos", () => launch(""))]));
+  root.appendChild(head("Dépôt", "Dépose les vidéos et visuels d’un client, puis ferme la fenêtre : Claude transcrit, propose la date et trois descriptions pendant que tu fais autre chose. Tu peux enchaîner plusieurs clients. Chaque fichier en cours apparaît ici.", [addBtn("Déposer des fichiers", () => launch(""))]));
   const all = []; Object.keys(PD.all).forEach(c => PD.all[c].forEach(it => all.push([c, it])));
-  if (!all.length){ root.appendChild(el("p","empty","Rien en cours. Clique sur « Déposer des vidéos » pour commencer.")); return; }
+  if (!all.length){ root.appendChild(el("p","empty","Rien en cours. Clique sur « Déposer des fichiers » pour commencer.")); return; }
   const st = it => it.busy ? ["Envoi du fichier…","run"] : it.wait ? [it.kind === "video" ? "Transcription et écriture…" : "Écriture…","run"] : it.props ? ["Prête, à relire","ok"] : !it.url ? ["Envoi interrompu","l3"] : ["En attente","" ];
   const order = it => it.busy || it.wait ? 1 : it.props ? 0 : 2;
   all.sort((a, b) => order(a[1]) - order(b[1]) || a[0].localeCompare(b[0], "fr"));
