@@ -24,7 +24,7 @@ const VIEWS = [
   ["accueil","Accueil"],["agenda","Agenda"],["taches","Tâches"],["messagerie","Messagerie"],["vocal","Vocal"],["commercial","Commercial"],["clients","Calendrier clients"],
   ["montage","Rushs"],["tournage","Feuilles de tournage"],["publications","Publications"],["campagnes","Campagnes"],["formation","Formation"],["parametres","Paramètres"],["fiches","Tableau clients"],["strategie","Stratégie"],["idees","Idées"],["focus","Focus"],["finance","Finance"],["chalet","Chalet"]
 ];
-const NAV_GROUPS = [["",["accueil"]],["Au quotidien",["agenda","taches","tournage","montage","messagerie","vocal"]],["Gestion",["fiches","strategie","commercial","publications","idees"]],["Meta",["campagnes"]],["Ressources",["formation"]],["Compte",["parametres"]]];
+const NAV_GROUPS = [["",["accueil"]],["Au quotidien",["agenda","taches","messagerie","vocal"]],["Production",["idees","strategie","tournage","montage","publications"]],["Clients",["commercial","fiches"]],["Publicité",["campagnes"]],["Ressources",["formation"]],["Compte",["parametres"]]];
 /* Onglets fusionnés : le calendrier clients vit dans l’agenda, le montage dans les tâches. */
 const MERGED = { clients: ["agenda","agHub"] };
 /* Pages par défaut d’un compte sans réglage par prénom. Le serveur applique les mêmes limites aux données. */
@@ -1203,6 +1203,7 @@ function callImport(){
 function metaNote(c){ const m = c.meta; if (!m) return null; const d = el("div","mt-meta");
   d.textContent = "Meta : " + (m.live && m.live.length ? plural(m.live.length, "active", "actives") : "rien d’actif") + (m.spend ? ", " + Math.round(m.spend) + " € ce mois" : "") + (m.leads ? ", " + plural(m.leads, "contact") : "");
   d.title = (m.account || "") + (m.live && m.live.length ? " : " + m.live.join(", ") : "") + "\nLu le " + (m.at ? new Date(m.at).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""); return d; }
+(function(){ const st = document.createElement("style"); st.textContent = ".pb-drop{margin:22px 0 8px;padding:20px 22px;border:1.5px dashed rgba(198,255,51,.45);border-radius:18px;background:var(--card)}.pb-dh{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px}.pb-dh h2{margin:0;font:400 var(--fs-3xl)/1 var(--display);font-style:italic;text-transform:uppercase}.pb-dh .note{flex:1 1 320px;margin:0}.pb-open{margin-top:16px;display:grid;gap:8px}.pb-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:8px 0;border-top:1px solid var(--line-2)}.pb-row .note{flex:1 1 200px}.pb-bh{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px;margin-top:34px}.pb-bh .fin-h{margin:0}.pb-nav{display:flex;gap:6px;flex-wrap:wrap}"; document.head.appendChild(st); })();
 (function(){ const st = document.createElement("style"); st.textContent = ".mt-meta{margin-top:4px;min-width:150px;font-size:var(--fs-xs,12px);line-height:1.35;color:var(--muted);white-space:normal}"; document.head.appendChild(st); })();
 function metaSyncBtn(){ const b = btn("Actualiser depuis Meta","", async () => { b.disabled = true; b.textContent = "Lecture de Meta…";
     try { const r = await GC.api("POST","/api/g-metaads/sync"); toast("État des campagnes lu sur Meta (" + plural(r.accounts, "compte") + ")."); } catch(e){ toast(e.message); } b.disabled = false; b.textContent = "Actualiser depuis Meta"; }); return b; }
@@ -1596,7 +1597,7 @@ const PD = { all: (() => { const a = store.get("pdDrafts") || {}; const old = st
 function pdPoll(){ if (PD.t) return; const tick = async () => { PD.t = 0; const w = Object.values(PD.all).flat().filter(x => x.wait); if (!w.length) return;
     for (const it of w){ try { const q = await GC.api("GET","/api/g-prod/describe/" + it.wait); if (q.status !== "done") continue;
       it.wait = ""; it.props = q.propositions; if (!it.text && it.props[0]) it.text = it.props[0]; PD.save();
-      if (!(PD.redraw && PD.redraw())) toast("Descriptions prêtes pour « " + it.name + " » : rouvre « Déposer des productions »."); } catch(e){} }
+      if (!(PD.redraw && PD.redraw())) { toast("Descriptions prêtes pour « " + it.name + " » : rouvre « Déposer des productions »."); if (S.view === "publications") render(); } } catch(e){} }
     PD.t = setTimeout(tick, 15000); };
   PD.t = setTimeout(tick, 2000); }
 setTimeout(pdPoll, 8000);
@@ -1704,10 +1705,23 @@ let pubAt = {}; function loadPubs(mk, force){ if (!force && Date.now() - (pubAt[
   GC.api("GET", "/api/g-pubs?month=" + mk + (force ? "&fresh=1" : "")).then(r => { S.pubs = Object.assign({}, S.pubs, { [mk]: r }); renderSoon(); }).catch(() => {}); }
 function vPublications(root){
   const mk = S.ui.pubM || monthKey(), R = (S.pubs || {})[mk]; loadPubs(mk);
-  const nav = [addBtn("Déposer des productions", () => { const R2 = (S.pubs || {})[mk]; prodDrop(R2 && (R2.rows || R2.plan) ? ["Agence Gacolet","Gabriel"].concat((R2.rows || R2.plan).filter(r => r.blogId).map(r => r.client)) : []); }), btn("‹","icon", () => { S.ui.pubM = addMonths(mk + "-01", -1).slice(0, 7); render(); }), btn("Ce mois","", () => { S.ui.pubM = ""; render(); }), btn("›","icon", () => { S.ui.pubM = addMonths(mk + "-01", 1).slice(0, 7); render(); }), btn("Actualiser","", () => { loadPubs(mk, true); toast("Lecture de Metricool…"); })];
+  const openDrop = () => { const R2 = (S.pubs || {})[mk]; prodDrop(R2 && (R2.rows || R2.plan) ? ["Agence Gacolet","Gabriel"].concat((R2.rows || R2.plan).filter(r => r.blogId).map(r => r.client)) : []); };
+  const mnav = [btn("‹","icon", () => { S.ui.pubM = addMonths(mk + "-01", -1).slice(0, 7); render(); }), btn("Ce mois","", () => { S.ui.pubM = ""; render(); }), btn("›","icon", () => { S.ui.pubM = addMonths(mk + "-01", 1).slice(0, 7); render(); }), btn("Actualiser","", () => { loadPubs(mk, true); toast("Lecture de Metricool…"); })];
   const rows = R ? (R.rows || R.plan || []) : [], tot = k => rows.reduce((a, r) => a + (Number(r[k]) || 0), 0);
   const plan = r => (Number(r.stat) || 0) + (Number(r.video) || 0), done = r => (r.statDone || 0) + (r.vidDone || 0), sched = r => (r.statSched || 0) + (r.vidSched || 0), totP = rows.reduce((a, r) => a + plan(r), 0);
-  root.appendChild(head(["Publications", monthLabel(mk)], "Le nombre de posts prévus au mois pour chaque client, face à ce qui est réellement posté sur Metricool (un post compté une fois, sur Instagram, ou Facebook à défaut ; stories exclues). " + totP + " posts prévus. Clique sur un client pour le détail.", nav));
+  root.appendChild(head("Publications", "En haut, tu déposes les vidéos et visuels à publier : Claude les écoute et prépare dates et descriptions. En bas, le bilan du mois lu sur Metricool."));
+  // 1. Espace de dépôt et de production
+  { const box = el("section","pb-drop"); const t1 = el("div","pb-dh"); t1.append(el("h2", null, "Déposer et produire"), el("p","note","Vidéos et visuels d’un client : Claude écoute la vidéo (ou regarde le visuel), propose la date et trois descriptions, puis tout part dans Metricool."));
+    const go = btn("Déposer des productions","lemon", openDrop); t1.appendChild(go); box.appendChild(t1);
+    const open = Object.keys(PD.all).filter(c => PD.all[c].length);
+    if (open.length){ const ul = el("div","pb-open"); ul.appendChild(el("div","flabel","En cours"));
+      open.forEach(c => { const l = PD.all[c], w = l.filter(x => x.wait).length, ready = l.filter(x => x.props).length; const r = el("div","pb-row");
+        r.append(clientTag(c), el("span","note", plural(l.length, "fichier") + (w ? ", " + w + " en cours d’écriture" : "") + (ready ? ", " + plural(ready, "description prête", "descriptions prêtes") : "")), btn("Reprendre","sm", () => { S.ui.prodC = c; remember(); openDrop(); })); ul.appendChild(r); });
+      box.appendChild(ul); }
+    root.appendChild(box); }
+  // 2. Bilan du mois
+  { const h = el("div","pb-bh"); h.appendChild(el("h2","fin-h",(/^[aeiouéèêh]/i.test(monthLabel(mk)) ? "Bilan d’" : "Bilan de ") + monthLabel(mk).toLowerCase())); const tl = el("div","pb-nav"); mnav.forEach(b => tl.appendChild(b)); h.appendChild(tl); root.appendChild(h);
+    root.appendChild(el("p","note", totP + " posts prévus au mois, face à ce qui est réellement posté sur Metricool (un post compté une fois, sur Instagram, ou Facebook à défaut ; stories exclues). Clique sur un client pour le détail.")); }
   if (!R){ root.appendChild(el("p","empty","Lecture de Metricool…")); return; }
   if (!R.ok) root.appendChild(el("p","status", R.reason === "no-token" ? "Metricool n’est pas encore relié au serveur : il manque la clé API Metricool (METRICOOL_USER_TOKEN) dans les variables d’environnement Infomaniak. Le prévu s’affiche, les compteurs se rempliront dès que la clé sera ajoutée." : "Metricool ne répond pas pour l’instant."));
   const t = today(), past = mk < monthKey(), cur = mk === monthKey();
