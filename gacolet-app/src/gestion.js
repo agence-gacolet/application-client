@@ -81,6 +81,7 @@ module.exports = function (app, { db, wrap, root }) {
   app.use(["/api/g", "/api/g-"], (req, res, next) => ensure().then(() => next(), e => res.status(500).json({ error: "Base indisponible.", detail: String(e.message || e).slice(0, 300) })));
   const okId = id => /^[\w.-]{1,120}$/.test(String(id || ""));
   const stamp = () => new Date().toISOString();
+  const STARTED = new Date().toISOString();
   const newId = () => Date.now().toString(36) + crypto.randomBytes(4).toString("hex");
 
   // ---------- Mots de passe et jetons ----------
@@ -708,7 +709,9 @@ module.exports = function (app, { db, wrap, root }) {
     if (!okCol(col) || !okId(id)) return res.status(400).json({ error: "Demande invalide." });
     const cur = await current(col, id);
     if (cur) { const no = allowed(req.user, col, cur, null, null); if (no) return refuse(res, no); }
-    await db.run("UPDATE docs SET deleted = 1, data = '{}', updated_at = ? WHERE col = ? AND id = ?", [stamp(), col, id]);
+    // Corbeille : le contenu est gardé 30 jours pour pouvoir le restaurer (sauf les messages, effacés pour de bon)
+    if (col === "messages") await db.run("UPDATE docs SET deleted = 1, data = '{}', updated_at = ? WHERE col = ? AND id = ?", [stamp(), col, id]);
+    else await db.run("UPDATE docs SET deleted = 1, updated_at = ? WHERE col = ? AND id = ?", [stamp(), col, id]);
     if (cur) await afterTask(col, id, null, req.user);
     res.json({ ok: true }); bump();
   }));
@@ -1101,4 +1104,75 @@ module.exports = function (app, { db, wrap, root }) {
   }));
   app.get(["/jeu", "/jeu/"], (req, res) => res.sendFile(path.join(root, "public", "jeu.html")));
   app.get(["/gestion", "/gestion/"], (req, res) => res.sendFile(path.join(root, "public", "gestion.html")));
+
+  // ---------- Corbeille : ce qui a été supprimé dans les 30 derniers jours, restaurable en un clic (accès complet) ----------
+  const titleOf = (col, d) => String(d.title || d.company || d.name || d.subject || d.label || d.content || d.text || (d.client ? (col === "shoots" ? "Tournage " : "") + d.client : "") || "Sans titre").slice(0, 120);
+  app.get("/api/g-corbeille", auth, ownerOnly, wrap(async (req, res) => {
+    const lim = new Date(Date.now() - 30 * 864e5).toISOString();
+    const rows = await db.all("SELECT col, id, data, updated_at FROM docs WHERE deleted = 1 AND updated_at >= ? AND data <> '{}' ORDER BY updated_at DESC LIMIT 300", [lim]);
+    res.json({ items: rows.filter(r => okCol(r.col) && r.col !== "messages" && !DUO_COLS.includes(r.col)).map(r => { let d = {}; try { d = JSON.parse(r.data || "{}"); } catch (e) {} return { col: r.col, id: r.id, title: titleOf(r.col, d), client: d.client || "", who: d.who || d.owner || "", at: r.updated_at }; }) });
+  }));
+  app.post("/api/g-corbeille/:col/:id", auth, ownerOnly, wrap(async (req, res) => {
+    const { col, id } = req.params; if (!okCol(col) || !okId(id) || col === "messages") return res.status(400).json({ error: "Demande invalide." });
+    const r = await db.one("SELECT data FROM docs WHERE col = ? AND id = ? AND deleted = 1", [col, id]);
+    if (!r || r.data === "{}") return res.status(404).json({ error: "Rien à restaurer : l’élément n’est plus dans la corbeille." });
+    await db.run("UPDATE docs SET deleted = 0, updated_at = ? WHERE col = ? AND id = ?", [stamp(), col, id]);
+    let d = {}; try { d = JSON.parse(r.data); } catch (e) {}
+    await afterTask(col, id, d, req.user); res.json({ ok: true }); bump();
+  }));
+
+  // ---------- Sauvegarde (copie hors Infomaniak, téléchargée chaque jour par 80_APPLICATION/sauvegarde.py sur le Mac) ----------
+  // Accès complet seulement. Toute la base, sauf les jetons de session des clients (inutiles pour restaurer).
+  app.get("/api/g-backup", auth, ownerOnly, wrap(async (req, res) => {
+    const names = process.env.DB_HOST
+      ? (await db.all("SHOW TABLES")).map(r => Object.values(r)[0])
+      : (await db.all("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")).map(r => r.name);
+    const tables = {};
+    for (const t of names) {
+      if (!/^[a-z0-9_]+$/i.test(t)) continue;
+      const rows = await db.all("SELECT * FROM `" + t + "`");
+      tables[t] = t === "users" ? rows.map(r => Object.assign({}, r, { token: "" })) : rows;
+    }
+    const files = [];
+    const walk = (dir, rel) => { let l = []; try { l = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return; }
+      for (const e of l) { const p = path.join(dir, e.name), r = rel ? rel + "/" + e.name : e.name;
+        if (e.isDirectory()) walk(p, r); else if (e.isFile()) files.push({ path: r, size: fs.statSync(p).size }); } };
+    walk(path.join(root, "uploads"), "");
+    res.json({ app: "gacolet", date: new Date().toISOString(), tables, files });
+  }));
+  app.get("/api/g-backup/file", auth, ownerOnly, (req, res) => {
+    const base = path.join(root, "uploads"), p = path.resolve(base, String(req.query.p || ""));
+    if (!p.startsWith(base + path.sep)) return res.status(400).end();
+    res.sendFile(p, err => { if (err && !res.headersSent) res.status(404).end(); });
+  });
+
+  // ---------- Mise à jour de l'appli depuis GitHub, sans passer par le Manager Infomaniak (Matis seulement) ----------
+  // Même chose que le bouton Build : git pull, copie de gacolet-app à la racine, npm install si besoin.
+  // Si le code du serveur a changé, l'appli s'arrête juste après la réponse pour repartir sur la nouvelle version.
+  const { execFile } = require("child_process");
+  const run = (cmd, args) => new Promise(ok => execFile(cmd, args, { cwd: root, timeout: 180000, maxBuffer: 4e6 }, (err, out, er) => ok({ code: err ? (err.code || 1) : 0, out: String(out || "") + String(er || "") })));
+  // Accès : Matis connecté, ou la clé de mise en ligne gardée dans le trousseau du Mac de Matis (en-tête X-Deploy-Key)
+  const deployKeyOk = req => { const k = String(req.get("x-deploy-key") || ""), want = process.env.DEPLOY_KEY || ""; return want.length >= 32 && k.length === want.length && crypto.timingSafeEqual(Buffer.from(k), Buffer.from(want)); };
+  const deployAuth = (req, res, next) => deployKeyOk(req) ? (req.user = { name: "Matis (Mac)", role: "owner" }, next()) : auth(req, res, () => onlyMatis(req, res, next));
+  const onlyMatis = (req, res, next) => req.user && req.user.role === "owner" && req.user.name === "Matis" ? next() : res.status(403).json({ error: "Réservé à Matis." });
+  // Enregistre la clé de mise en ligne dans le .env du serveur (accès complet, une fois)
+  app.put("/api/g-keys/deploy", auth, ownerOnly, wrap(async (req, res) => {
+    const k = String((req.body || {}).key || "").trim(); if (!/^[A-Za-z0-9_-]{32,128}$/.test(k)) return res.status(400).json({ error: "Clé invalide." });
+    const ENV = path.join(root, ".env"); let txt = ""; try { txt = fs.readFileSync(ENV, "utf8"); } catch (e) {}
+    txt = txt.split("\n").filter(l => l && !/^DEPLOY_KEY=/.test(l)).join("\n") + "\nDEPLOY_KEY='" + k + "'\n";
+    fs.writeFileSync(ENV, txt.replace(/^\n+/, ""), { mode: 0o600 }); process.env.DEPLOY_KEY = k; res.json({ ok: true });
+  }));
+  app.get("/api/g-deploy", deployAuth, wrap(async (req, res) => { const h = await run("git", ["rev-parse", "--short", "HEAD"]); res.json({ version: h.out.trim(), started: STARTED }); }));
+  app.post("/api/g-deploy", deployAuth, wrap(async (req, res) => {
+    const before = (await run("git", ["rev-parse", "HEAD"])).out.trim(), log = [];
+    const pull = await run("git", ["pull", "--ff-only"]); log.push("$ git pull\n" + pull.out);
+    if (pull.code) return res.status(500).json({ ok: false, log: log.join("\n") });
+    const after = (await run("git", ["rev-parse", "HEAD"])).out.trim();
+    const changed = before === after ? [] : (await run("git", ["diff", "--name-only", before, after])).out.split("\n").filter(Boolean);
+    if (changed.length) { const cp = await run("cp", ["-R", "gacolet-app/.", "./"]); log.push("$ cp -R gacolet-app/. ./\n" + cp.out); if (cp.code) return res.status(500).json({ ok: false, log: log.join("\n") }); }
+    if (changed.some(f => /package(-lock)?\.json$/.test(f))) { const ni = await run("npm", ["install", "--omit=dev"]); log.push("$ npm install\n" + ni.out.slice(-2000)); }
+    const restart = changed.some(f => /^gacolet-app\/(src\/|server\.js|package)/.test(f));
+    res.json({ ok: true, from: before.slice(0, 7), to: after.slice(0, 7), changed, restart, log: log.join("\n") });
+    if (restart) setTimeout(() => process.exit(0), 800);
+  }));
 };

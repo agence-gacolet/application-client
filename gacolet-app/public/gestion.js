@@ -3053,11 +3053,37 @@ function pmField(label, type, value, ac){ const l = el("label","pm-f"); l.append
 async function reloadUsers(){ try { const r = await GC.api("GET","/api/g-users"); S.users = r.users; } catch(e){ toast(e.message); if (!S.users) S.users = []; } render(); }
 
 function vParametres(root){
-  const tabs = [["compte","Mon compte"],["notif","Notifications"]].concat(S.role === "owner" ? [["equipe","Équipe et accès"],["codes","Codes clients"],["liaisons","Liaisons"]] : []).concat([["cgu","Conditions"]]);
+  const tabs = [["compte","Mon compte"],["notif","Notifications"]].concat(S.role === "owner" ? [["equipe","Équipe et accès"],["codes","Codes clients"],["corbeille","Corbeille"],["liaisons","Liaisons"]] : []).concat([["cgu","Conditions"]]);
   const tab = tabs.some(t => t[0] === S.ui.pmTab) ? S.ui.pmTab : (S.secours ? "equipe" : "compte");
   root.appendChild(head("Paramètres", "Ton compte, tes notifications, l’équipe et les règles de l’application.", [segm(tabs, tab, v => { S.ui.pmTab = v; remember(); render(); })]));
   const w = el("div","pm"); root.appendChild(w);
-  ({compte:pmCompte, notif:pmNotif, equipe:pmEquipe, codes:pmCodes, cgu:pmCgu, liaisons:pmLiaisons})[tab](w);
+  ({compte:pmCompte, notif:pmNotif, equipe:pmEquipe, codes:pmCodes, cgu:pmCgu, liaisons:pmLiaisons, corbeille:pmCorbeille})[tab](w);
+}
+/* Corbeille : tout ce qui a été supprimé depuis 30 jours (tâches, prospects, fiches, tournages, idées...), restaurable en un clic */
+const COL_LABEL = { tasks:"Tâche", commercial:"Commercial", clients:"Fiche client", events:"Agenda", shoots:"Tournage", idees:"Idée", rushes:"Rush", publications:"Publication", campaigns:"Campagne", cevents:"Temps fort", keydates:"Date clé", posts:"Com de l’agence", edtodo:"Tâche éditoriale", formations:"Formation", strategies:"Stratégie", vrooms:"Salon vocal", msheets:"Meta", meta:"Meta", pilotage:"Pilotage" };
+function pmCorbeille(w){
+  const c = pmCard("Corbeille", "Ce qui a été supprimé ces 30 derniers jours. « Restaurer » le remet exactement comme avant, pour tout le monde. Les messages supprimés ne sont pas gardés.");
+  w.appendChild(c);
+  if (!S.trash){ c.appendChild(skeleton(3)); GC.api("GET","/api/g-corbeille").then(r => { S.trash = r.items || []; render(); }).catch(e => { S.trash = []; toast(e.message); }); return; }
+  if (!S.trash.length){ c.appendChild(el("p","empty","La corbeille est vide.")); return; }
+  const {w: tw, tb} = table(["Supprimé le","Type","Élément","~Client",""]);
+  S.trash.forEach(it => { const tr = el("tr","row"); td(tr, fmtFR(it.at.slice(0, 10)) + " " + it.at.slice(11, 16).replace(":", " h "), "nw"); td(tr, COL_LABEL[it.col] || it.col, "nw"); td(tr, it.title, "ttl w"); td(tr, it.client ? clientTag(it.client) : "", "nw hm");
+    const b = btn("Restaurer","sm lemon", async () => { b.disabled = true; try { await GC.api("POST","/api/g-corbeille/" + it.col + "/" + it.id); S.trash = S.trash.filter(x => x !== it); toast((COL_LABEL[it.col] || "Élément") + " restauré : « " + it.title + " »."); render(); } catch(e){ b.disabled = false; toast(e.message); } });
+    b.disabled = !writable(); td(tr, b); tb.appendChild(tr); });
+  c.appendChild(tw);
+  c.appendChild(el("p","status","En cas de problème plus grave (données abîmées), une copie complète de l’appli est faite chaque jour sur le Mac de Matis, et Infomaniak garde 7 jours de sauvegardes."));
+}
+/* Mise à jour de l'appli depuis GitHub (Matis) : même chose que le bouton Build d'Infomaniak */
+function pmMaj(w){
+  if ((S.me || "") !== "Matis" || S.role !== "owner") return;
+  const c = pmCard("Version de l’appli", "Récupère la dernière version enregistrée sur GitHub et la met en ligne. L’appli redémarre seule si le serveur a changé (quelques secondes de coupure).");
+  const st = el("p","note","Vérification…"); c.appendChild(st);
+  GC.api("GET","/api/g-deploy").then(r => { st.textContent = "Version en ligne : " + r.version + ", démarrée le " + fmtFR(r.started.slice(0, 10)) + " à " + r.started.slice(11, 16).replace(":", " h ") + " (heure UTC)."; }).catch(e => { st.textContent = e.message; });
+  const out = el("pre","pm-log"); out.hidden = true;
+  const a = el("div","pm-actions"); const b = btn("Mettre à jour depuis GitHub","lemon", async () => { b.disabled = true; out.hidden = false; out.textContent = "Mise à jour…";
+    try { const r = await GC.api("POST","/api/g-deploy"); out.textContent = (r.changed.length ? "Version " + r.from + " → " + r.to + "\n" + r.changed.join("\n") : "Déjà à jour.") + (r.restart ? "\n\nL’appli redémarre : recharge la page dans 10 secondes." : ""); toast(r.changed.length ? "Appli mise à jour." : "Déjà à jour."); }
+    catch(e){ out.textContent = e.message; } b.disabled = false; });
+  a.appendChild(b); c.append(a, out); w.appendChild(c);
 }
 /* Liaisons : la clé Metricool se colle ici, le serveur la garde et ne la renvoie jamais */
 function pmLiaisons(w){
@@ -3068,6 +3094,7 @@ function pmLiaisons(w){
   const a = el("div","pm-actions"); const b = btn("Enregistrer la clé","lemon", async () => { const v = inp.value.trim(); if (!v) return toast("Colle d’abord la clé.");
     b.disabled = true; try { await GC.api("PUT","/api/g-keys/metricool",{ token: v }); inp.value = ""; toast("Metricool relié."); S.pubs = {}; pubAt = {}; render(); } catch(x){ toast(x.message || "Enregistrement impossible."); b.disabled = false; } });
   a.appendChild(b); c.appendChild(a); w.appendChild(c);
+  pmMaj(w);
 }
 
 function pmCompte(w){
