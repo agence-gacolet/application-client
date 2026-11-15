@@ -5,8 +5,11 @@
 /* ---------- Constantes ---------- */
 let PEOPLE = ["Gabriel","Matis","Clara"];
 let OWNERS = ["Gabriel","Matis","Clara","À attribuer"];
-const POLES = [["00","DIRECTION & DIVERS"],["10","STRATÉGIE & CONSEIL"],["20","PRODUCTION"],["30","GRAPHISME & IMPRESSION"],["40","RÉSEAUX SOCIAUX"],["50","PUBLICITÉ"],["60","WEB & RÉFÉRENCEMENT"]];
-const POLE = Object.fromEntries(POLES);
+const POLES = [["00","DIRECTION"],["CO","COMMERCIAL"],["20","PRODUCTION"],["30","GRAPHISME & PRINT"],["50","PUBLICITÉ"],["60","WEB"],["99","AUTRES"]];
+/* Anciennes catégories Stratégie & conseil et Réseaux sociaux : rangées dans Autres */
+const POLE_OLD = { "10": "99", "40": "99" };
+const poleOf = t => { const c = (t && t.pole) || "99"; return POLE_OLD[c] || c; };
+const POLE = Object.assign(Object.fromEntries(POLES), { "10": "AUTRES", "40": "AUTRES" });
 const EV_TYPES = ["Tournage","Éditorial","Maroudeur","Rendez-vous"];
 const EV_STATUS = ["Prévu","Fait","Annulé"];
 const CAMP_STATUS = ["En cours","À lancer","Arrêtée"];
@@ -19,7 +22,7 @@ const DAYS = ["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"]
 const DEFAULT_COLORS = {"Agence Gacolet":"#1D1D1B","AR Climatisation":"#E8833A","Bonobo":"#2E9E5B","Delta Sud Formation":"#D6334A","Domaine Pagezi":"#7A1F3D","Flora Design":"#C25CC9","France Étanchéité":"#2F6FE4","Gaufrement Bon":"#E3B505","Hugo Maître Nageur":"#1BA6C9","Insolent":"#5C5C57","KR Thermolaquage":"#8C6239","La Vie La Construction":"#F06A1D","Le Petit Mas":"#6E8B3D","Locamex":"#E2559C","Meyer-Pic":"#3D4FB5","Only Clean":"#17A398","Paillotte Bassamoise":"#F2A93B","SOS Pare-Brise Codognan":"#9B2226","SOS Pare-Brise Vendargues":"#4A6C8C","Sport Défense":"#8E44AD","The New Me Montpellier":"#D98BA5","Total Habitat 360":"#6C7A2E"};
 const VIEWS = [
   ["accueil","Accueil"],["agenda","Agenda"],["taches","Tâches"],["messagerie","Messagerie"],["vocal","Vocal"],["commercial","Commercial"],["clients","Calendrier clients"],
-  ["montage","Rushs"],["tournage","Feuilles de tournage"],["publications","Publications"],["campagnes","Campagnes"],["formation","Formation"],["parametres","Paramètres"],["fiches","Tableau clients"],["strategie","Stratégie"],["idees","Idées clients"],["focus","Focus"],["finance","Finance"],["chalet","Chalet"]
+  ["montage","Rushs"],["tournage","Feuilles de tournage"],["publications","Publications"],["campagnes","Campagnes"],["formation","Formation"],["parametres","Paramètres"],["fiches","Tableau clients"],["strategie","Stratégie"],["idees","Idées"],["focus","Focus"],["finance","Finance"],["chalet","Chalet"]
 ];
 const NAV_GROUPS = [["",["accueil"]],["Au quotidien",["agenda","taches","tournage","montage","messagerie","vocal"]],["Gestion",["fiches","strategie","commercial","publications","idees"]],["Meta",["campagnes"]],["Ressources",["formation"]],["Compte",["parametres"]]];
 /* Onglets fusionnés : le calendrier clients vit dans l’agenda, le montage dans les tâches. */
@@ -267,7 +270,7 @@ function agendaItems(){
   const L = new Set(S.ui.agLayers), out = [];
   if (L.has("events")) S.d.events.forEach(e => { if (!S.ui.agTypes.includes(e.type)) return; out.push({k:"events", date:e.date, time:e.time||"", client:e.client, label:e.title||e.type, who:e.who||[], ref:e, cls:"ev t-"+e.type+" s-"+(e.status||"Prévu"), meta:[e.type, e.place, (e.files||[]).length ? plural(e.files.length,"fichier") : ""].filter(Boolean).join(", "), tag:e.status||"Prévu"}); });
   if (L.has("tasks")) openTasks().forEach(t => { if (!isISO(t.date)) return; const late = lateDays(t.date) > 0; out.push({k:"tasks", date: t.date, client:t.client, label:t.title, who:[t.who], ref:t, cls:"ev k-task"+(late?" late":""), meta:"Tâche, "+t.who, tag:late ? lateDays(t.date)+" j de retard" : "Tâche"}); });
-  if (L.has("relances")) S.d.commercial.forEach(c => { if (!isISO(c.nextDate)) return; out.push({k:"relances", date:c.nextDate, client:c.company, label:c.nextAction||"Relance", who:["Gabriel"], ref:c, cls:"ev k-relance", meta:"Commercial, "+(c.stage||""), tag:c.kind}); });
+  if (L.has("relances")) S.d.commercial.filter(coMine).forEach(c => { if (!isISO(c.nextDate)) return; out.push({k:"relances", date:c.nextDate, client:c.company, label:c.nextAction||"Relance", who:[coOwner(c)], ref:c, cls:"ev k-relance", meta:"Commercial, "+(c.stage||""), tag:c.kind}); });
   if (L.has("cevents")) S.d.cevents.forEach(e => { if (!isISO(e.date)) return; out.push({k:"cevents", date:e.date, client:e.client, label:e.subject, who:["Clara"], ref:e, cls:"ev k-cevent", meta:"Temps fort, préparer avant le "+fmtD(prepBy(e)), tag:e.piste ? "Piste" : (e.done ? "Fait" : "Temps fort")}); });
   if (L.has("keydates")) S.d.keydates.forEach(k => { if (!isISO(k.date)) return; out.push({k:"keydates", date:k.date, client:"", label:k.label, who:[], ref:k, cls:"ev k-keydate", meta:k.forWhom||"", tag:"Date clé"}); });
   if (L.has("posts")){
@@ -289,11 +292,11 @@ function itemTaskDraft(i){ const r = i.ref || {}, isPost = i.k === "posts", reel
   const what = isPost ? [r.type, r.client].filter(Boolean).join(" agence, ") : (i.label || "");
   const title = reel ? "Monter le réel agence « " + (r.client || i.label) + " »" : i.k === "events" && r.type === "Tournage" ? "Tourner « " + (r.title || r.client || "") + " »" : isPost ? "Préparer « " + what + " »" : "Préparer « " + (i.label || "") + " »";
   const date = isPost && postDue(r) ? postDue(r) : i.date;
-  const pole = reel || (i.k === "events" && r.type === "Tournage") ? "20" : isPost || i.k === "cevents" ? "40" : "00";
+  const pole = reel || (i.k === "events" && r.type === "Tournage") ? "20" : isPost || i.k === "cevents" ? "20" : "99";
   return { who: who0, pole, client: i.client || "", date, title, note: "Depuis l’agenda : " + fmtDL(i.date) + (i.meta ? ", " + (Array.isArray(i.meta) ? i.meta.filter(Boolean).join(", ") : i.meta) : ""), done: false, srcKey: itemKey(i) }; }
 function itemToTask(i){ const d = itemTaskDraft(i); closeModal();
   openForm({ key:"itt", title: "En faire une tâche", intro: "La tâche garde le lien avec l’élément de l’agenda.", values: d,
-    fields:[{k:"who",label:"Qui",type:"select",options:OWNERS,half:true},{k:"pole",label:"Pôle",type:"select",options:POLES,half:true},{k:"client",label:"Client",list:clientNames(),half:true},{k:"date",label:"Pour le",type:"date",half:true},{k:"title",label:"À faire",req:"Écris ce qu’il faut faire."},{k:"note",label:"Note",type:"textarea",rows:2}],
+    fields:[{k:"who",label:"Qui",type:"select",options:OWNERS,half:true},{k:"pole",label:"Catégorie",type:"select",options:POLES,half:true},{k:"client",label:"Client",list:clientNames(),half:true},{k:"date",label:"Pour le",type:"date",half:true},{k:"title",label:"À faire",req:"Écris ce qu’il faut faire."},{k:"note",label:"Note",type:"textarea",rows:2}],
     onSave: out => save("tasks", null, Object.assign({}, d, out)).then(() => toast("Tâche créée pour " + out.who + ".")) }); }
 function itemsToTasks(){ if (!writable()) return;
   const cur = agCursor(), mk = iso(cur).slice(0, 7), list = agendaItems().filter(i => !["tasks","relances","keydates"].includes(i.k) && (i.date || "").slice(0, 7) === mk);
@@ -301,7 +304,7 @@ function itemsToTasks(){ if (!writable()) return;
     m.appendChild(el("p","muted", "Éléments affichés en " + MONTHS[cur.getMonth()] + " avec les filtres actuels. Coche ceux qui deviennent une tâche chacun. Ceux déjà en tâche sont décochés."));
     if (!list.length){ m.appendChild(el("p","empty","Rien à passer en tâches ce mois-ci avec ces filtres.")); }
     const row = el("div","row2"); const lw = el("label",null,"Qui (pour toutes)"); const sw = el("select"); [["","Selon l’élément"]].concat(OWNERS.map(x => [x,x])).forEach(([v,l]) => { const o = el("option",null,l); o.value = v; sw.appendChild(o); }); lw.appendChild(sw);
-    const lp = el("label",null,"Pôle (pour toutes)"); const sp = el("select"); [["","Selon l’élément"]].concat(POLES).forEach(([v,l]) => { const o = el("option",null,l); o.value = v; sp.appendChild(o); }); lp.appendChild(sp); row.append(lw, lp); const fw = el("div","form"); fw.appendChild(row); if (list.length) m.appendChild(fw);
+    const lp = el("label",null,"Catégorie (pour toutes)"); const sp = el("select"); [["","Selon l’élément"]].concat(POLES).forEach(([v,l]) => { const o = el("option",null,l); o.value = v; sp.appendChild(o); }); lp.appendChild(sp); row.append(lw, lp); const fw = el("div","form"); fw.appendChild(row); if (list.length) m.appendChild(fw);
     const box = el("div"); box.style.cssText = "max-height:48vh;overflow:auto;margin:12px 0;display:grid;gap:6px"; const checks = [];
     list.forEach(i => { const done = !!itemTaskOf(i), d = itemTaskDraft(i); const lab = el("label","inline"); lab.style.cssText = "align-items:flex-start;gap:10px;padding:8px 10px;border:1px solid var(--line-2);border-radius:10px";
       const c = el("input"); c.type = "checkbox"; c.checked = !done; checks.push([c, i]); const txt = el("div"); txt.appendChild(el("div","ttl", d.title)); txt.appendChild(el("div","note", fmtD(i.date) + ", " + (i.client || "") + (done ? ", déjà en tâche" : "") + ", pour " + d.who + (d.date !== i.date ? " le " + fmtD(d.date) : ""))); lab.append(c, txt); box.appendChild(lab); });
@@ -350,7 +353,7 @@ function editEvent(e){
 /* Tâches */
 function openTask(t){
   openFacts({ title: t.title, client: t.client,
-    facts: [["Qui", t.who],["Pôle", POLE[t.pole] || t.pole],["À rendre le", t.date ? fmtDL(t.date)+" "+t.date.slice(0,4) : "Sans date"],["À poster le", isISO(t.postDate) ? fmtDL(t.postDate)+" "+t.postDate.slice(0,4)+(t.client ? ", dans le calendrier éditorial de "+t.client : "") : ""],["Retard", lateDays(t.date) && !t.done ? lateDays(t.date)+" jours" : ""],["Fait", t.done ? "Oui, le "+fmtFR(t.doneAt) : ""],["Note", t.note]],
+    facts: [["Qui", t.who],["Catégorie", POLE[poleOf(t)] || t.pole],["À rendre le", t.date ? fmtDL(t.date)+" "+t.date.slice(0,4) : "Sans date"],["À poster le", isISO(t.postDate) ? fmtDL(t.postDate)+" "+t.postDate.slice(0,4)+(t.client ? ", dans le calendrier éditorial de "+t.client : "") : ""],["Retard", lateDays(t.date) && !t.done ? lateDays(t.date)+" jours" : ""],["Fait", t.done ? "Oui, le "+fmtFR(t.doneAt) : ""],["Note", t.note]],
     quick: t.done ? [["Rouvrir la tâche", () => patch("tasks", t.id, {done:false, doneAt:""}).then(closeModal)]] :
       [["C’est fait", () => patch("tasks", t.id, {done:true, doneAt:today()}).then(() => { closeModal(); toast("Tâche faite."); })],
        ["Décaler à demain", () => patch("tasks", t.id, {date:addDays(today(),1)}).then(closeModal)],
@@ -359,8 +362,8 @@ function openTask(t){
 }
 function editTask(t){
   openForm({ key:"ta", title: t.id ? "Modifier la tâche" : "Nouvelle tâche", intro: t.id ? "" : "Intitulé « Verbe + livrable », une seule personne par tâche.",
-    values: Object.assign({who: S.ui.tWho && S.ui.tWho !== "Tous" ? S.ui.tWho : (S.me || "À attribuer"), pole:"00"}, t),
-    fields: [{k:"who",label:"Qui",type:"select",options:OWNERS,half:true},{k:"pole",label:"Pôle",type:"select",options:POLES,half:true},
+    values: Object.assign({who: S.ui.tWho && S.ui.tWho !== "Tous" ? S.ui.tWho : (S.me || "À attribuer")}, t, {pole: poleOf(t)}),
+    fields: [{k:"who",label:"Qui",type:"select",options:OWNERS,half:true},{k:"pole",label:"Catégorie",type:"select",options:POLES,half:true},
       {k:"client",label:"Client",list:clientNames(),half:true},{k:"title",label:"À faire",req:"Écris ce qu’il faut faire.",ph:"Ex. Monter les 3 réels KR",half:true},
       {k:"date",label:"À rendre le",type:"date",half:true},{k:"postDate",label:"À poster le (calendrier éditorial du client)",type:"date",half:true},
       {k:"note",label:"Note",type:"textarea"},{k:"done",label:"Fait",type:"check"}],
@@ -395,9 +398,25 @@ function editCoReport(c){
     onCancel: () => openCommercial(c),
     onSave: o => patch("commercial", c.id, {report: stamp(o.txt) + (c.report ? "\n" + c.report : ""), lastContact: stamp(o.txt)}) });
 }
+/* Commercial : chaque ligne a son commercial (Gabriel ou Julie). Une ligne sans commercial est à Gabriel.
+   Chacun ne voit que les siennes ; avec l’accès complet, on peut voir celles de l’autre et réattribuer. */
+const SALES = ["Gabriel","Julie"];
+const coOwner = c => c.owner || "Gabriel";
+const coMine = c => coOwner(c) === (S.me || "Gabriel");
+/* Clients du commercial : Abonnement, Meta ou Prestation unique. Abonnement + Meta = Abonnement.
+   Par défaut, déduit des packs cochés dans le Tableau clients (même nom d'entreprise) ; sinon choisi sur la fiche. */
+const CO_CATS = ["Abonnement","Meta","Prestation unique"];
+function coCat(c){
+  if (CO_CATS.includes(c.cat)) return c.cat;
+  const f = (S.d.clients || []).find(x => norm(x.name) === norm(c.company)); const sv = f ? svOf(f) : {};
+  if (["perf","perfplus","gestion"].some(k => k in sv)) return "Abonnement";
+  if ("meta" in sv) return "Meta";
+  return "";
+}
 function editCommercial(c){
-  openForm({ key:"co", title: c.id ? "Modifier, "+c.company : "Nouveau prospect", values: Object.assign({kind:"Prospect", relance:""}, c),
-    fields:[{k:"company",label:"Entreprise",req:"Indique l’entreprise."},{k:"kind",label:"Type",type:"select",options:["Prospect","Client"],half:true},{k:"stage",label:"Étape",half:true,list:["à contacter","à rappeler","rendez-vous pris","proposition envoyée","à clore","client actif","signé"]},
+  const me = S.me || "Gabriel", own = S.role === "owner" ? SALES : [me];
+  openForm({ key:"co", title: c.id ? "Modifier, "+c.company : "Nouveau prospect", values: Object.assign({kind:"Prospect", relance:"", owner: SALES.includes(me) ? me : "Gabriel"}, c, {owner: c.id ? coOwner(c) : (SALES.includes(me) ? me : (S.ui.coWho && SALES.includes(S.ui.coWho) ? S.ui.coWho : "Gabriel"))}),
+    fields:[{k:"company",label:"Entreprise",req:"Indique l’entreprise."},{k:"owner",label:"Commercial",type:"select",options:own,half:true},{k:"kind",label:"Type",type:"select",options:["Prospect","Client"],half:true},{k:"cat",label:"Si client : catégorie",type:"select",options:[["","Selon le Tableau clients"]].concat(CO_CATS),half:true},{k:"stage",label:"Étape",half:true,list:["à contacter","à rappeler","rendez-vous pris","proposition envoyée","à clore","client actif","signé"]},
       {k:"nextAction",label:"Prochaine action"},{k:"nextDate",label:"Date",type:"date",half:true},{k:"j0",label:"J0 (contact de départ)",type:"date",half:true},
       {k:"relance",label:"Relance",half:true,list:["0 sur 4","1 sur 4","2 sur 4","3 sur 4","4 sur 4"]},{k:"contact",label:"Contact",half:true},{k:"source",label:"Provenance",type:"select",options:[["","Non précisée"],"Réseaux sociaux","Recommandation","Prospection directe","Salon ou événement","Autre"]},
       {k:"lastContact",label:"Dernier contact",type:"textarea",rows:2},{k:"notes",label:"Notes",type:"textarea",rows:4}],
@@ -470,9 +489,10 @@ function editKeydate(k){
     onDelete: k.id ? () => remove("keydates", k.id) : null,
     onSave: out => { const cl = out.clientsTxt.split(",").map(s => s.trim()).filter(Boolean); delete out.clientsTxt; return save("keydates", k.id || null, Object.assign(k.id ? strip(k) : {}, out, {clients:cl, forWhom:cl.join(", ")})); } });
 }
-/* Services vendus : gestion des réseaux sociaux, publicité Meta, ou les deux. Les anciennes fiches (codes 10 à 60) sont relues ainsi. */
-const SERVICES = [["com","Gestion des réseaux sociaux","Réseaux sociaux"],["meta","Publicité Meta","Meta"]];
-const svOf = c => { const o = {}; Object.entries(c.services || {}).forEach(([k, v]) => { const n = k === "meta" || k === "50" ? "meta" : "com"; if (!(n in o) || (v && (!o[n] || v < o[n]))) o[n] = v || o[n] || ""; }); return o; };
+/* Services vendus : les quatre packs. Les anciennes fiches sont relues ainsi : réseaux sociaux (et codes 10 à 60) = Pack Gestion, publicité Meta (code 50) = Pack Meta. */
+const SERVICES = [["perf","Pack Performance","Performance"],["perfplus","Pack Performance +","Performance +"],["gestion","Pack Gestion","Gestion"],["meta","Pack Meta","Meta"]];
+const SV_KEYS = SERVICES.map(x => x[0]);
+const svOf = c => { const o = {}; Object.entries(c.services || {}).forEach(([k, v]) => { const n = SV_KEYS.includes(k) ? k : k === "50" ? "meta" : "gestion"; if (!(n in o) || (v && (!o[n] || v < o[n]))) o[n] = v || o[n] || ""; }); return o; };
 function editClient(c){
   const sv = svOf(c); const vals = Object.assign({}, c); SERVICES.forEach(([k]) => { vals["sv"+k] = k in sv; vals["sd"+k] = sv[k] || ""; });
   const svFields = []; SERVICES.forEach(([k, l]) => { svFields.push({k:"sv"+k, label:l, type:"check", half:true}); svFields.push({k:"sd"+k, label:"Depuis le", type:"date", half:true}); });
@@ -517,19 +537,60 @@ function netLinks(c, big){
     a.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + NET_ICO[k] + '</svg>'; box.appendChild(a); });
   return box;
 }
+/* Offres de l'agence, d'après la plaquette v12 du 03/11/2026 ; le Pack Meta (campagnes seules, hors pack) n'y figure pas : conditions tirées de agence.md (campagnes Meta). */
+const OFFRES = [
+  { k:"perf", name:"Pack Performance", price:"999 €", per:"HT par mois", tag:"L’offre principale", sub:"dont 450 € payés au résultat",
+    items:["1 visite par mois chez le client","4 vidéos tournées sur son lieu de travail, chaque mois","2 publications par semaine sur Facebook et Instagram","Fiche Google tenue à jour, réponse à chaque avis","Avis clients récoltés chaque mois","Publicité Facebook et Instagram, payée au résultat","Bilan mensuel des demandes"],
+    notes:["Budget publicitaire en plus, conseillé à partir de 17 € par jour, payé par le client directement à Meta.","Payé au résultat : objectif de contacts fixé ensemble ; s’il n’est pas atteint, les 450 € baissent d’autant."] },
+  { k:"perfplus", name:"Pack Performance +", price:"1 999 €", per:"HT par mois", tag:"Le service communication complet", sub:"23 988 € HT par an",
+    items:["Visites sur mesure, selon l’activité","8 vidéos par mois","3 publications par semaine sur 3 réseaux","Fiche Google, avis clients et bilan mensuel","Un témoignage client filmé chaque trimestre","Un point toutes les deux semaines","Publicité en option : 450 € payés au résultat, soit 2 449 € au plus"],
+    notes:["Argument : moins cher qu’un chargé de communication (32 700 à 34 650 € bruts par an en Occitanie hors charges, Michael Page, étude de rémunérations 2027)."] },
+  { k:"gestion", name:"Pack Gestion", price:"650 €", per:"HT par mois", tag:"Sans publicité", sub:"« Sans publicité » dans la plaquette",
+    items:["1 visite par mois chez le client","4 vidéos tournées sur son lieu de travail","2 publications par semaine sur Facebook et Instagram","Fiche Google, avis clients et bilan mensuel","Un renfort selon le secteur : Google renforcé (2 publications par semaine sur la fiche, suivi de la place dans les recherches) ou autre, sur mesure"],
+    notes:["Pour les métiers où la publicité n’est pas la bonne solution."] },
+  { k:"meta", name:"Pack Meta", price:"450 €", per:"HT par mois au plus", tag:"Hors pack, campagnes Meta seules", sub:"Pas dans la plaquette : offre à part, vendue seule",
+    items:["Conception et pilotage des campagnes Facebook et Instagram","Tournage et montage des publicités (lancement, puis tournages suivants compris dans les honoraires)","Honoraires au prorata des contacts qualifiés obtenus, plafonnés à 450 €","Définition écrite du contact qualifié dans le contrat","Bilan mensuel des demandes"],
+    notes:["Frais de démarrage : 300 € HT de référence (200 € accordés à certains clients), couvrent le premier tournage.","Budget publicitaire payé par le client directement à Meta, sur son propre compte : 500 € par mois conseillés au minimum.","Jamais de volume garanti sans définition écrite du contact compté."] }
+];
+const UNITES = [["Identité et imprimés",[["Logo","450 €"],["Charte complète","1 200 €"],["Refonte de charte","650 €"],["Visuel à imprimer","150 €"]]],
+  ["Web et Google",[["Création de fiche Google","150 €"],["Optimisation de fiche Google","350 €"],["Site et référencement","2 800 €"],["Refonte de site","1 900 €"],["Campagnes Google locales","250 € / mois"]]],
+  ["Tournage et vidéo",[["Captation caméra, 1 h","175 €"],["Interview, 1 h","250 €"],["Captation drone, 1 h","350 €"],["Format complet, 1 h","435 €"],["Demi-journée caméra","600 €"],["Journée caméra","1 035 €"],["Demi-journée format complet","1 200 €"],["Journée format complet","1 915 €"]]],
+  ["Photo, studio, montage",[["Shooting photo","350 €"],["Studio","75 € / h"],["Montage d’une vidéo courte","60 €"],["Vidéo longue","250 €"]]]];
+function vOffres(root){
+  const n = k => S.d.clients.filter(c => c.name !== AGENCE && k in svOf(c)).length;
+  const g = el("div","of-grid");
+  OFFRES.forEach(o => { const c = el("article","of-card" + (o.k === "meta" ? " hors" : ""));
+    c.append(el("span","of-tag", o.tag), el("h2", null, o.name));
+    const pr = el("div","of-pr"); pr.append(el("b", null, o.price), el("span", null, o.per)); c.appendChild(pr);
+    c.appendChild(el("p","of-sub", o.sub));
+    const ul = el("ul","of-ul"); o.items.forEach(x => ul.appendChild(el("li", null, x))); c.appendChild(ul);
+    o.notes.forEach(x => c.appendChild(el("p","of-note", x)));
+    const cl = el("button","of-n", plural(n(o.k), "client") + " sur ce pack"); cl.type = "button"; cl.onclick = () => { S.ui.fiTab = "clients"; S.ui.fiSv = o.k; remember(); render(); }; c.appendChild(cl);
+    g.appendChild(c); });
+  root.appendChild(g);
+  root.appendChild(el("h2","fin-h of-uh","Prestations à l’unité"));
+  const u = el("div","of-units");
+  UNITES.forEach(([t, rows]) => { const b = el("div","of-ub"); b.appendChild(el("h3", null, t)); rows.forEach(([l, p]) => { const r = el("div","of-ur"); r.append(el("span", null, l), el("b", null, p)); b.appendChild(r); }); u.appendChild(b); });
+  root.appendChild(u);
+  root.appendChild(el("p","status","Source : plaquette des offres v12 du 03/11/2026 ; Pack Meta d’après les règles de l’agence (agence.md). Acompte de 30 % sur les prestations à l’unité ; déplacement compris jusqu’à 10 km, puis +15 € à +40 € jusqu’à 50 km."));
+}
 function vFiches(root){
-  root.appendChild(head("Tableau clients", "Réservé à " + fullNames() + " : depuis quand, quels services, la formule et ce qu’il faut penser.", [addBtn("Nouveau client", () => editClient({}))]));
+  const fiTab = S.ui.fiTab === "offres" ? "offres" : "clients";
+  root.appendChild(head("Tableau clients", fiTab === "offres" ? "Les offres de l’agence et ce que chaque pack comprend. Prix hors taxes." : "Réservé à " + fullNames() + " : depuis quand, quels services, la formule et ce qu’il faut penser.", [segm([["clients","Clients"],["offres","Offres"]], fiTab, v => { S.ui.fiTab = v; remember(); render(); }), fiTab === "clients" ? addBtn("Nouveau client", () => editClient({})) : null]));
+  if (fiTab === "offres") return vOffres(root);
   const f = el("div","filters ag-f"); const g = el("div","fgroup"); const lb = el("label","flabel","Service"); lb.htmlFor = "fi-sv"; const sel = el("select","pick"); sel.id = "fi-sv";
-  [["","Tous les services"],["com","Réseaux sociaux"],["meta","Publicité Meta"],["both","Réseaux sociaux et Meta"]].forEach(([v,l]) => { const o = el("option",null,l); o.value = v; sel.appendChild(o); }); sel.value = S.ui.fiSv || ""; sel.onchange = () => { S.ui.fiSv = sel.value; remember(); render(); };
+  [["","Tous les services"]].concat(SERVICES.map(x => [x[0], x[1]])).forEach(([v,l]) => { const o = el("option",null,l); o.value = v; sel.appendChild(o); }); sel.value = S.ui.fiSv || ""; sel.onchange = () => { S.ui.fiSv = sel.value; remember(); render(); };
   g.append(lb, sel); f.appendChild(g); root.appendChild(f);
-  const list = S.d.clients.filter(c => c.name !== AGENCE && (!S.ui.fiSv || (S.ui.fiSv === "both" ? ("com" in svOf(c) && "meta" in svOf(c)) : S.ui.fiSv in svOf(c)))).sort((a,b) => (a.since || "9999").localeCompare(b.since || "9999") || a.name.localeCompare(b.name,"fr"));
+  const list = S.d.clients.filter(c => c.name !== AGENCE && (!SV_KEYS.includes(S.ui.fiSv) || S.ui.fiSv in svOf(c))).sort((a,b) => (a.since || "9999").localeCompare(b.since || "9999") || a.name.localeCompare(b.name,"fr"));
   const {w, tb} = table(["Client","Depuis","Services","Contact et réseaux","~Formule","~Publications / mois","~À penser"]);
   const line = (tr, txt, cls) => { const c = td(tr, txt ? el("span","fi-1", txt) : el("span","muted","—"), cls); if (txt) c.title = txt; return c; };
   list.forEach(c => { const tr = el("tr","row fi-row"); tr.onclick = () => editClient(c);
     td(tr, clientTag(c.name),"nw"); td(tr, c.since ? fmtFR(c.since) : "—","nw");
-    const so = svOf(c), ks = SERVICES.map(x => x[0]).filter(k => k in so), sv = el("div","fi-sv");
-    ks.forEach(k => { const s = SERVICES.find(x => x[0] === k); const p = el("b","fi-code",s[2]); p.title = s[1] + (so[k] ? ", depuis " + fmtFR(so[k]) : ""); sv.appendChild(p); });
-    if (!ks.length) sv.appendChild(el("span","muted","À renseigner"));
+    const so = svOf(c), sv = el("div","fi-sv fi-svc"); sv.onclick = e => e.stopPropagation();
+    SERVICES.forEach(([k, l, sh]) => { const lab = el("label","fi-ck" + (k in so ? " on" : "")); lab.title = l + (so[k] ? ", depuis " + fmtFR(so[k]) : "");
+      const cb = el("input"); cb.type = "checkbox"; cb.checked = k in so; cb.disabled = !writable();
+      cb.onchange = () => { const n = {}; Object.entries(svOf(c)).forEach(([a, b]) => { if (a !== k) n[a] = b; }); if (cb.checked) n[k] = so[k] || today(); patch("clients", c.id, { services: n }).then(() => toast(l + (cb.checked ? " coché pour " : " retiré pour ") + c.name + ".")); };
+      lab.append(cb, el("span", null, sh)); sv.appendChild(lab); });
     td(tr, sv,"nw"); const nl = netLinks(c); if (!nl.childNodes.length) nl.appendChild(el("span","muted","À renseigner")); td(tr, nl,"nw"); line(tr, c.formula, "hm"); line(tr, c.perMonth, "hm"); line(tr, [c.remember, c.ask ? "À demander : " + c.ask : ""].filter(Boolean).join(" "), "hm");
     tb.appendChild(tr); });
   w.classList.add("fi-tw");
@@ -611,7 +672,7 @@ function vAccueil(root){
   const t14 = addDays(t0, 14), t7 = addDays(t0, 7);
   const myTasks = openTasks().filter(t => t.who === me && (!isISO(t.date) || t.date <= t7)).length;
   const tiles = [];
-  if (S.role && S.role !== "owner"){ if (canSee("commercial")) tiles.push([S.d.commercial.filter(c => isISO(c.nextDate) && c.nextDate <= t0).length, "relances", () => go("commercial")]); }
+  if (S.role && S.role !== "owner"){ if (canSee("commercial")) tiles.push([S.d.commercial.filter(c => coMine(c) && isISO(c.nextDate) && c.nextDate <= t0).length, "relances", () => go("commercial")]); }
   else if (me === "Matis"){
     tiles.push([S.d.rushes.filter(r => r.kind !== "reel" && !rushReady(r) && r.status !== "Posté" && (r.editor === "Matis" || !r.editor)).length, "montages", () => go("montage")]);
     tiles.push([S.d.events.filter(e => e.type === "Tournage" && e.status === "Prévu" && e.date >= t0 && e.date <= t7).length, "tournages cette semaine", () => go("agenda")]);
@@ -619,7 +680,7 @@ function vAccueil(root){
     tiles.push([S.d.posts.filter(p => postWho(p) === "Clara" && !POST_DONE.includes(p.status) && p.date >= t0 && p.date <= t14).length, "posts à préparer", () => { S.ui.agClient = AGENCE; go("agenda"); }]);
     tiles.push([S.d.cevents.filter(e => !e.done && prepBy(e) && prepBy(e) <= t14 && e.date >= t0).length, "temps forts clients", () => { S.ui.ccTab = "soon"; go("clients"); }]);
   } else {
-    tiles.push([S.d.commercial.filter(c => isISO(c.nextDate) && c.nextDate <= t0).length, "relances", () => go("commercial")]);
+    tiles.push([S.d.commercial.filter(c => coMine(c) && isISO(c.nextDate) && c.nextDate <= t0).length, "relances", () => go("commercial")]);
     tiles.push([S.d.campaigns.filter(c => c.status === "À lancer").length, "campagnes à lancer", () => go("campagnes")]);
   }
   ["main","shoot"].forEach(md => { const pre = md === "shoot" ? "tg:" : "", chs = msgChannels(md);
@@ -830,7 +891,10 @@ function vTaches(root){
   const list = who === "Terminées" ? null : S.d.tasks.filter(t => (who === "Tous" || t.who === who) && !t.done);
   const counts = Object.fromEntries(OWNERS.map(p => [p, openTasks().filter(t => t.who === p).length])); counts["Tous"] = openTasks().length; counts["Terminées"] = S.d.tasks.filter(t => t.done).length;
   root.appendChild(head("Tâches", "Une tâche, une seule personne. Une tâche cochée part dans les archives.", [addBtn("Ajouter une tâche", () => editTask({}))]));
-  const f = el("div","filters"); f.appendChild(chipBar(OWNERS.concat(["Tous","Terminées"]).map(p => [p, p === "Terminées" ? "Archives" : p]), who, v => { S.ui.tWho = v; remember(); render(); }, counts)); root.appendChild(f);
+  const f = el("div","filters"); f.appendChild(chipBar(OWNERS.concat(["Tous","Terminées"]).map(p => [p, p === "Terminées" ? "Archives" : p]), who, v => { S.ui.tWho = v; remember(); render(); }, counts));
+  const tri = S.ui.tSort === "date" ? "date" : "pole";
+  if (who !== "Terminées") f.appendChild(segm([["pole","Par catégorie"],["date","Par date"]], tri, v => { S.ui.tSort = v; remember(); render(); }));
+  root.appendChild(f);
   if (who === "Terminées"){
     const done = S.d.tasks.filter(t => t.done).sort((a,b) => (b.doneAt||"").localeCompare(a.doneAt||""));
     const {w, tb} = table(["Terminée le","Personne","Client","Tâche","Note",""]);
@@ -840,10 +904,12 @@ function vTaches(root){
   }
   const {w, tb} = table(["Fait","~Client","À faire","Date","~Retard","~Note"].concat(who === "Tous" ? ["Qui"] : []));
   const cols = who === "Tous" ? 7 : 6;
-  POLES.forEach(([code, label]) => {
-    const rows = list.filter(t => (t.pole || "00") === code).sort((a,b) => (a.done - b.done) || (b.createdAt||b.updatedAt||"").localeCompare(a.createdAt||a.updatedAt||""));
+  const byDate = (a,b) => { const da = isISO(a.date) ? a.date : "9999", db = isISO(b.date) ? b.date : "9999"; return da.localeCompare(db) || (a.createdAt||a.updatedAt||"").localeCompare(b.createdAt||b.updatedAt||""); };
+  const groups = tri === "date" ? [["", null, list.slice().sort(byDate)]]
+    : POLES.map(([code, label]) => [code, label, list.filter(t => poleOf(t) === code).sort((a,b) => (a.done - b.done) || (b.createdAt||b.updatedAt||"").localeCompare(a.createdAt||a.updatedAt||""))]);
+  groups.forEach(([code, label, rows]) => {
     if (!rows.length) return;
-    band(tb, label, rows.length, cols);
+    if (label) band(tb, label, rows.length, cols);
     rows.forEach(t => {
       const n = t.done ? 0 : lateDays(t.date);
       const tr = el("tr","row"+(t.done ? " done" : "")+(lateClass(n) ? " r"+lateClass(n) : "")); tr.onclick = () => openTask(t);
@@ -860,21 +926,28 @@ function vTaches(root){
 
 /* ---------- Commercial ---------- */
 function vCommercial(root){
-  const q = norm(S.ui.coQ);
-  const all = S.d.commercial.filter(c => (S.ui.coKind === "Tous" || c.kind === (S.ui.coKind === "Clients" ? "Client" : "Prospect")) && (!q || norm([c.company,c.stage,c.notes,c.contact,c.nextAction].join(" ")).includes(q)));
-  const due = S.d.commercial.filter(c => isISO(c.nextDate) && c.nextDate <= today()).length;
-  root.appendChild(head("Commercial", plural(due,"action due","actions dues")+" aujourd’hui ou en retard, rythme de relance J+3, J+7, J+14, J+30", [addBtn("Nouveau prospect", () => editCommercial({}))]));
+  const q = norm(S.ui.coQ), me = S.me || "Gabriel", full = S.role === "owner";
+  const who = full ? (["Tous"].concat(SALES).includes(S.ui.coWho) ? S.ui.coWho : (SALES.includes(me) ? me : "Tous")) : me;
+  const base = S.d.commercial.filter(c => who === "Tous" || coOwner(c) === who);
+  const all = base.filter(c => (S.ui.coKind === "Tous" || c.kind === (S.ui.coKind === "Clients" ? "Client" : "Prospect")) && (!q || norm([c.company,c.stage,c.notes,c.contact,c.nextAction].join(" ")).includes(q)));
+  const due = base.filter(c => isISO(c.nextDate) && c.nextDate <= today()).length;
+  root.appendChild(head(full ? "Commercial" : "Mes prospects", plural(due,"action due","actions dues")+" aujourd’hui ou en retard, rythme de relance J+3, J+7, J+14, J+30", [addBtn("Nouveau prospect", () => editCommercial({}))]));
   const f = el("div","filters");
+  if (full){ const cnt = Object.fromEntries(SALES.map(p => [p, S.d.commercial.filter(c => coOwner(c) === p).length])); cnt.Tous = S.d.commercial.length;
+    f.appendChild(chipBar(SALES.concat(["Tous"]).map(p => [p, p]), who, v => { S.ui.coWho = v; remember(); render(); }, cnt)); }
   f.appendChild(segm([["Tous","Tous"],["Clients","Clients"],["Prospects","Prospects"]], S.ui.coKind, v => { S.ui.coKind = v; remember(); render(); }));
   const s = el("input","search"); s.id = "co-q"; s.type = "search"; s.placeholder = "Chercher une entreprise"; s.value = S.ui.coQ; s.oninput = () => { S.ui.coQ = s.value; renderSoon(); };
   f.appendChild(s); root.appendChild(f);
-  const {w, tb} = table(["Entreprise","~Étape","Prochaine action","Date","~Retard","~Dernier contact","~Relance"]);
+  const showWho = full && who === "Tous";
+  const {w, tb} = table(["Entreprise","~Étape","Prochaine action","Date","~Retard","~Dernier contact","~Relance"].concat(showWho ? ["Commercial"] : []));
   const RS = c => c.kind === "Prospect" && c.source === "Réseaux sociaux";
-  [["Client","CLIENTS"],["Réseaux","PROSPECTS RÉSEAUX"],["Prospect","PROSPECTS"]].forEach(([k, label]) => {
-    const rows = all.filter(c => k === "Réseaux" ? RS(c) : c.kind === k && !RS(c)).sort((a,b) => (a.nextDate||"9999").localeCompare(b.nextDate||"9999"));
-    if (!rows.length) return; band(tb, label, rows.length, 7);
+  [["Abonnement","ABONNEMENT"],["Meta","META"],["Prestation unique","PRESTATION UNIQUE"],["?","À CLASSER"],["Réseaux","PROSPECTS RÉSEAUX"],["Prospect","PROSPECTS"]].forEach(([k, label]) => {
+    const rows = all.filter(c => k === "Réseaux" ? RS(c) : k === "Prospect" ? c.kind === "Prospect" && !RS(c) : c.kind === "Client" && (coCat(c) || "?") === k).sort((a,b) => (a.nextDate||"9999").localeCompare(b.nextDate||"9999"));
+    if (!rows.length) return; band(tb, label, rows.length, showWho ? 8 : 7);
     rows.forEach(c => { const n = lateDays(c.nextDate); const tr = el("tr","row"+(lateClass(n) ? " r"+lateClass(n) : "")); tr.onclick = () => openCommercial(c);
-      mo(td(tr, c.company,"ttl w"), c.stage); td(tr, el("div","note",c.stage),"hm"); td(tr, el("div","note",c.nextAction)); td(tr, fmtD(c.nextDate),"nw"); td(tr, n ? n+" j" : "","nw hm"); td(tr, el("div","note",c.lastContact),"hm"); td(tr, c.relance,"nw hm"); tb.appendChild(tr); });
+      mo(td(tr, c.company,"ttl w"), c.stage); td(tr, el("div","note",c.stage),"hm"); td(tr, el("div","note",c.nextAction)); td(tr, fmtD(c.nextDate),"nw"); td(tr, n ? n+" j" : "","nw hm"); td(tr, el("div","note",c.lastContact),"hm"); td(tr, c.relance,"nw hm");
+      if (showWho){ const sel = el("select","inl"); SALES.forEach(x => { const o = el("option",null,x); o.value = x; sel.appendChild(o); }); sel.value = coOwner(c); sel.disabled = !writable(); sel.onclick = e => e.stopPropagation(); sel.onchange = () => patch("commercial", c.id, {owner: sel.value}).then(() => toast(c.company + " attribué à " + sel.value + ".")); td(tr, sel, "nw"); }
+      tb.appendChild(tr); });
   });
   if (!all.length) root.appendChild(el("p","empty", S.ui.coQ ? "Aucune entreprise ne correspond." : "Aucune fiche pour l’instant."));
   else root.appendChild(w);
@@ -1883,10 +1956,27 @@ function vcChat(){ const box = document.getElementById("vc-msgs"); if (!box) ret
   if (!VC.chat.length) box.appendChild(el("p","muted","Messages visibles par les personnes présentes, effacés à la fin de l’appel."));
   VC.chat.forEach(m => { const d = el("div","vc-m" + (m.mine ? " mine" : "")); if (!m.mine) d.appendChild(el("b",null,m.name)); d.appendChild(document.createTextNode(m.text)); box.appendChild(d); }); box.scrollTop = box.scrollHeight; }
 function vVocal(root){
-  root.appendChild(head("Vocal", "Salons vocaux de l’agence, directement dans l’application : micro, caméra et partage d’écran."));
+  root.appendChild(head("Vocal", "La salle de réunion de l’agence : micro, caméra et partage d’écran, sans rien installer."));
   if (VC.room){ const st = el("section","vc-stage"); st.id = "vc-stage"; root.appendChild(st); setTimeout(vcStage, 0); }
+  /* Seule la salle Réunion reste affichée ; les autres salons et les visios s’ouvrent avec le bouton + */
+  { const here = voiceHere("reunion"), mine = VC.room === "reunion";
+    const h = el("section","vx-hero" + (here.length ? " live" : "") + (mine ? " mine" : ""));
+    const orb = el("div","vx-orb"); const ic = el("span","vx-oic"); ic.innerHTML = HEADSET; orb.appendChild(ic);
+    if (here.length){ const ring = el("div","vx-ring"); here.slice(0, 6).forEach(n => { const av = avatarEl(n, 34); av.title = n; ring.appendChild(av); }); orb.appendChild(ring); }
+    const tx = el("div","vx-htx");
+    tx.append(el("span","vx-st", here.length ? "En direct" : "Libre"), el("h2", null, "Réunion"),
+      el("p","muted", here.length ? (here.length === 1 ? here[0] + " est dans la salle" : here.slice(0, -1).join(", ") + " et " + here[here.length - 1] + " sont dans la salle") : "Points d’équipe et réunions avec un client. Personne pour l’instant."));
+    const a = el("div","vx-hact");
+    a.appendChild(mine ? btn("Quitter la réunion","vx-leave", () => vcLeave()) : btn(VC.room ? "Passer en réunion" : "Rejoindre la réunion","lemon vx-join", () => vcJoin("reunion", "Réunion")));
+    const more = el("button","vx-more" + (S.ui.vxMore ? " on" : "")); more.type = "button"; more.setAttribute("aria-expanded", String(!!S.ui.vxMore)); more.setAttribute("aria-label","Autres salons et visios"); more.title = "Autres salons et visios"; more.textContent = "+";
+    more.onclick = () => { S.ui.vxMore = !S.ui.vxMore; remember(); render(); }; a.appendChild(more);
+    tx.appendChild(a); h.append(orb, tx); root.appendChild(h);
+    const others = VOICE.filter(([k]) => k !== "reunion").concat((S.cgroups || []).map(x => [x.room, "Visio, " + x.name])).concat((S.invites || []).map(x => [x.room, x.label])).filter(([k]) => voiceHere(k).length && VC.room !== k);
+    if (others.length && !S.ui.vxMore){ const lv = el("div","vx-live"); others.forEach(([k, l]) => { const c = el("button","vx-chip"); c.type = "button"; c.append(el("i"), el("span", null, l + " : " + voiceHere(k).join(", "))); c.onclick = () => vcJoin(k, l); lv.appendChild(c); }); root.appendChild(lv); }
+  }
+  if (!S.ui.vxMore){ root.appendChild(el("p","status","Le son et l’image passent directement d’un ordinateur à l’autre. On peut changer d’onglet pendant un appel : une barre reste en bas de l’écran.")); return; }
   const g = el("div","vx-grid");
-  VOICE.forEach(([k, l, sub]) => { const here = voiceHere(k), mine = VC.room === k;
+  VOICE.filter(([k]) => k !== "reunion").forEach(([k, l, sub]) => { const here = voiceHere(k), mine = VC.room === k;
     const c = el("section","vx-card" + (here.length ? " live" : "") + (mine ? " mine" : "")); const ic = el("span","wa-vic"); ic.innerHTML = HEADSET;
     const hd = el("div","vx-hd"); const tt = el("div"); tt.append(el("h2",null,l), el("p","muted",sub)); hd.append(ic, tt); c.appendChild(hd);
     const ppl = el("div","vx-ppl"); if (here.length) here.forEach(n => { const p = el("span","vx-p"); p.append(avatarEl(n, 28), el("span",null,n)); ppl.appendChild(p); }); else ppl.appendChild(el("span","muted","Personne pour l’instant")); c.appendChild(ppl);
@@ -2241,32 +2331,51 @@ function focusFill(){
   focusPeople();
 }
 
-/* ---------- Idées clients : ce que les clients déposent depuis leur espace ---------- */
+/* ---------- Idées : celles des clients (déposées depuis leur espace) et les nôtres, notées en interne, rangées par client ---------- */
+const ideaInternal = i => !!i.internal;
+const ideaFrom = i => ideaInternal(i) ? "Envoyé par " + (i.by || "l’équipe") : "Envoyé par le client";
+function editIdee(i){ if (!writable()) return;
+  openForm({ key:"idi", title: i.id ? "Modifier l’idée" : "Nouvelle idée interne", intro: i.id ? "" : "Visible par l’équipe seulement, jamais par le client.",
+    values: Object.assign({ client: S.ui.idClient || "" }, i),
+    fields: [{k:"client",label:"Client",list:clientNames(),req:"Indique le client."},{k:"text",label:"L’idée",type:"textarea",rows:5,req:"Écris l’idée."}],
+    onDelete: i.id ? () => remove("idees", i.id) : null,
+    onSave: out => { const me = S.me || "Gabriel";
+      const b = Object.assign(i.id ? strip(i) : { internal: true, by: me, kind: "Idée interne", at: new Date().toISOString(), seen: [me], files: [] }, { client: String(out.client || "").trim(), text: String(out.text || "").trim() });
+      return save("idees", i.id || null, b).then(() => toast(i.id ? "Idée modifiée." : "Idée ajoutée pour " + b.client + ".")); } });
+}
 function vIdees(root){
   const me = S.me || "Gabriel", all = (S.d.idees || []).slice().sort((a, b) => (b.at || "").localeCompare(a.at || ""));
-  const names = [...new Set(all.map(i => i.client))].sort((a, b) => a.localeCompare(b, "fr"));
+  const names = [...new Set(all.map(i => i.client).filter(Boolean))].sort((a, b) => a.localeCompare(b, "fr"));
   const f = S.ui.idClient && names.includes(S.ui.idClient) ? S.ui.idClient : "";
+  const src = ["equipe","client"].includes(S.ui.idSrc) ? S.ui.idSrc : "";
   const sel = el("select","pick"); [["","Tous les clients"]].concat(names.map(n => [n, n])).forEach(([v, l]) => { const o = el("option", null, l); o.value = v; if (v === f) o.selected = true; sel.appendChild(o); });
   sel.onchange = () => { S.ui.idClient = sel.value; remember(); render(); };
   const unseen = all.filter(i => !(i.seen || []).includes(me));
   const markAll = unseen.length ? btn("Tout marquer comme vu","sm", () => unseen.forEach(i => patch("idees", i.id, { seen: [...new Set((i.seen || []).concat(me))] }))) : null;
-  root.appendChild(head("Idées clients", "Idées, photos et vidéos envoyées par les clients depuis leur espace", [sel, markAll]));
-  const list = all.filter(i => !f || i.client === f);
-  if (!list.length){ root.appendChild(el("p","empty","Rien pour l’instant. Les envois des clients arrivent ici.")); return; }
-  const g = el("div","id-grid");
-  list.forEach(i => {
-    const c = el("article","id-card" + ((i.seen || []).includes(me) ? "" : " new"));
-    const h = el("header","id-h"); h.append(avatarEl(i.client, 34, { src: "", color: colorOf(i.client), soft: true }));
-    const t = el("div","id-ht"); t.append(el("b",null,i.client), el("small",null,(i.who || "") + ", " + waTime(i.at))); h.append(t, el("span","pill",i.kind || "Idée")); c.appendChild(h);
-    if (i.text) c.appendChild(el("p","id-tx",i.text));
-    if ((i.files || []).length){ const m = el("div","id-media"); i.files.forEach(x => m.appendChild(attachEl(x))); c.appendChild(m); }
-    const a = el("div","id-acts");
-    if (!(i.seen || []).includes(me)) a.appendChild(btn("Marquer comme vu","sm", () => patch("idees", i.id, { seen: [...new Set((i.seen || []).concat(me))] })));
-    const g2 = (S.cgroups || []).find(x => x.name === i.client);
-    if (g2) a.appendChild(btn("Répondre dans le groupe","sm lemon", () => { S.ui.msgMode = "main"; S.ui.msgCh = g2.ch; S.ui.waConv = true; remember(); go("messagerie"); }));
-    c.appendChild(a); g.appendChild(c);
+  root.appendChild(head("Idées", "Les idées envoyées par les clients depuis leur espace et les nôtres, notées en interne, rangées par client", [addBtn("Ajouter une idée", () => editIdee({})), sel, markAll]));
+  const fl = el("div","filters"); fl.appendChild(segm([["","Toutes"],["equipe","Envoyées par l’équipe"],["client","Envoyées par le client"]], src, v => { S.ui.idSrc = v; remember(); render(); })); root.appendChild(fl);
+  const list = all.filter(i => (!f || i.client === f) && (!src || (src === "equipe") === ideaInternal(i)));
+  if (!list.length){ root.appendChild(el("p","empty", src === "equipe" ? "Aucune idée interne pour l’instant. Ajoute-en une avec le bouton en haut." : "Rien pour l’instant. Les envois des clients arrivent ici.")); return; }
+  const byClient = {}; list.forEach(i => (byClient[i.client || "Sans client"] = byClient[i.client || "Sans client"] || []).push(i));
+  Object.keys(byClient).sort((a, b) => a.localeCompare(b, "fr")).forEach(cn => {
+    root.appendChild(el("h2","fin-h id-cl", cn + " (" + byClient[cn].length + ")"));
+    const g = el("div","id-grid");
+    byClient[cn].forEach(i => {
+      const intl = ideaInternal(i);
+      const c = el("article","id-card" + (intl ? " intl" : "") + ((i.seen || []).includes(me) ? "" : " new"));
+      const h = el("header","id-h"); h.append(avatarEl(intl ? (i.by || "") : i.client, 34, { src: "", color: colorOf(intl ? (i.by || "") : i.client), soft: true }));
+      const t = el("div","id-ht"); t.append(el("b",null,ideaFrom(i)), el("small",null,(intl ? "" : (i.who ? i.who + ", " : "")) + waTime(i.at))); h.append(t, el("span","pill" + (intl ? " l1" : ""), intl ? "Interne" : (i.kind || "Idée"))); c.appendChild(h);
+      if (i.text) c.appendChild(el("p","id-tx",i.text));
+      if ((i.files || []).length){ const m = el("div","id-media"); i.files.forEach(x => m.appendChild(attachEl(x))); c.appendChild(m); }
+      const a = el("div","id-acts");
+      if (!(i.seen || []).includes(me)) a.appendChild(btn("Marquer comme vu","sm", () => patch("idees", i.id, { seen: [...new Set((i.seen || []).concat(me))] })));
+      if (intl){ const e = btn("Modifier","sm", () => editIdee(i)); e.disabled = !writable(); a.appendChild(e); }
+      else { const g2 = (S.cgroups || []).find(x => x.name === i.client);
+        if (g2) a.appendChild(btn("Répondre dans le groupe","sm lemon", () => { S.ui.msgMode = "main"; S.ui.msgCh = g2.ch; S.ui.waConv = true; remember(); go("messagerie"); })); }
+      c.appendChild(a); g.appendChild(c);
+    });
+    root.appendChild(g);
   });
-  root.appendChild(g);
 }
 
 /* ---------- Formation ---------- */
@@ -2362,7 +2471,14 @@ function vTournage(root){
       const prog = el("p","tg-meta", c.done || c.ko ? c.done + " fait" + (c.done > 1 ? "s" : "") + (c.ko ? ", " + c.ko + " pas possible" + (c.ko > 1 ? "s" : "") : "") + " sur " + c.all : "Pas encore tourné");
       const act = el("div","tg-act");
       act.append(btn("Lancer le tournage", "sm lemon", () => tgLive(s)), btn("PDF", "sm", () => tgPdf(s)), btn("Modifier", "sm", () => tgEdit(s)));
-      card.append(top, h, meta, cnt, bar, prog, act); g.appendChild(card);
+      const sb = btn(s.sentAt ? "Renvoyer au client" : "Envoyer au client", "sm", () => tgSend(s)); sb.disabled = !writable(); act.appendChild(sb);
+      card.append(top, h, meta, cnt, bar, prog);
+      if (s.sentAt){ const st = s.clientStatus || "wait", cs = el("div","tg-cs " + st);
+        cs.appendChild(el("span","pill" + (st === "ok" ? " ok" : st === "wait" ? " l2" : " no"), { wait: "Envoyée au client, en attente", ok: "Validée par le client", mod: "Retours du client", no: "Refusée par le client" }[st]));
+        if (s.clientBy && st !== "wait") cs.appendChild(el("span","note", s.clientBy + ", " + fmtFR((s.clientAt || "").slice(0, 10))));
+        if (s.clientNote && st !== "ok") cs.appendChild(el("p","tg-cn", s.clientNote));
+        card.appendChild(cs); }
+      card.appendChild(act); g.appendChild(card);
     });
     root.appendChild(g);
   };
@@ -2456,6 +2572,19 @@ function tgEdit(s0){
     };
     act.append(cancel, ok); m.appendChild(act);
   });
+}
+/* Envoi au client : la feuille apparaît dans son espace (onglet Tournages), il valide, fait des retours ou refuse */
+function tgSend(s){
+  if (!writable()) return;
+  const g = (S.cgroups || []).find(x => norm(x.name) === norm(s.client));
+  if (!g) return toast("Pas d’espace client au nom « " + (s.client || "") + " ». Le nom du client de la feuille doit être celui de son espace.");
+  const again = !!s.sentAt;
+  openModal(m => { const t = el("h3", null, again ? "Renvoyer la feuille au client" : "Envoyer la feuille au client"); t.id = "mtitle"; m.appendChild(t);
+    m.appendChild(el("p","muted", (again ? "La feuille repasse « À valider » chez " : "La feuille apparaît dans l’onglet Tournages de l’espace de ") + g.name + (g.people.length ? " (" + g.people.join(", ") + ")" : "") + ". Le client peut la valider, faire des retours ou la refuser ; sa réponse arrive ici et dans votre groupe avec lui."));
+    const a = el("div","actions"); const c = el("button","btn","Annuler"); c.type = "button"; c.onclick = closeModal;
+    const ok = el("button","btn solid", again ? "Renvoyer" : "Envoyer"); ok.type = "button";
+    ok.onclick = async () => { ok.disabled = true; try { await patch("shoots", s.id, { sentAt: new Date().toISOString(), sentBy: S.me || "", clientStatus: "wait", clientNote: "", clientBy: "", clientAt: "" }); closeModal(); toast("Feuille envoyée à " + g.name + "."); } catch(e){ ok.disabled = false; } };
+    a.append(c, ok); m.appendChild(a); });
 }
 /* Le tournage apparaît dans l'agenda (événement Tournage « tg-<id> ») */
 async function tgSyncEvent(id, s){
@@ -2634,12 +2763,12 @@ const ICONS = {
   idees:'<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>',
   focus:'<path d="M12 21c-3.6 0-6.5-2.6-6.5-6.2 0-3.4 2.6-5.2 3.6-8.3.9 1.4 1.4 2.7 1.4 4 1.3-1.1 2.3-3.2 2.1-6 3 2.4 5.9 6 5.9 10.3 0 3.6-2.9 6.2-6.5 6.2z"/><path d="M12 21c-1.6 0-2.8-1.2-2.8-2.8 0-1.7 1.6-2.6 2.8-4.2 1.2 1.6 2.8 2.5 2.8 4.2 0 1.6-1.2 2.8-2.8 2.8z"/>'
 };
-const SHORT = {finance:"Finance", strategie:"Stratégie", chalet:"Chalet", fiches:"Tableau clients", parametres:"Paramètres", accueil:"Accueil", agenda:"Agenda", taches:"Tâches", commercial:"Commercial", campagnes:"Campagnes", montage:"Rushs", tournage:"Tournage", publications:"Publications", clients:"Calendrier clients", messagerie:"Messagerie", vocal:"Vocal", formation:"Formation", idees:"Idées clients", focus:"Focus"};
+const SHORT = {finance:"Finance", strategie:"Stratégie", chalet:"Chalet", fiches:"Tableau clients", parametres:"Paramètres", accueil:"Accueil", agenda:"Agenda", taches:"Tâches", commercial:"Commercial", campagnes:"Campagnes", montage:"Rushs", tournage:"Tournage", publications:"Publications", clients:"Calendrier clients", messagerie:"Messagerie", vocal:"Vocal", formation:"Formation", idees:"Idées", focus:"Focus"};
 const MOBILE_MAIN = ["accueil","agenda","taches","messagerie"];
 const ico = k => { const s = document.createElementNS("http://www.w3.org/2000/svg","svg"); s.setAttribute("viewBox","0 0 24 24"); s.setAttribute("aria-hidden","true"); s.classList.add("ico"); s.innerHTML = ICONS[k] || ""; return s; };
 function renderTabs(){
   const me = S.me || "Gabriel";
-  const badge = { messagerie: unreadRole(), taches: openTasks().filter(t => t.who === me && lateDays(t.date) > 0).length, commercial: me === "Gabriel" ? S.d.commercial.filter(c => isISO(c.nextDate) && c.nextDate <= today()).length : 0, idees: (S.d.idees || []).filter(i => !(i.seen || []).includes(me)).length, focus: FOCUS.people.filter(p => p.name !== me && !p.pause).length, vocal: S.ready ? new Set(VOICE.flatMap(([k]) => voiceHere(k)).filter(n => n !== me)).size : 0 };
+  const badge = { messagerie: unreadRole(), taches: openTasks().filter(t => t.who === me).length, commercial: SALES.includes(me) ? S.d.commercial.filter(c => coOwner(c) === me && isISO(c.nextDate) && c.nextDate <= today()).length : 0, idees: (S.d.idees || []).filter(i => !(i.seen || []).includes(me)).length, focus: FOCUS.people.filter(p => p.name !== me && !p.pause).length, vocal: S.ready ? new Set(VOICE.flatMap(([k]) => voiceHere(k)).filter(n => n !== me)).size : 0 };
   try { const n = badge.messagerie || 0; if (navigator.setAppBadge) { n ? navigator.setAppBadge(n) : navigator.clearAppBadge(); } } catch(e){}
   const link = k => { const a = el("a"); a.href = "#"+k; a.appendChild(ico(k)); a.appendChild(el("span","lb", SHORT[k])); if (k === S.view) a.setAttribute("aria-current","page"); if (badge[k]) a.appendChild(el("span","n",String(badge[k]))); return a; };
   const n = $("#tabs"); n.textContent = "";
@@ -3050,7 +3179,7 @@ function pmEquipe(w){
 }
 /* Pages par rôle : un interrupteur par page et par rôle. Le serveur applique les mêmes règles aux données. */
 const PAGE_LIST = [["agenda","Agenda"],["taches","Tâches"],["messagerie","Messagerie"],["vocal","Vocal"],["focus","Focus"],["clients","Calendrier clients"],["montage","Rushs"],["tournage","Feuilles de tournage"],
-  ["fiches","Tableau clients"],["strategie","Stratégie"],["commercial","Commercial"],["publications","Publications"],["idees","Idées clients"],["campagnes","Campagnes Meta"],["formation","Formation"]];
+  ["fiches","Tableau clients"],["strategie","Stratégie"],["commercial","Commercial"],["publications","Publications"],["idees","Idées"],["campagnes","Campagnes Meta"],["formation","Formation"]];
 function swEl(on, fn, label, locked){ const l = el("label","sw" + (locked ? " locked" : "")); const i = el("input"); i.type = "checkbox"; i.checked = !!on; i.disabled = !!locked || !writable(); i.setAttribute("aria-label", label); i.onchange = () => fn(i.checked); l.append(i, el("span")); return l; }
 async function loadAccess(){ try { S.access = await GC.api("GET","/api/g-access"); } catch(e){ S.access = { roles: {}, people: {} }; } render(); }
 async function saveAccess(msg){ try { await GC.api("PUT","/api/g-access", { roles: S.access.roles, people: S.access.people }); if (msg) toast(msg); } catch(e){ toast(e.message); loadAccess(); } }

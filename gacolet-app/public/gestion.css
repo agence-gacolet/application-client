@@ -979,12 +979,22 @@ html.vc-full #vc-stage{position:fixed;inset:0;z-index:5000}
 
 /* Groupes avec les clients et idées clients (équipe) */
 .wa-ext{align-self:flex-start;padding:1px 7px;border-radius:999px;background:rgba(198,255,51,.14);color:var(--lemon);font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
-.id-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin-top:22px}
+.id-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin-top:12px}
+.fin-h.id-cl{margin-top:26px}
+.tg-cs{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:4px 0 2px}
+.tg-cn{flex-basis:100%;margin:0;padding:8px 10px;border-radius:10px;background:rgba(255,159,90,.1);color:#FFB37E;font-size:13px;white-space:pre-wrap}
+.cl-sh{margin:6px 0 0;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.cl-shl{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:10px}
+.cl-shl li{display:flex;flex-direction:column;gap:4px}
+.cl-shl li>b{font-size:14.5px}
+.cl-shk{font-size:12px;color:var(--muted)}
+.cl-shlink{font-size:13px;color:var(--lemon);overflow-wrap:anywhere}
+.id-card.intl{border-style:dashed}
 .id-card{display:flex;flex-direction:column;gap:12px;padding:16px;border:1px solid var(--line-2);border-radius:16px;background:var(--card);min-width:0}
 .id-card.new{border-color:rgba(198,255,51,.45);box-shadow:0 0 0 1px rgba(198,255,51,.12) inset}
 .id-h{display:flex;align-items:center;gap:10px}
 .id-ht{display:flex;flex-direction:column;min-width:0;flex:1}
-.id-ht b{font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.id-ht b{font-size:14.5px;line-height:1.25}
 .id-ht small{font-size:12px;color:var(--muted)}
 .id-tx{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14.5px;line-height:1.5}
 .id-media{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
@@ -1663,3 +1673,102 @@ html.tg-lock,html.tg-lock body{overflow:hidden}
 
 /* Bouton de suppression armé lisible (14/11/2026) */
 .btn.danger.armed,.btn.danger.armed:hover{background:#FF5A4E;border-color:#FF5A4E;color:#0E0E0D;font-weight:700}
+
+/* Messagerie affinée (14/11/2026) : bulles fines et sobres, texte plus petit, couleurs discrètes */
+.wa-msgs{padding:14px 28px 16px;gap:0;scroll-behavior:smooth}
+.wa-line{margin-top:9px;max-width:62%;gap:7px}
+.wa-line.cont{margin-top:2px}
+.wa-bub{padding:6px 11px 7px;border-radius:14px;background:#1A1A1B;border:1px solid rgba(255,255,255,.06);color:#EDEDED;gap:3px;box-shadow:none}
+.wa-line.mine .wa-bub{background:rgba(198,255,51,.10);border-color:rgba(198,255,51,.20);color:#F1F6E4}
+.wa-line.cont .wa-bub,.wa-line.mine.cont .wa-bub{border-radius:14px}
+.wa-line:not(.mine):not(.cont) .wa-bub,.wa-line.tail:not(.mine) .wa-bub{border-bottom-left-radius:4px}
+.wa-line.mine:not(.cont) .wa-bub,.wa-line.tail.mine .wa-bub{border-bottom-right-radius:4px}
+.wa-txt{font-size:14px;line-height:1.42;letter-spacing:0;font-weight:400;padding-right:0}
+.wa-name{font-size:11px;font-weight:500;letter-spacing:.01em;color:rgba(235,235,245,.45)!important;margin:0 0 2px}
+.wa-line .av{width:24px;height:24px;font-size:10px}
+.wa-line .av-sp{width:24px}
+.wa-day{font-size:11px;font-weight:500;color:rgba(235,235,245,.4);margin:18px 0 6px}
+.wa-line.mine .wa-quote{background:rgba(0,0,0,.18)}
+.wa-quote{background:rgba(255,255,255,.05);border-radius:9px;padding:5px 9px;font-size:13px}
+.wa-line.mine .wa-file,.wa-line.mine .vw{background:rgba(0,0,0,.2)}
+.wa-line.mine .vw-play{background:var(--lemon);color:#0E0E0D}
+.wa-line.mine .vw-bars span.on{background:var(--lemon)}
+.wa-line.mine .wa-time{color:rgba(241,246,228,.55)}
+.wa-typing{background:#1A1A1B;border:1px solid rgba(255,255,255,.06);border-radius:14px 14px 14px 4px;padding:9px 12px}
+.wa-re button{background:#141415;border:1px solid rgba(255,255,255,.1);padding:1px 6px;font-size:12px}
+.wa-re button.on{background:rgba(198,255,51,.14);border-color:rgba(198,255,51,.35);color:var(--ink)}
+.wa-re button.on span{color:var(--ink)}
+.wa-bar textarea{font-size:14px;border-radius:16px;border-color:rgba(255,255,255,.12);min-height:36px;padding:8px 13px}
+.wa-send{background:var(--lemon);color:#0E0E0D}
+@media (max-width:760px){ .wa-msgs{padding:10px 12px 12px} .wa-line{max-width:80%} .wa-txt{font-size:15px} }
+
+/* Vocal (14/11/2026) : une seule salle fixe, Réunion ; le reste derrière le bouton + */
+.vx-hero{position:relative;display:flex;align-items:center;gap:34px;margin-top:22px;padding:34px 38px;border:1px solid rgba(255,255,255,.07);border-radius:24px;overflow:hidden;
+  background:radial-gradient(120% 140% at 0% 0%,rgba(198,255,51,.10),transparent 55%),linear-gradient(160deg,#151515,#0E0E0D)}
+.vx-hero::after{content:"";position:absolute;inset:auto -10% -60% 40%;height:120%;background:radial-gradient(closest-side,rgba(198,255,51,.06),transparent);pointer-events:none}
+.vx-orb{position:relative;flex:none;width:132px;height:132px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle at 35% 30%,#232323,#121212);border:1px solid rgba(255,255,255,.08);box-shadow:0 0 0 10px rgba(255,255,255,.015),0 20px 50px rgba(0,0,0,.5)}
+.vx-oic svg{width:46px;height:46px;stroke:rgba(235,235,235,.75);fill:none;stroke-width:1.6}
+.vx-hero.live .vx-orb{border-color:rgba(198,255,51,.45);animation:vxPulse 2.4s ease-in-out infinite}
+.vx-hero.live .vx-oic svg{stroke:var(--lemon)}
+@keyframes vxPulse{0%,100%{box-shadow:0 0 0 0 rgba(198,255,51,.22),0 20px 50px rgba(0,0,0,.5)}50%{box-shadow:0 0 0 16px rgba(198,255,51,0),0 20px 50px rgba(0,0,0,.5)}}
+@media (prefers-reduced-motion:reduce){.vx-hero.live .vx-orb{animation:none}}
+.vx-ring{position:absolute;left:50%;bottom:-14px;transform:translateX(-50%);display:flex}
+.vx-ring .av{margin-left:-8px;border:2px solid #111;box-shadow:0 4px 10px rgba(0,0,0,.4)}
+.vx-ring .av:first-child{margin-left:0}
+.vx-htx{position:relative;z-index:1;display:flex;flex-direction:column;gap:8px;min-width:0}
+.vx-htx h2{margin:0;font:400 56px/.9 var(--display);font-style:italic;letter-spacing:.4px;text-transform:uppercase}
+.vx-htx .muted{margin:0;font-size:14px;max-width:46ch}
+.vx-st{align-self:flex-start;display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:rgba(235,235,245,.5)}
+.vx-st::before{content:"";width:7px;height:7px;border-radius:50%;background:rgba(235,235,245,.3)}
+.vx-hero.live .vx-st{color:var(--lemon)}
+.vx-hero.live .vx-st::before{background:var(--lemon);box-shadow:0 0 10px var(--lemon)}
+.vx-hact{display:flex;align-items:center;gap:10px;margin-top:10px}
+.vx-join{padding:11px 22px;border-radius:999px;font-weight:700}
+.vx-leave{padding:11px 22px;border-radius:999px;background:rgba(255,90,78,.12);border-color:rgba(255,90,78,.4);color:#FF8A80}
+.vx-more{width:42px;height:42px;border-radius:50%;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.03);color:var(--ink);font-size:22px;line-height:1;font-weight:300;cursor:pointer;transition:transform .2s,background .2s,border-color .2s}
+.vx-more:hover{background:rgba(255,255,255,.07)}
+.vx-more.on{transform:rotate(45deg);border-color:rgba(198,255,51,.4);color:var(--lemon)}
+.vx-live{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.vx-chip{display:inline-flex;align-items:center;gap:8px;padding:7px 13px;border-radius:999px;border:1px solid rgba(198,255,51,.25);background:rgba(198,255,51,.06);color:var(--ink);font-size:13px;cursor:pointer}
+.vx-chip i{width:7px;height:7px;border-radius:50%;background:var(--lemon)}
+@media (max-width:760px){.vx-hero{flex-direction:column;align-items:flex-start;gap:22px;padding:24px}.vx-orb{width:96px;height:96px}.vx-htx h2{font-size:36px}}
+
+/* Tableau clients : les quatre packs en cases à cocher dans la colonne Services */
+.fi-svc{display:grid;grid-template-columns:repeat(2,auto);gap:4px 12px;justify-content:start}
+.fi-ck{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);cursor:pointer;white-space:nowrap}
+.fi-ck input{width:15px;height:15px;margin:0;accent-color:var(--lemon);cursor:pointer}
+.fi-ck.on{color:var(--ink)}
+
+
+/* Tableau clients > Offres */
+.of-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:16px;margin-top:22px}
+.of-card{display:flex;flex-direction:column;gap:10px;padding:22px;border:1px solid var(--line-2);border-radius:18px;background:var(--card)}
+.of-card.hors{border-style:dashed;border-color:rgba(198,255,51,.35)}
+.of-tag{font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.of-card.hors .of-tag{color:var(--lemon)}
+.of-card h2{margin:0;font:400 32px/.95 var(--display);font-style:italic;text-transform:uppercase;letter-spacing:.3px}
+.of-pr{display:flex;align-items:baseline;gap:8px}
+.of-pr b{font:400 44px/1 var(--display);font-style:italic;color:var(--lemon)}
+.of-pr span{font-size:13px;color:var(--muted)}
+.of-sub{margin:0;font-size:13px;color:var(--ink-2)}
+.of-ul{margin:4px 0 0;padding:0;list-style:none;display:flex;flex-direction:column}
+.of-ul li{position:relative;padding:8px 0 8px 22px;border-bottom:1px solid var(--line-2);font-size:13.5px;line-height:1.4}
+.of-ul li::before{content:"";position:absolute;left:0;top:12px;width:11px;height:11px;border-radius:3px;background:var(--lemon)}
+.of-note{margin:0;font-size:12.5px;line-height:1.45;color:var(--muted)}
+.of-n{margin-top:auto;align-self:flex-start;padding:6px 12px;border-radius:999px;border:1px solid var(--line-2);background:none;color:var(--ink);font-size:12.5px;cursor:pointer}
+.of-n:hover{border-color:var(--lemon)}
+.fin-h.of-uh{margin-top:34px}
+.of-units{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;margin-top:12px}
+.of-ub{padding:16px 18px;border:1px solid var(--line-2);border-radius:14px;background:var(--card)}
+.of-ub h3{margin:0 0 8px;font:400 20px/1 var(--display);font-style:italic;text-transform:uppercase}
+.of-ur{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--line-2);font-size:13px}
+.of-ur:last-child{border-bottom:0}
+.of-ur b{white-space:nowrap}
+
+/* Fond de conversation (14/11/2026) : ni noir ni blanc, un brun graphite chaud avec un léger halo citron et un grain discret */
+.wa-msgs{background-color:#181713;background-image:radial-gradient(90% 60% at 100% 0%,rgba(198,255,51,.07),transparent 60%),radial-gradient(70% 50% at 0% 100%,rgba(255,170,90,.05),transparent 60%),radial-gradient(rgba(255,255,255,.035) 1px,transparent 1.2px);background-size:auto,auto,18px 18px;background-attachment:local}
+.wa-bub{background:#26241F;border-color:rgba(255,240,220,.06);color:#EEEAE2}
+.wa-line.mine .wa-bub{background:#36401F;border-color:rgba(198,255,51,.18);color:#F3F7E8}
+.wa-name{color:rgba(238,234,226,.45)!important}
+.wa-day{color:rgba(238,234,226,.4)}
+.wa-typing{background:#26241F;border-color:rgba(255,240,220,.06)}

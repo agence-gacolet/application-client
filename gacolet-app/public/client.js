@@ -80,12 +80,14 @@ function uploadFile(file, onProgress){
 const S = { view: "accueil", d: null, f: null, mmode: "main", mch: "grp", conv: false, pf: "wait", modOpen: null, kind: "Idée", draft: "", idDraft: "", pend: { chat: [], idee: [] } };
 const posts = () => (S.d && S.d.posts) || [];
 const waiting = () => posts().filter(p => p.status === "wait").length;
+const shoots = () => (S.f && S.f.shoots) || [];
+const shootsWaiting = () => shoots().filter(s => s.status === "wait").length;
 const has = m => S.d && S.d.client && (S.d.client.modules || []).includes(m);
 const myName = () => (S.f && S.f.me.name) || "";
 const unread = () => S.f ? [...new Set(S.f.messages.map(m => m.ch))].reduce((n, k) => n + unreadIn(k), 0) : 0;
 
 /* ---------- Navigation ---------- */
-const VIEWS = [["accueil","Accueil"],["valider","À valider"],["stats","Statistiques"],["meta","Meta"],["messagerie","Messagerie"],["visio","Visio"],["idees","Mes idées"],["prel","Prélèvements"]];
+const VIEWS = [["accueil","Accueil"],["valider","À valider"],["tournages","Tournages"],["stats","Statistiques"],["meta","Meta"],["messagerie","Messagerie"],["visio","Visio"],["idees","Mes idées"],["prel","Prélèvements"]];
 const MOBILE = ["accueil","valider","messagerie","stats"];
 const ICONS = {
   accueil:'<path d="M4 11.2 12 4.8l8 6.4V20h-5.6v-5.2H9.6V20H4z"/>',
@@ -96,11 +98,12 @@ const ICONS = {
   prel:'<rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19M6.5 15h4"/>',
   meta:'<path d="M4 10v4l3 .4L15 19V5L7 9.6z"/><path d="M18.2 9.4a3.6 3.6 0 0 1 0 5.2"/>',
   plus:'<path d="M5 7h14M5 12h14M5 17h14"/>',
-  idees:'<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>'
+  idees:'<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>',
+  tournages:'<rect x="3" y="7" width="13" height="11" rx="2"/><path d="m16 11 5-3v9l-5-3M6 4h7"/>'
 };
 const ico = k => { const s = document.createElementNS("http://www.w3.org/2000/svg","svg"); s.setAttribute("viewBox","0 0 24 24"); s.setAttribute("aria-hidden","true"); s.classList.add("ico"); s.innerHTML = ICONS[k] || ""; return s; };
 function renderTabs(){
-  const badge = { valider: waiting(), messagerie: S.view === "messagerie" ? 0 : unread(), prel: billDue().length };
+  const badge = { valider: waiting(), tournages: shootsWaiting(), messagerie: S.view === "messagerie" ? 0 : unread(), prel: billDue().length };
   const link = ([k, l]) => { const a = el("a"); a.href = "#"+k; a.appendChild(ico(k)); a.appendChild(el("span","lb",l)); if (k === S.view) a.setAttribute("aria-current","page"); if (badge[k]) a.appendChild(el("span","n",String(badge[k]))); return a; };
   const lockMark = a => { a.appendChild(el("span","lk-dot","Découvrir")); return a; };
   const link2 = v => { const a = link(v); if ((v[0] === "meta" && !has("meta")) || ((v[0] === "stats" || v[0] === "valider") && !has("com"))) { a.classList.add("lk-nav"); lockMark(a); } return a; };
@@ -113,7 +116,7 @@ function renderTabs(){
   m.appendChild(more);
   $("#mbar-title").textContent = (VIEWS.find(v => v[0] === S.view) || ["",""])[1];
   $("#acct-name").textContent = myName(); $("#acct-role").textContent = (S.f && S.f.client.name) || "";
-  const tot = badge.valider + unread(); try { if (navigator.setAppBadge) { tot ? navigator.setAppBadge(tot) : navigator.clearAppBadge(); } } catch(e){}
+  const tot = badge.valider + badge.tournages + unread(); try { if (navigator.setAppBadge) { tot ? navigator.setAppBadge(tot) : navigator.clearAppBadge(); } } catch(e){}
 }
 function go(v){ if (location.hash !== "#"+v) location.hash = v; else render(); }
 
@@ -124,6 +127,7 @@ function vAccueil(root){
   const hello = hr < 5 ? "Bonne nuit" : hr < 12 ? "Bonjour" : hr < 18 ? "Bon après-midi" : "Bonsoir";
   const w = waiting(), u = unread();
   let say = "Bienvenue dans l’espace " + ((S.f && S.f.client.name) || "de votre entreprise") + ".";
+  const sw = shootsWaiting(); if (sw) say += sw > 1 ? " " + sw + " feuilles de tournage attendent votre accord." : " Une feuille de tournage attend votre accord.";
   if (w) say += w > 1 ? " " + w + " publications attendent votre accord." : " Une publication attend votre accord.";
   else if (u) say += u > 1 ? " L’agence vous a écrit " + u + " messages." : " L’agence vous a écrit.";
   else say += weekend ? " Tout est calé, bon week-end." : " Tout est à jour, l’agence s’occupe du reste.";
@@ -141,6 +145,58 @@ function vAccueil(root){
   const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone;
   if (!standalone){ const ios = /iphone|ipad|ipod/i.test(navigator.userAgent); W.appendChild(el("p","cl-install", ios ? "Astuce : dans Safari, bouton Partager puis « Sur l’écran d’accueil » pour garder l’application à portée de main." : "Astuce : installez l’application depuis le menu du navigateur pour la garder à portée de main.")); }
   root.appendChild(W);
+}
+
+/* ---------- Tournages : la feuille préparée par l’agence, à valider avant le jour J ---------- */
+const SH_LABEL = { wait: "À valider", ok: "Validée", mod: "Changements demandés", no: "Refusée" };
+async function decideShoot(s, status, note){
+  if (S.f && S.f.preview){ toast("Aperçu en lecture seule : rien n’est envoyé."); return; }
+  try { await api("/api/c/shoot", { body: { id: s.id, status, note: note || "" } });
+    s.status = status; s.note = status === "ok" ? "" : note; s.decidedBy = myName(); s.decidedAt = new Date().toISOString(); S.shOpen = null;
+    toast(status === "ok" ? "Feuille validée. Merci, l’agence est prévenue." : status === "mod" ? "Vos retours sont envoyés à l’agence." : "Refus envoyé à l’agence."); render();
+  } catch(e){ toast(e.message); }
+}
+function vTournages(root){
+  const list = shoots(), f = S.shf || "wait";
+  const cnt = k => list.filter(s => k === "mod" ? (s.status === "mod" || s.status === "no") : s.status === k).length;
+  root.appendChild(head(["Vos", "tournages"], "Ce que l’agence prévoit de filmer chez vous. Relisez la feuille, puis validez ou dites ce qu’il faut changer avant le jour du tournage.",
+    [segm([["wait","À valider" + (cnt("wait") ? " " + cnt("wait") : "")],["mod","Retours" + (cnt("mod") ? " " + cnt("mod") : "")],["ok","Validées"]], f, v => { S.shf = v; render(); })]));
+  const rows = list.filter(s => f === "mod" ? (s.status === "mod" || s.status === "no") : s.status === f);
+  if (!rows.length){ root.appendChild(el("p","empty", f === "wait" ? "Aucune feuille de tournage à valider pour l’instant." : "Rien ici pour l’instant.")); return; }
+  const g = el("div","cl-posts");
+  rows.forEach(s => {
+    const c = el("article","cl-post cl-shoot"), b = el("div","cl-pb");
+    const meta = el("div","cl-pmeta"); meta.append(el("span","pill" + (s.status === "wait" ? " l3" : s.status === "no" ? " no" : ""), SH_LABEL[s.status] || ""), el("span",null, [s.time ? fmtTime(s.time) : "", s.duration].filter(Boolean).join(", "))); b.appendChild(meta);
+    b.appendChild(el("h3","cl-pt", s.date ? "Tournage du " + fmtDL(s.date) : "Tournage, date à fixer"));
+    const facts = [["Lieu", s.place],["À l’image", s.onCamera]].filter(x => x[1]);
+    facts.forEach(([k, v]) => { const p = el("p","cl-cap"); p.append(el("b",null,k + " : "), document.createTextNode(v)); b.appendChild(p); });
+    const items = (title, arr) => { if (!arr.length) return; b.appendChild(el("h4","cl-sh", title)); const ol = el("ol","cl-shl");
+      arr.forEach(v => { const li = el("li"); li.appendChild(el("b",null, v.title || (v.kind === "muet" ? "Réel sans paroles" : v.kind === "photo" ? "Photo" : "Réel parlé")));
+        if (v.kind !== "photo") li.appendChild(el("span","cl-shk", v.kind === "muet" ? "Sans paroles" : "Parlé"));
+        if (v.line) li.appendChild(el("p","cl-cap", v.line));
+        String(v.links || "").split(/\s*\n\s*/).filter(Boolean).forEach(u => { const href = /^https?:\/\//i.test(u) ? u : /^[\w.-]+\.[a-z]{2,}(\/|$)/i.test(u) ? "https://" + u : ""; if (!href) return; const a = el("a","cl-shlink", "Exemple : " + u.replace(/^https?:\/\//, "").slice(0, 60)); a.href = href; a.target = "_blank"; a.rel = "noopener"; li.appendChild(a); });
+        if ((v.files || []).length){ const m = el("div","id-media"); v.files.forEach(x => m.appendChild(attachEl(x))); li.appendChild(m); }
+        ol.appendChild(li); }); b.appendChild(ol); };
+    items("Vidéos", s.videos || []); items("Photos", s.photos || []);
+    if (s.broll){ const p = el("p","cl-cap"); p.append(el("b",null,"À ramener : "), document.createTextNode(s.broll)); b.appendChild(p); }
+    if (s.rules){ const p = el("p","cl-cap"); p.append(el("b",null,"À respecter : "), document.createTextNode(s.rules)); b.appendChild(p); }
+    if (s.note) b.appendChild(el("p","cl-note" + (s.status === "no" ? " no" : ""), (s.status === "no" ? "Votre raison : " : "Vos retours : ") + s.note));
+    if (s.status !== "wait" && s.decidedBy) b.appendChild(el("p","muted cl-by", SH_LABEL[s.status] + " par " + s.decidedBy + " le " + fmtD(s.decidedAt)));
+    if (s.status !== "ok"){
+      const open = S.shOpen === s.id, a = el("div","cl-acts");
+      a.append(btn("Valider","lemon", () => decideShoot(s, "ok")),
+        btn(open && S.shKind === "mod" ? "Fermer" : "Faire des retours","", () => { if (open && S.shKind === "mod"){ S.shOpen = null; } else { S.shOpen = s.id; S.shKind = "mod"; } render(); }),
+        btn(open && S.shKind === "no" ? "Fermer" : "Refuser","", () => { if (open && S.shKind === "no"){ S.shOpen = null; } else { S.shOpen = s.id; S.shKind = "no"; } render(); }));
+      b.appendChild(a);
+      if (open){ const no = S.shKind === "no", box = el("div","cl-modbox" + (no ? " no" : "")), ta = el("textarea"); ta.id = "sh-" + s.id; ta.rows = 3;
+        ta.placeholder = no ? "Pourquoi cette feuille ne vous convient pas" : "Ce qu’il faut changer, ajouter ou retirer : une vidéo, une personne à filmer, l’heure, le lieu";
+        box.append(el("b",null, no ? "Pourquoi refusez-vous cette feuille ?" : "Qu’est-ce qu’il faut changer ?"), ta, btn("Envoyer à l’agence","lemon", () => {
+          if (!ta.value.trim()){ toast("Expliquez ce qu’il faut changer, l’agence en a besoin."); ta.focus(); return; } decideShoot(s, S.shKind, ta.value.trim()); }));
+        b.appendChild(box); setTimeout(() => { const t = document.getElementById("sh-" + s.id); if (t && document.activeElement !== t) t.focus({ preventScroll: true }); }, 0); }
+    }
+    c.appendChild(b); g.appendChild(c);
+  });
+  root.appendChild(g);
 }
 
 /* ---------- À valider ---------- */
@@ -585,7 +641,7 @@ function vPrel(root){
 }
 
 /* ---------- Rendu ---------- */
-const R = { accueil: vAccueil, valider: vValider, stats: vStats, meta: vMeta, messagerie: vMessagerie, visio: vVisio, idees: vIdees, prel: vPrel };
+const R = { accueil: vAccueil, valider: vValider, tournages: vTournages, stats: vStats, meta: vMeta, messagerie: vMessagerie, visio: vVisio, idees: vIdees, prel: vPrel };
 function fromHash(){ const h = location.hash.replace("#",""); S.view = R[h] ? h : "accueil"; }
 function render(){
   if (!S.d || !S.f) return;
@@ -598,8 +654,8 @@ function render(){
 }
 window.addEventListener("hashchange", () => { fromHash(); S.modOpen = null; render(); window.scrollTo(0,0); });
 
-async function loadFeed(){ const f = await api("/api/c/feed"); const before = S.f ? JSON.stringify([S.f.messages.map(m => m.id + m.at), S.f.idees.map(i => i.id + (i.seen || []).length), (S.f.visio || {}).here]) : ""; S.f = f;
-  const after = JSON.stringify([f.messages.map(m => m.id + m.at), f.idees.map(i => i.id + (i.seen || []).length), (f.visio || {}).here]);
+async function loadFeed(){ const f = await api("/api/c/feed"); const before = S.f ? JSON.stringify([S.f.messages.map(m => m.id + m.at), S.f.idees.map(i => i.id + (i.seen || []).length), (S.f.visio || {}).here, (S.f.shoots || []).map(s => s.id + s.status + s.sentAt)]) : ""; S.f = f;
+  const after = JSON.stringify([f.messages.map(m => m.id + m.at), f.idees.map(i => i.id + (i.seen || []).length), (f.visio || {}).here, (f.shoots || []).map(s => s.id + s.status + s.sentAt)]);
   const typing = document.activeElement && /^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName) && S.view !== "messagerie";
   if (before !== after && !typing) render(); }
 async function load(){
