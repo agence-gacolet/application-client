@@ -1619,7 +1619,7 @@ function prodDrop(clients){
         try { const r = await GC.api("POST","/api/g-prod/describe", { client, url: it.url, file: it.name, kind: it.kind });
           if (r.queued){ it.wait = r.queued; PD.save(); draw(); pdPoll(); return; }
           it.props = r.propositions; if (!it.text && it.props[0]) it.text = it.props[0]; draw(); } catch(e){ toast(e.message); gb.disabled = false; gb.textContent = "Proposer des descriptions"; } });
-      if (it.wait){ gb.disabled = true; gb.textContent = it.kind === "video" ? "Claude écoute la vidéo et écrit les descriptions (10 min au plus)…" : "Claude regarde le visuel et écrit les descriptions (10 min au plus)…"; }
+      if (it.wait){ gb.disabled = true; gb.textContent = it.kind === "video" ? "Claude écoute la vidéo et écrit les descriptions (2 à 4 min)…" : "Claude regarde le visuel et écrit les descriptions (2 à 4 min)…"; }
       c.appendChild(gb);
       if (it.url && !it.props && !it.wait && !it.asked){ it.asked = true; setTimeout(() => gb.click(), 0); }   // dès que le fichier est envoyé, Claude s'en occupe sans qu'on lui explique
       if (it.props) { const pp = el("div","pd-props"); it.props.forEach((p, k) => { const o = el("button","pd-prop" + (it.text === p ? " on" : ""), p); o.type = "button"; o.onclick = () => { it.text = p; draw(); }; pp.appendChild(o); }); c.appendChild(pp); }
