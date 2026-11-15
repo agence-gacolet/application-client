@@ -1555,6 +1555,56 @@ function vStrategie(root){
   + ".sx-sec{border:1px solid var(--line-2);border-radius:14px;margin:10px 0;padding:0 16px;background:var(--card)}.sx-sec summary{cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:14px 0;font-weight:700;list-style:none}.sx-sec summary::-webkit-details-marker{display:none}.sx-sec[open] summary{border-bottom:1px solid var(--line-2);margin-bottom:10px}"
   + ".sx-md{padding-bottom:12px;font-size:14px;line-height:1.55}.sx-md p{margin:6px 0}.sx-md ul,.sx-md ol{margin:6px 0;padding-left:20px}.sx-md li{margin:3px 0}.sx-md .tw{margin:10px 0}.sx-md th{text-align:left}.sx-md td,.sx-md th{vertical-align:top;font-size:13px}.sx-pts{margin:6px 0 10px;padding-left:18px;font-size:14px}.sx-pts li{margin:4px 0}"; document.head.appendChild(st); })();
 
+/* Dépôt de productions : on dépose les vidéos et visuels d'un client, l'appli propose les dates (rythme de sa formule, après ce qui est déjà
+   programmé) et trois descriptions écrites par Claude d'après sa fiche et sa stratégie ; on choisit, on corrige, puis tout part dans Metricool. */
+function prodDrop(clients){
+  if (!clients.length){ toast("Liste des clients Metricool en cours de chargement, réessaie dans un instant."); return; }
+  const items = []; let client = clients.includes(S.ui.prodC) ? S.ui.prodC : clients[0], status = null;
+  GC.api("GET","/api/g-prod/status").then(r => { status = r; draw(); }).catch(() => {});
+  let m0; const draw = () => { if (!m0) return; const body = m0.querySelector(".pd-body"); body.textContent = "";
+    if (status && !status.claude) body.appendChild(el("p","note","Les propositions de description ont besoin de la clé Claude (Paramètres > Liaisons). Tu peux quand même écrire la description et programmer."));
+    if (!items.length) body.appendChild(el("p","empty","Dépose une ou plusieurs vidéos ou visuels ci-dessus."));
+    items.forEach((it, i) => { const c = el("div","pd-it");
+      const top = el("div","pd-top"); const th = it.kind === "video" ? el("video","pd-th") : el("img","pd-th"); if (it.url){ th.src = it.url; if (it.kind === "video"){ th.muted = true; th.preload = "metadata"; } } top.appendChild(th);
+      const meta = el("div","pd-meta"); meta.appendChild(el("b", null, it.name)); meta.appendChild(el("span","note", it.busy ? "Envoi du fichier…" : it.kind === "video" ? "Réel" : "Publication"));
+      const dr = el("div","pd-dt"); const di = el("input"); di.type = "date"; di.value = it.date || ""; di.onchange = () => it.date = di.value; const ti = el("input"); ti.type = "time"; ti.value = it.time || ""; ti.onchange = () => it.time = ti.value; dr.append(di, ti); meta.appendChild(dr);
+      const rm = btn("Retirer","sm", () => { items.splice(i, 1); draw(); }); meta.appendChild(rm); top.appendChild(meta); c.appendChild(top);
+      const sj = el("input"); sj.placeholder = "De quoi parle cette production ? (ex. chantier de terrasse à Uzès, avant/après)"; sj.value = it.subject || ""; sj.oninput = () => it.subject = sj.value; c.appendChild(sj);
+      const gb = btn(it.props ? "Autres propositions" : "Proposer des descriptions","sm lemon", async () => { if (!it.subject){ toast("Écris d’abord de quoi parle la production."); return; } gb.disabled = true; gb.textContent = "Claude écrit…";
+        try { const r = await GC.api("POST","/api/g-prod/describe", { client, subject: it.subject, kind: it.kind }); it.props = r.propositions; if (!it.text && it.props[0]) it.text = it.props[0]; draw(); } catch(e){ toast(e.message); gb.disabled = false; gb.textContent = "Proposer des descriptions"; } });
+      gb.disabled = !!(status && !status.claude); c.appendChild(gb);
+      if (it.props) { const pp = el("div","pd-props"); it.props.forEach((p, k) => { const o = el("button","pd-prop" + (it.text === p ? " on" : ""), p); o.type = "button"; o.onclick = () => { it.text = p; draw(); }; pp.appendChild(o); }); c.appendChild(pp); }
+      const ta = el("textarea"); ta.rows = 5; ta.placeholder = "Description qui sera publiée"; ta.value = it.text || ""; ta.oninput = () => it.text = ta.value; c.appendChild(ta);
+      body.appendChild(c); });
+    const go = m0.querySelector(".pd-go"); go.disabled = !items.length || items.some(x => x.busy || !x.url); go.textContent = items.length ? "Programmer " + items.length + " publication" + (items.length > 1 ? "s" : "") + " dans Metricool" : "Programmer dans Metricool"; };
+  const slots = async () => { const need = items.filter(x => !x.date); if (!need.length) return; try { const r = await GC.api("GET","/api/g-prod/slots?client=" + encodeURIComponent(client) + "&n=" + items.length);
+    const used = new Set(items.filter(x => x.date).map(x => x.date)); const free = r.slots.filter(s => !used.has(s.date)); need.forEach(x => { const s = free.shift(); if (s){ x.date = s.date; x.time = s.time; } }); draw(); } catch(e){ toast(e.message); } };
+  openModal(m => { m0 = m; m.classList.add("pd-modal");
+    const t = el("h3", null, "Déposer des productions"); t.id = "mtitle"; m.appendChild(t);
+    m.appendChild(el("p","muted","Les dates suivent le rythme de la formule du client, après ce qui est déjà programmé. Tout est modifiable avant l’envoi."));
+    const f = el("div","form"); const l = el("label", null, "Client"); const sel = el("select"); clients.forEach(n => { const o = el("option", null, n); o.value = n; sel.appendChild(o); }); sel.value = client;
+    sel.onchange = () => { client = sel.value; S.ui.prodC = client; remember(); items.forEach(x => { x.date = ""; x.props = null; }); slots(); draw(); }; l.appendChild(sel); f.appendChild(l);
+    const dz = el("label","pd-drop"); dz.innerHTML = "<b>Choisir ou glisser les vidéos et visuels</b><span>MP4, MOV, JPG, PNG</span>"; const fi = el("input"); fi.type = "file"; fi.multiple = true; fi.accept = "video/*,image/*"; fi.hidden = true; dz.appendChild(fi);
+    const add = files => { [...files].forEach(file => { const it = { name: file.name, kind: /^video\//.test(file.type) ? "video" : "image", busy: true, url: "", text: "", subject: "" }; items.push(it);
+      S.assets.upload(file).then(r => { it.url = r.url; it.busy = false; draw(); }).catch(e => { it.busy = false; toast(file.name + " : " + e.message); items.splice(items.indexOf(it), 1); draw(); }); }); draw(); slots(); };
+    fi.onchange = () => add(fi.files); dz.ondragover = e => { e.preventDefault(); dz.classList.add("on"); }; dz.ondragleave = () => dz.classList.remove("on"); dz.ondrop = e => { e.preventDefault(); dz.classList.remove("on"); add(e.dataTransfer.files); };
+    f.appendChild(dz); m.appendChild(f);
+    m.appendChild(el("div","pd-body"));
+    const act = el("div","actions"); const go = btn("Programmer dans Metricool","lemon pd-go", async () => {
+      const bad = items.find(x => !x.date || !x.time); if (bad){ toast("Il manque la date ou l’heure de « " + bad.name + " »."); return; }
+      go.disabled = true; go.textContent = "Envoi à Metricool…";
+      try { const r = await GC.api("POST","/api/g-prod/schedule", { client, items: items.map(x => ({ url: x.url, kind: x.kind, text: x.text, date: x.date, time: x.time })) });
+        const ok = r.results.filter(x => x.ok).length, ko = r.results.filter(x => !x.ok);
+        if (ko.length) toast(ok + " programmée(s), " + ko.length + " refusée(s) : " + ko[0].error); else { toast(ok + " publication" + (ok > 1 ? "s" : "") + " programmée" + (ok > 1 ? "s" : "") + " dans Metricool pour " + client + "."); closeModal(); }
+        if (typeof loadPubs === "function") loadPubs(S.ui.pubM || monthKey(), true);
+      } catch(e){ toast(e.message); } go.disabled = false; draw(); });
+    act.append(btn("Annuler","", closeModal), go); m.appendChild(act); draw();
+  });
+}
+(function(){ const st = document.createElement("style"); st.textContent = ".pd-modal{max-width:720px}.pd-drop{display:flex;flex-direction:column;align-items:center;gap:4px;padding:22px;border:1.5px dashed var(--line-2);border-radius:14px;cursor:pointer;text-align:center}.pd-drop.on{border-color:#C6FF33}.pd-drop span{font-size:12px;color:var(--muted)}"
+  + ".pd-body{display:grid;gap:14px;margin:14px 0;max-height:52vh;overflow:auto}.pd-it{display:grid;gap:8px;padding:12px;border:1px solid var(--line-2);border-radius:14px;background:var(--card)}.pd-top{display:flex;gap:12px}.pd-th{width:64px;height:110px;object-fit:cover;border-radius:8px;background:#000;flex:none}"
+  + ".pd-meta{display:flex;flex-direction:column;gap:6px;min-width:0;flex:1}.pd-meta b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pd-dt{display:flex;gap:6px;flex-wrap:wrap}.pd-dt input{max-width:150px}.pd-it input,.pd-it textarea{width:100%}"
+  + ".pd-props{display:grid;gap:6px}.pd-prop{text-align:left;white-space:pre-wrap;font:inherit;font-size:13px;line-height:1.4;padding:10px;border-radius:10px;border:1px solid var(--line-2);background:none;color:var(--ink);cursor:pointer}.pd-prop.on{border-color:#C6FF33;background:rgba(198,255,51,.06)}"; document.head.appendChild(st); })();
 /* Récap d'un client dans Publications : ce qui est posté, programmé, en erreur sur Metricool, et ce que le client a validé ou refusé dans son espace */
 function pubRecap(r, mk, ok){
   openModal(m => {
@@ -1591,7 +1641,7 @@ let pubAt = {}; function loadPubs(mk, force){ if (!force && Date.now() - (pubAt[
   GC.api("GET", "/api/g-pubs?month=" + mk + (force ? "&fresh=1" : "")).then(r => { S.pubs = Object.assign({}, S.pubs, { [mk]: r }); renderSoon(); }).catch(() => {}); }
 function vPublications(root){
   const mk = S.ui.pubM || monthKey(), R = (S.pubs || {})[mk]; loadPubs(mk);
-  const nav = [btn("‹","icon", () => { S.ui.pubM = addMonths(mk + "-01", -1).slice(0, 7); render(); }), btn("Ce mois","", () => { S.ui.pubM = ""; render(); }), btn("›","icon", () => { S.ui.pubM = addMonths(mk + "-01", 1).slice(0, 7); render(); }), btn("Actualiser","", () => { loadPubs(mk, true); toast("Lecture de Metricool…"); })];
+  const nav = [addBtn("Déposer des productions", () => { const R2 = (S.pubs || {})[mk]; prodDrop(R2 && (R2.rows || R2.plan) ? (R2.rows || R2.plan).filter(r => r.blogId).map(r => r.client) : []); }), btn("‹","icon", () => { S.ui.pubM = addMonths(mk + "-01", -1).slice(0, 7); render(); }), btn("Ce mois","", () => { S.ui.pubM = ""; render(); }), btn("›","icon", () => { S.ui.pubM = addMonths(mk + "-01", 1).slice(0, 7); render(); }), btn("Actualiser","", () => { loadPubs(mk, true); toast("Lecture de Metricool…"); })];
   const rows = R ? (R.rows || R.plan || []) : [], tot = k => rows.reduce((a, r) => a + (Number(r[k]) || 0), 0);
   const plan = r => (Number(r.stat) || 0) + (Number(r.video) || 0), done = r => (r.statDone || 0) + (r.vidDone || 0), sched = r => (r.statSched || 0) + (r.vidSched || 0), totP = rows.reduce((a, r) => a + plan(r), 0);
   root.appendChild(head(["Publications", monthLabel(mk)], "Le nombre de posts prévus au mois pour chaque client, face à ce qui est réellement posté sur Metricool (un post compté une fois, sur Instagram, ou Facebook à défaut ; stories exclues). " + totP + " posts prévus. Clique sur un client pour le détail.", nav));
@@ -3349,6 +3399,16 @@ function envoyer() {
 }
 `;
 }
+/* Clé Claude (API Anthropic) : descriptions proposées dans le dépôt de productions */
+function pmClaude(w){
+  const c = pmCard("Claude (descriptions des publications)", "Sert à proposer les descriptions dans Publications > Déposer des productions, d’après la fiche et la stratégie du client. Clé à créer sur console.anthropic.com, payée à l’usage (environ 1 à 2 centimes par série de propositions).");
+  w.appendChild(c);
+  if (S.cla == null){ S.cla = ""; GC.api("GET","/api/g-prod/status").then(r => { S.cla = r.claude ? "on" : "off"; render(); }).catch(() => {}); }
+  c.appendChild(el("p","note", S.cla === "on" ? "Relié : les propositions de description sont disponibles." : "Pas encore relié."));
+  const f = el("div","form"), l = el("label", null, S.cla === "on" ? "Remplacer la clé" : "Clé Claude"), i = el("input"); i.type = "password"; i.autocomplete = "off"; i.placeholder = "sk-ant-…"; l.appendChild(i); f.appendChild(l); c.appendChild(f);
+  const a = el("div","pm-actions"), b = btn("Enregistrer la clé", S.cla === "on" ? "" : "lemon", async () => { if (!i.value.trim()) return toast("Colle d’abord la clé."); b.disabled = true; try { await GC.api("PUT","/api/g-keys/anthropic", { key: i.value.trim() }); i.value = ""; S.cla = "on"; toast("Claude relié."); render(); } catch(e){ toast(e.message); b.disabled = false; } });
+  a.appendChild(b); c.appendChild(a);
+}
 /* Clé Google Maps (Places API) pour les listes d'appels */
 function pmPlaces(w){
   const c = pmCard("Google Maps (listes d’appels)", "Sert à générer les listes d’appels avec le téléphone, le site et les avis Google. Clé à créer dans Google Cloud (API « Places API (New) »). Environ 1 000 recherches gratuites par mois, puis quelques centimes par recherche.");
@@ -3414,7 +3474,7 @@ function pmLiaisons(w){
   const a = el("div","pm-actions"); const b = btn("Enregistrer la clé","lemon", async () => { const v = inp.value.trim(); if (!v) return toast("Colle d’abord la clé.");
     b.disabled = true; try { await GC.api("PUT","/api/g-keys/metricool",{ token: v }); inp.value = ""; toast("Metricool relié."); S.pubs = {}; pubAt = {}; render(); } catch(x){ toast(x.message || "Enregistrement impossible."); b.disabled = false; } });
   a.appendChild(b); c.appendChild(a); w.appendChild(c);
-  pmGsheets(w); pmPlaces(w);
+  pmGsheets(w); pmPlaces(w); pmClaude(w);
   pmMaj(w);
 }
 

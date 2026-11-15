@@ -1136,6 +1136,10 @@ module.exports = function (app, { db, wrap, root }) {
     ["France Étanchéité", "6077200", 4, 4], ["Gaufrement Bon", "6000998", 4, 4], ["La Vie La Construction", "6000767", 8, 4], ["Le Petit Mas", "7628911", 0, 4],
     ["Locamex", "6000991", 8, 4], ["Meyer-Pic", "6636223", 4, 4], ["Only Clean", "7446043", 4, 4], ["Paillotte Bassamoise", "6245450", 8, 4], ["Sport Défense", "6225588", 4, 4], ["Insolent", "", 0, 4]];
   const pubCache = new Map();
+  // Dépôt de productions (descriptions Claude + programmation Metricool)
+  const persistKey = (name, val) => { const ENV = path.join(root, ".env"); let txt = ""; try { txt = fs.readFileSync(ENV, "utf8"); } catch (e) {}
+    txt = txt.split("\n").filter(l => l && !l.startsWith(name + "=")).join("\n") + "\n" + name + "='" + val + "'\n"; fs.writeFileSync(ENV, txt.replace(/^\n+/, ""), { mode: 0o600 }); process.env[name] = val; };
+  require("./production")({ app, auth, wrap, db, current, pubPlan: PUB_PLAN, persistKey });
   app.get("/api/g-pubs", auth, wrap(async (req, res) => {
     const mk = /^\d{4}-\d{2}$/.test(String(req.query.month || "")) ? req.query.month : new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Paris" }).slice(0, 7);
     const plan = PUB_PLAN.map(([client, blogId, stat, video]) => ({ client, blogId, stat, video }));
