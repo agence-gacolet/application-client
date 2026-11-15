@@ -2838,6 +2838,7 @@ function vIdees(root){
       if (intl){ const e = btn("Modifier","sm", () => editIdee(i)); e.disabled = !writable(); a.appendChild(e); }
       else { const g2 = (S.cgroups || []).find(x => x.name === i.client);
         if (g2) a.appendChild(btn("Répondre dans le groupe","sm lemon", () => { S.ui.msgMode = "main"; S.ui.msgCh = g2.ch; S.ui.waConv = true; remember(); go("messagerie"); })); }
+      { let armed = false; const db = btn("Supprimer","sm danger", async () => { if (!armed){ armed = true; db.textContent = "Confirmer la suppression"; db.classList.add("armed"); setTimeout(() => { armed = false; db.textContent = "Supprimer"; db.classList.remove("armed"); }, 4000); return; } db.disabled = true; try { await remove("idees", i.id); toast("Idée supprimée (récupérable 30 jours dans la corbeille)."); } catch(e){ db.disabled = false; } }); db.disabled = !writable(); db.style.marginLeft = "auto"; a.appendChild(db); }
       c.appendChild(a); g.appendChild(c);
     });
     root.appendChild(g);
