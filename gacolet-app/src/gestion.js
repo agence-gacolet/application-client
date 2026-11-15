@@ -750,11 +750,13 @@ module.exports = function (app, { db, wrap, root }) {
       if (!r.ok) return res.status(502).json({ error: "L’annuaire des entreprises ne répond pas (" + r.status + "). Réessaie dans un instant." });
       const j = await r.json(); pages = j.total_pages || 1; total = j.total_results || 0; page++;
       for (const e of j.results || []) {
-        const et = (e.matching_etablissements || []).find(x => x.etat_administratif === "A" && (!deps.length || deps.some(d => String(x.code_postal || "").startsWith(d))) && (!cps.length || cps.includes(String(x.code_postal || "")))) || null;
+        const nafs = naf ? naf.split(",") : null;
+        const et = (e.matching_etablissements || []).find(x => x.etat_administratif === "A" && (!nafs || nafs.includes(x.activite_principale)) && (!deps.length || deps.some(d => String(x.code_postal || "").startsWith(d))) && (!cps.length || cps.includes(String(x.code_postal || "")))) || null;
         if (!et) continue;
         const name = ((et.liste_enseignes || [])[0] || e.nom_raison_sociale || e.nom_complet || "").replace(/\s+/g, " ").trim(), key = nk(name);
         if (!name || known.has(key) || seen.has(key)) continue; seen.add(key);
-        const dir = (e.dirigeants || []).find(d => d.type_dirigeant === "personne physique");
+        const pp = (e.dirigeants || []).filter(d => d.type_dirigeant === "personne physique" && !/commissaire|suppl/i.test(d.qualite || ""));
+        const dir = pp.find(d => /g[ée]rant|pr[ée]sident|directeur|exploitant/i.test(d.qualite || "")) || pp[0];
         const cap = t => String(t || "").toLowerCase().replace(/(^|[\s'-])\S/g, m => m.toUpperCase());
         out.push({ company: cap(name), city: cap(et.libelle_commune), address: cap(et.adresse), cp: et.code_postal || "", contact: dir ? cap(String(dir.prenoms || "").split(" ")[0] + " " + (dir.nom || "")) + (dir.qualite ? " (" + dir.qualite + ")" : "") : "",
           activity: et.activite_principale || e.activite_principale || "", siren: e.siren || "", staff: e.tranche_effectif_salarie || "", since: e.date_creation || "" });
