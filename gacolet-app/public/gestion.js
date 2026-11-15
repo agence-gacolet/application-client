@@ -641,13 +641,15 @@ function vBilans(root){
   if (BI.m !== m || !BI.list) { if (BI.m !== m) biLoadList(m); }
   const f = el("div","filters ag-f"); const g = el("div","fgroup"); const lb = el("label","flabel","Mois"); lb.htmlFor = "bi-m"; const sel = el("select","pick"); sel.id = "bi-m";
   months.forEach(x => { const o = el("option", null, biLabel(x)); o.value = x; sel.appendChild(o); }); sel.value = m; sel.onchange = () => { S.ui.biM = sel.value; remember(); render(); }; g.append(lb, sel); f.appendChild(g); root.appendChild(f);
-  const cls = (S.cgroups || []).slice().sort((a, b) => a.name.localeCompare(b.name, "fr"));
+  if (!BI.cl){ if (!BI.clLoading){ BI.clLoading = true; GC.api("GET","/api/g-bilan-clients").then(r => { BI.cl = r.clients || []; }).catch(() => { BI.cl = (S.cgroups || []).map(c => ({ id: c.id, name: c.name, space: true })); }).then(() => { BI.clLoading = false; render(); }); }
+    root.appendChild(el("div","sk sk-page")); return; }
+  const cls = BI.cl.slice().sort((a, b) => a.name.localeCompare(b.name, "fr"));
   if (!cls.length){ root.appendChild(el("p","empty","Aucun client relié à un espace client pour l’instant : le bilan se calcule à partir de son planning Metricool et de ses contacts Meta.")); return; }
   const st = cid => (BI.list || []).some(x => x.cid === cid) ? "saved" : "todo";
-  const cur = cls.some(c => c.id === S.ui.biC) ? S.ui.biC : cls[0].id;
+  const cur = cls.some(c => String(c.id) === String(S.ui.biC)) ? cls.find(c => String(c.id) === String(S.ui.biC)).id : cls[0].id, curC = cls.find(c => c.id === cur) || {};
   const wrap = el("div","bi-wrap"); const side = el("div","bi-side");
   cls.forEach(c => { const s = BI.list ? st(c.id) : ""; const b = el("button","bi-ci" + (c.id === cur ? " on" : "")); b.type = "button";
-    b.append(el("b", null, c.name), el("span","pill" + (s === "saved" ? " ok" : ""), s === "saved" ? "Prêt" : s ? "À préparer" : "…"));
+    b.append(el("b", null, c.name), el("span","pill" + (s === "saved" ? " ok" : ""), s === "saved" ? "Prêt" : s ? "À préparer" : "…")); if (!c.space) b.title = "Pas d’espace client : bilan à imprimer ou en PDF";
     b.onclick = () => { S.ui.biC = c.id; remember(); render(); }; side.appendChild(b); });
   const main = el("div","bi-main"); wrap.append(side, main); root.appendChild(wrap);
   const k = cur + "|" + m, r = BI.data[k];
@@ -683,6 +685,7 @@ function vBilans(root){
   let armed = false; const sendB = btn(sv.sent ? "Renvoyer au client" : "Envoyer au client","", async () => {
     if (!armed){ armed = true; sendB.textContent = "Confirmer l’envoi"; sendB.classList.add("armed"); toast("Le bilan apparaîtra dans l’onglet Bilans de l’espace de " + r.data.client.name + "."); return; }
     sendB.disabled = true; try { const out = await GC.api("PUT","/api/g-bilan/" + cur, { m, extra: x, send: true, html: deck.outerHTML }); r.saved = out.saved; BI.list = null; biLoadList(m); toast("Bilan envoyé dans l’espace du client."); render(); } catch(e){ toast(e.message); sendB.disabled = false; } });
+  if (!curC.space){ sendB.disabled = true; sendB.title = "Ce client n’a pas d’espace client : imprime le bilan ou fais-en un PDF."; }
   acts.append(btn("Enregistrer","lemon", send), sendB, btn("Imprimer ou PDF","", () => window.print()));
   if (sv.savedAt) acts.appendChild(el("span","muted bi-pubd","Enregistré le " + fmtFR(sv.savedAt.slice(0, 10)) + " par " + (sv.savedBy || "") + (sv.sent ? ", envoyé au client le " + fmtFR(sv.sent.at.slice(0, 10)) : "")));
   const col = el("div","bi-col"); col.append(acts, form); deck = bilanSlides(r.data, x); main.append(col, deck);

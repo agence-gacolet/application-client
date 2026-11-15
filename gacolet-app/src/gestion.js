@@ -976,7 +976,9 @@ module.exports = function (app, { db, wrap, root }) {
   const okMonth = m => /^\d{4}-(0[1-9]|1[0-2])$/.test(String(m || ""));
   const prevMonth = m => { const [y, mo] = m.split("-").map(Number), d = new Date(y, mo - 2, 1); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); };
   async function bilanData(cid, month, noPrev) {
-    const c = await db.one("SELECT * FROM clients WHERE id = ?", [cid]); if (!c) return null;
+    // « b<id> » : client sans espace client, calculé directement à partir de sa marque Metricool
+    let c; if (/^b\d+$/.test(String(cid))) { const pp = PUB_PLAN.find(x => x[1] === String(cid).slice(1)); if (!pp) return null; c = { id: cid, name: pp[0], modules: "com", metricool_blog_id: pp[1] }; }
+    else c = await db.one("SELECT * FROM clients WHERE id = ?", [cid]); if (!c) return null;
     const mods = String(c.modules || "com").split(",");
     let posts = [], postsError = "";
     if (mods.includes("com") && c.metricool_blog_id) { try { posts = await fetchMonth(c.metricool_blog_id, month); } catch (e) { postsError = "Planning Metricool indisponible."; } }
@@ -1005,8 +1007,15 @@ module.exports = function (app, { db, wrap, root }) {
       meta, shoots: { count: shoots.length, videos: vids.length, dates: shoots.map(s => s.date).sort() }, stats };
   }
   const bilanId = (cid, m) => "c" + cid + "-" + m;
+  const bilanCid = p => /^b\d+$/.test(String(p)) ? String(p) : Number(p);
+  // Liste des bilans : les clients qui ont un espace client, puis toutes les marques Metricool qui n'en ont pas
+  app.get("/api/g-bilan-clients", auth, ownerOnly, wrap(async (req, res) => {
+    const rows = await db.all("SELECT id, name, metricool_blog_id FROM clients"), out = rows.map(r => ({ id: r.id, name: r.name, space: true, blog: r.metricool_blog_id || "" }));
+    PUB_PLAN.filter(x => x[1] && !rows.some(r => String(r.metricool_blog_id || "") === x[1] || sameName(r.name, x[0]))).forEach(x => out.push({ id: "b" + x[1], name: x[0], space: false, blog: x[1] }));
+    res.json({ clients: out });
+  }));
   app.get("/api/g-bilan/:cid", auth, ownerOnly, wrap(async (req, res) => {
-    const cid = Number(req.params.cid), m = String(req.query.m || ""); if (!cid || !okMonth(m)) return res.status(400).json({ error: "Demande invalide." });
+    const cid = bilanCid(req.params.cid), m = String(req.query.m || ""); if (!cid || !okMonth(m)) return res.status(400).json({ error: "Demande invalide." });
     const data = await bilanData(cid, m); if (!data) return res.status(404).json({ error: "Client introuvable." });
     res.json({ data, saved: await current("_bilans", bilanId(cid, m)) });
   }));
@@ -1016,7 +1025,7 @@ module.exports = function (app, { db, wrap, root }) {
     res.json({ bilans: rows.map(r => { let d = {}; try { d = JSON.parse(r.data || "{}"); } catch (e) {} return { cid: d.cid, savedAt: d.savedAt || "", savedBy: d.savedBy || "", sentAt: (d.sent && d.sent.at) || "" }; }) });
   }));
   app.put("/api/g-bilan/:cid", auth, ownerOnly, wrap(async (req, res) => {
-    const cid = Number(req.params.cid), b = req.body || {}, m = String(b.m || ""); if (!cid || !okMonth(m)) return res.status(400).json({ error: "Demande invalide." });
+    const cid = bilanCid(req.params.cid), b = req.body || {}, m = String(b.m || ""); if (!cid || !okMonth(m)) return res.status(400).json({ error: "Demande invalide." });
     const data = await bilanData(cid, m); if (!data) return res.status(404).json({ error: "Client introuvable." });
     const s = (v, n) => String(v == null ? "" : v).trim().slice(0, n), num = v => { const x = Number(String(v == null ? "" : v).replace(",", ".")); return isFinite(x) && x >= 0 ? Math.round(x) : null; };
     // Ce que l'agence ajoute au bilan : uniquement des champs texte connus, longueur bornée
@@ -1025,6 +1034,7 @@ module.exports = function (app, { db, wrap, root }) {
     const doc = { cid, month: m, data, extra, savedAt: new Date().toISOString(), savedBy: req.user.name, };
     // « Envoyer » : le bilan (les diapositives telles qu'affichées) part dans l'espace du client, onglet Bilans ; un nouvel envoi remplace le précédent
     const prev = await current("_bilans", bilanId(cid, m)); if (prev && prev.sent) doc.sent = prev.sent;
+    if (b.send && typeof cid === "string") return res.status(400).json({ error: "Ce client n’a pas d’espace client : imprime le bilan ou fais-en un PDF." });
     if (b.send) { const html = String(b.html || "").slice(0, 800000).replace(/<script[\s\S]*?<\/script>/gi, "").replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "").replace(/javascript:/gi, "");
       if (!/class="bs-deck"/.test(html)) return res.status(400).json({ error: "Bilan vide." });
       doc.sent = { at: new Date().toISOString(), by: req.user.name, html }; }
