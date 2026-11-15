@@ -1626,7 +1626,7 @@ html.tg-lock,html.tg-lock body{overflow:hidden}
 .wa-txt{font-size:var(--fs-base);line-height:1.42;letter-spacing:0;font-weight:400;padding-right:0}
 .wa-name{font-size:var(--fs-xs);font-weight:500;letter-spacing:.01em;margin:0 0 2px}
 .wa-line .av{font-size:var(--fs-2xs)}
-.wa-line .av-sp{width:24px}
+.wa-line .av-sp{width:26px}
 .wa-day{font-size:var(--fs-xs);font-weight:500;margin:18px 0 6px}
 .wa-line.mine .wa-quote{background:rgba(0,0,0,.18)}
 .wa-quote{background:rgba(255,255,255,.05);border-radius:9px;padding:5px 9px;font-size:var(--fs-m)}
