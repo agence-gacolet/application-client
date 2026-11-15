@@ -70,7 +70,7 @@ module.exports = function production({ app, auth, wrap, db, current, put, pubPla
     res.json({ slots: out, blog: !!blog, hour: H, perMonth: plan, days: pref.map(k => DAYS[k]), thisMonth: countIn(monthOf(now)) });
   }));
 
-  // Sans clé Claude : la demande part dans une file (_descq) ; Claude Code, sur le Mac de l'agence, la traite toutes les 10 minutes
+  // Sans clé Claude : la demande part dans une file (_descq) ; Claude Code, sur le Mac de l'agence, la relève chaque minute (tâche planifiée « gacolet-descriptions »)
   // avec l'abonnement Claude (rien à payer en plus), puis renvoie les trois propositions.
   const RULES = "Règles : français, au ton du client, deux émojis au plus, pas de tiret long, pas de formule toute faite ni de marque d'écriture automatique, pas de superlatif non sourcé, pas de prénom de l'équipe de l'agence, aucun chiffre sans source. Disposition habituelle de l'agence, à respecter exactement, blocs séparés par une ligne vide : 1) une accroche d'une ligne, sans émoji ; ligne vide ; 2) un paragraphe de 2 à 4 phrases qui reprend ce que dit la vidéo (tutoiement si le client tutoie) ; ligne vide ; 3) une ligne d'invitation à agir signée par le client (ex. « Maître nageur à Lunel, je réponds à tes questions : écris-moi en message privé. »), avec au plus un émoji, à la fin de la ligne ; ligne vide ; 4) une ligne de 4 à 6 mots-dièse écrits avec une majuscule à chaque mot (#StageDeNatation), le premier au nom du client (ex. #HugoMaitreNageur), sans accents. Trois descriptions aux angles différents.";
   app.get("/api/g-prod/describe/:id", auth, wrap(async (req, res) => { const q = await current("_descq", String(req.params.id)); if (!q) return res.status(404).json({ error: "Demande introuvable." }); res.json({ status: q.status, propositions: q.propositions || [], transcript: q.transcript || "", error: q.error || "" }); }));
@@ -151,6 +151,16 @@ module.exports = function production({ app, auth, wrap, db, current, put, pubPla
       await put("_purge", q.id, Object.assign({}, q, { id: undefined, done: true, doneAt: new Date().toISOString(), why: copied ? "copie Metricool" : "publication introuvable" }));
     }
   }
+  // Fichiers déposés mais jamais programmés : supprimés du serveur 30 jours après le dépôt (seulement ceux du Dépôt, repérés par leur demande de description)
+  async function purgeStale() {
+    if (!upDir) return; const lim = Date.now() - 30 * 86400000, done = new Set((await docsOf("_purge")).map(q => q.file));
+    for (const q of await docsOf("_descq")) {
+      const fn = String(q.url || "").replace(/^\/f\//, ""); if (!fn || q.purged || done.has(fn) || Date.parse(q.at || 0) > lim) continue;
+      try { fsP.unlinkSync(pathP.join(upDir, pathP.basename(fn))); } catch (e) {}
+      await put("_descq", q.id, Object.assign({}, q, { id: undefined, purged: new Date().toISOString() }));
+    }
+  }
+  setInterval(() => purgeStale().catch(() => {}), 6 * 3600000).unref();
   setInterval(() => purgeFiles().catch(() => {}), 120000).unref();
   setTimeout(() => purgeFiles().catch(() => {}), 20000).unref();
 
