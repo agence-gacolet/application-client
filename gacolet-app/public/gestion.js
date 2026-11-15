@@ -1585,7 +1585,6 @@ function prodDrop(clients){
   const items = []; let client = clients.includes(S.ui.prodC) ? S.ui.prodC : clients[0], status = null;
   GC.api("GET","/api/g-prod/status").then(r => { status = r; draw(); }).catch(() => {});
   let m0; const draw = () => { if (!m0) return; const body = m0.querySelector(".pd-body"); body.textContent = "";
-    if (status && !status.claude) body.appendChild(el("p","note","Les propositions de description ont besoin de la clé Claude (Paramètres > Liaisons). Tu peux quand même écrire la description et programmer."));
     if (!items.length) body.appendChild(el("p","empty","Dépose une ou plusieurs vidéos ou visuels ci-dessus."));
     items.forEach((it, i) => { const c = el("div","pd-it");
       const top = el("div","pd-top"); const th = it.kind === "video" ? el("video","pd-th") : el("img","pd-th"); if (it.url){ th.src = it.url; if (it.kind === "video"){ th.muted = true; th.preload = "metadata"; } } top.appendChild(th);
@@ -1594,8 +1593,11 @@ function prodDrop(clients){
       const rm = btn("Retirer","sm", () => { items.splice(i, 1); draw(); }); meta.appendChild(rm); top.appendChild(meta); c.appendChild(top);
       const sj = el("input"); sj.placeholder = "De quoi parle cette production ? (ex. chantier de terrasse à Uzès, avant/après)"; sj.value = it.subject || ""; sj.oninput = () => it.subject = sj.value; c.appendChild(sj);
       const gb = btn(it.props ? "Autres propositions" : "Proposer des descriptions","sm lemon", async () => { if (!it.subject){ toast("Écris d’abord de quoi parle la production."); return; } gb.disabled = true; gb.textContent = "Claude écrit…";
-        try { const r = await GC.api("POST","/api/g-prod/describe", { client, subject: it.subject, kind: it.kind }); it.props = r.propositions; if (!it.text && it.props[0]) it.text = it.props[0]; draw(); } catch(e){ toast(e.message); gb.disabled = false; gb.textContent = "Proposer des descriptions"; } });
-      gb.disabled = !!(status && !status.claude); c.appendChild(gb);
+        try { const r = await GC.api("POST","/api/g-prod/describe", { client, subject: it.subject, kind: it.kind });
+          if (r.queued){ it.wait = r.queued; draw(); const poll = async () => { if (!document.body.contains(m0)) return; try { const q = await GC.api("GET","/api/g-prod/describe/" + it.wait); if (q.status === "done"){ it.wait = ""; it.props = q.propositions; if (!it.text && it.props[0]) it.text = it.props[0]; draw(); return; } } catch(e){} setTimeout(poll, 15000); }; setTimeout(poll, 15000); return; }
+          it.props = r.propositions; if (!it.text && it.props[0]) it.text = it.props[0]; draw(); } catch(e){ toast(e.message); gb.disabled = false; gb.textContent = "Proposer des descriptions"; } });
+      if (it.wait){ gb.disabled = true; gb.textContent = "Claude écrit les descriptions (10 min au plus)…"; }
+      c.appendChild(gb);
       if (it.props) { const pp = el("div","pd-props"); it.props.forEach((p, k) => { const o = el("button","pd-prop" + (it.text === p ? " on" : ""), p); o.type = "button"; o.onclick = () => { it.text = p; draw(); }; pp.appendChild(o); }); c.appendChild(pp); }
       const ta = el("textarea"); ta.rows = 5; ta.placeholder = "Description qui sera publiée"; ta.value = it.text || ""; ta.oninput = () => it.text = ta.value; c.appendChild(ta);
       body.appendChild(c); });
@@ -3439,10 +3441,10 @@ function envoyer() {
 }
 /* Clé Claude (API Anthropic) : descriptions proposées dans le dépôt de productions */
 function pmClaude(w){
-  const c = pmCard("Claude (descriptions des publications)", "Sert à proposer les descriptions dans Publications > Déposer des productions, d’après la fiche et la stratégie du client. Clé à créer sur console.anthropic.com, payée à l’usage (environ 1 à 2 centimes par série de propositions).");
+  const c = pmCard("Claude (descriptions des publications)", "Facultatif. Sans clé, les descriptions de Publications > Déposer des productions sont écrites par Claude depuis le Mac de l’agence, avec l’abonnement, en 10 minutes au plus. Une clé (console.anthropic.com, payée à l’usage) les rend instantanées.");
   w.appendChild(c);
   if (S.cla == null){ S.cla = ""; GC.api("GET","/api/g-prod/status").then(r => { S.cla = r.claude ? "on" : "off"; render(); }).catch(() => {}); }
-  c.appendChild(el("p","note", S.cla === "on" ? "Relié : les propositions de description sont disponibles." : "Pas encore relié."));
+  c.appendChild(el("p","note", S.cla === "on" ? "Relié : propositions instantanées." : "Pas de clé : les propositions passent par le Mac de l’agence (10 minutes au plus)."));
   const f = el("div","form"), l = el("label", null, S.cla === "on" ? "Remplacer la clé" : "Clé Claude"), i = el("input"); i.type = "password"; i.autocomplete = "off"; i.placeholder = "sk-ant-…"; l.appendChild(i); f.appendChild(l); c.appendChild(f);
   const a = el("div","pm-actions"), b = btn("Enregistrer la clé", S.cla === "on" ? "" : "lemon", async () => { if (!i.value.trim()) return toast("Colle d’abord la clé."); b.disabled = true; try { await GC.api("PUT","/api/g-keys/anthropic", { key: i.value.trim() }); i.value = ""; S.cla = "on"; toast("Claude relié."); render(); } catch(e){ toast(e.message); b.disabled = false; } });
   a.appendChild(b); c.appendChild(a);
