@@ -888,6 +888,10 @@ module.exports = function (app, { db, wrap, root }) {
     }),
     limits: { fileSize: 300 * 1024 * 1024, files: 1 },
   });
+  // Envois en cours : une mise en ligne attend qu'ils soient finis avant de redémarrer le serveur (un dépôt ne doit jamais être coupé)
+  let UPLOADS = 0;
+  app.use("/api/g-upload", (req, res, next) => { UPLOADS++; let d = false; const end = () => { if (!d) { d = true; UPLOADS--; } }; res.on("finish", end); res.on("close", end); next(); });
+  global.gcUploads = () => UPLOADS;
   app.post("/api/g-upload", auth, up.single("file"), (req, res) => {
     const f = req.file;
     if (!f) return res.status(400).json({ error: "Aucun fichier reçu." });
@@ -1354,7 +1358,9 @@ module.exports = function (app, { db, wrap, root }) {
     const restart = changed.some(f => /^gacolet-app\/(src\/|server\.js|package)/.test(f));
     // Sous le gardien (supervisor.js) : le serveur s'arrête après la réponse et repart tout seul avec le nouveau code
     const auto = restart && !!process.env.GACOLET_SUPERVISED;
-    res.json({ ok: true, from: before.slice(0, 7), to: after.slice(0, 7), changed, restart, auto, log: log.join("\n") });
-    if (auto) setTimeout(() => process.exit(75), 600);
+    const busy = global.gcUploads ? global.gcUploads() : 0;
+    res.json({ ok: true, from: before.slice(0, 7), to: after.slice(0, 7), changed, restart, auto, uploads: busy, log: log.join("\n") + (auto && busy ? "\nRedémarrage reporté : " + busy + " envoi(s) de fichier en cours, il se fera dès qu'ils sont finis." : "") });
+    // Jamais de redémarrage pendant un envoi de fichier : on attend la fin (20 min au plus)
+    if (auto) { const t0 = Date.now(); const go = () => (global.gcUploads && global.gcUploads() > 0 && Date.now() - t0 < 20 * 60000) ? setTimeout(go, 2000) : process.exit(75); setTimeout(go, 600); }
   }));
 };
