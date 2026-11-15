@@ -726,7 +726,7 @@ module.exports = function (app, { db, wrap, root }) {
     res.json({ ok: true, id });
     if (col === "messages") pushMsg(data).catch(() => {});
   }));
-  // ---------- Listes d'appels du Commercial ----------
+  // ---------- Listes d’appels du Commercial (annuaire public ou Google Maps) ----------
   // Recherche d'entreprises dans l'annuaire public de l'État (recherche-entreprises.api.gouv.fr, gratuit, sans clé) :
   // activité (codes NAF), zone (départements ou codes postaux), taille ; les entreprises déjà dans l'appli sont écartées.
   const nk = s => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\([^)]*\)/g, "").replace(/[^a-z0-9]+/g, " ").trim();
