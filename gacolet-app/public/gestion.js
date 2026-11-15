@@ -823,12 +823,12 @@ function vAccueil(root){
   else if (hr < 14) say = "Une vraie pause, puis on reprend tranquillement.";
   else if (hr < 18) say = wd === 5 ? "Encore quelques heures et c’est le week-end." : "Encore un bel après-midi devant toi.";
   else say = "La journée touche à sa fin. Beau travail aujourd’hui.";
-  if (evs.length){ const e = evs[0]; const what = e.type === "Tournage" ? "tournage chez " + e.client : e.type === "Rendez-vous" ? "rendez-vous avec " + e.client : e.client; say += " " + (evening || weekend ? "Demain" : "Aujourd’hui") + ", " + what + (e.time ? " à " + fmtTime(e.time) : "") + "."; }
+  if (evs.length){ const e = evs[0]; const what = e.type === "Tournage" ? "tournage " + e.client : e.type === "Rendez-vous" ? "rendez-vous " + e.client : e.client; say = (evening || weekend ? "Demain" : "Aujourd’hui") + " : " + what + (e.time ? ", " + fmtTime(e.time) : "") + "."; }
+  else if (weekend) say = "C’est le week-end, profite.";
   const W = el("section","welcome2");
   const mug = document.createElement("div"); mug.className = "w2-mug"; mug.setAttribute("aria-hidden","true");
   mug.innerHTML = '<svg viewBox="0 0 64 64"><path class="st" d="M24 6c-3 4 3 6 0 10M32 4c-3 4 3 6 0 10M40 6c-3 4 3 6 0 10"/><path d="M12 24h36v14a14 14 0 0 1-14 14h-8a14 14 0 0 1-14-14z"/><path d="M48 28h3a7 7 0 0 1 0 14h-4"/><path d="M8 58h44"/></svg>';
   W.appendChild(mug);
-  const dl = fmtDL(t0); W.appendChild(el("p","w2-date", dl.charAt(0).toUpperCase()+dl.slice(1)));
   const h1 = el("h1","w2-h"); h1.append(document.createTextNode(hello + " "), el("span", null, me)); W.appendChild(h1);
   W.appendChild(el("p","w2-say", say));
   const t14 = addDays(t0, 14), t7 = addDays(t0, 7);
@@ -836,8 +836,7 @@ function vAccueil(root){
   const tiles = [];
   if (S.role && S.role !== "owner"){ if (canSee("commercial")) tiles.push([S.d.commercial.filter(c => coMine(c) && isISO(c.nextDate) && c.nextDate <= t0).length, "relances", () => go("commercial")]); }
   else if (me === "Matis"){
-    tiles.push([S.d.rushes.filter(r => r.kind !== "reel" && !rushReady(r) && r.status !== "Posté" && (r.editor === "Matis" || !r.editor)).length, "montages", () => go("montage")]);
-    tiles.push([S.d.events.filter(e => e.type === "Tournage" && e.status === "Prévu" && e.date >= t0 && e.date <= t7).length, "tournages cette semaine", () => go("agenda")]);
+    tiles.push([S.d.events.filter(e => e.type === "Tournage" && e.status === "Prévu" && e.date >= t0 && e.date <= t7).length, "tournages", () => go("agenda")]);
   } else if (me === "Clara"){
     tiles.push([S.d.posts.filter(p => postWho(p) === "Clara" && !POST_DONE.includes(p.status) && p.date >= t0 && p.date <= t14).length, "posts à préparer", () => { S.ui.agClient = AGENCE; go("agenda"); }]);
     tiles.push([S.d.cevents.filter(e => !e.done && prepBy(e) && prepBy(e) <= t14 && e.date >= t0).length, "temps forts clients", () => { S.ui.ccTab = "soon"; go("clients"); }]);
@@ -851,11 +850,10 @@ function vAccueil(root){
     const nt = team.reduce((n, k) => n + unreadIn(k), 0), nc = cli.reduce((n, k) => n + unreadIn(k), 0), fc = cli.find(k => unreadIn(k));
     const open = k => () => { S.ui.msgMode = md; if (md === "shoot") S.ui.msgShoot = k; else S.ui.msgCh = k; remember(); go("messagerie"); };
     const sfx = md === "shoot" ? ", tournage" : "";
-    if (nt) tiles.push([nt, (nt > 1 ? "messages équipe" : "message équipe") + sfx, open(team[0])]);
-    if (nc) tiles.push([nc, (nc > 1 ? "messages clients" : "message client") + sfx, open(fc)]); });
-  tiles.push([myTasks, "tâches cette semaine", () => { S.ui.tWho = me; go("taches"); }]);
+    if (nt) tiles.push([nt, (nt > 1 ? "messages" : "message") + (md === "shoot" ? " tournage" : ""), open(team[0])]);
+    if (nc) tiles.push([nc, (nc > 1 ? "messages clients" : "message client"), open(fc)]); });
+  tiles.unshift([myTasks, myTasks > 1 ? "tâches" : "tâche", () => { S.ui.tWho = me; go("taches"); }]);
   if (S.role === "owner" && new Date().getDate() <= 5){ if (BI.todo == null) biLoadTodo(); else if (BI.todo) tiles.push([BI.todo, "bilans de " + MONTHS[Number(biPrev().slice(5, 7)) - 1] + " à préparer", () => { S.ui.fiTab = "bilans"; S.ui.biM = biPrev(); remember(); go("fiches"); }]); }
-  W.appendChild(el("h2","w2-lab", hr >= 18 || weekend ? "Pour la suite" : "Ta journée en bref"));
   const s = el("div","w2-tiles");
   tiles.forEach(([n, l, f], i) => { const t = el("button","w2-tile" + (n ? "" : " zero")); t.style.animationDelay = (0.45 + i*0.08) + "s"; t.append(el("b",null,String(n)), el("span",null,l)); if (!n) t.appendChild(el("i",null,"C’est calé")); t.onclick = f; s.appendChild(t); });
   W.appendChild(s);
@@ -3296,7 +3294,7 @@ document.addEventListener("keydown", e => { if ((e.metaKey || e.ctrlKey) && (e.k
 { const a = document.getElementById("srch"), b = document.getElementById("msrch"); if (a) a.onclick = openSearch; if (b) b.onclick = openSearch; }
 function go(v){ if (MERGED[v]){ S.ui[MERGED[v][1]] = v; remember(); v = MERGED[v][0]; } if (location.hash !== "#"+v) location.hash = v; else { S.view = v; render(); } }
 function fromHash(){ let h = (location.hash||"").replace("#",""); if (h === "editorial"){ S.ui.agClient = AGENCE; if (!S.ui.agLayers.includes("posts")) S.ui.agLayers = S.ui.agLayers.concat("posts"); h = "agenda"; } if (MERGED[h] && canSee(h)){ S.ui[MERGED[h][1]] = h; h = MERGED[h][0]; } S.view = RENDER[h] && canSee(h) ? h : "accueil"; }
-window.addEventListener("hashchange", () => { const go = () => { fromHash(); render(); window.scrollTo(0,0); }; if (document.startViewTransition && !matchMedia("(prefers-reduced-motion: reduce)").matches) document.startViewTransition(go); else go(); });
+window.addEventListener("hashchange", () => { const go = () => { fromHash(); render(); window.scrollTo(0,0); }; if (document.startViewTransition && !matchMedia("(prefers-reduced-motion: reduce)").matches && !matchMedia("(max-width:640px)").matches) document.startViewTransition(go); else go(); });
 const ICONS = {
   finance:'<rect x="3.5" y="6" width="17" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6.5 9v.01M17.5 15v.01"/>',
   chalet:'<path d="M3 19.5h18M5 19.5V11l7-6.5 7 6.5v8.5"/><path d="M10 19.5v-5h4v5M2.5 12.5 12 4l9.5 8.5"/>',
