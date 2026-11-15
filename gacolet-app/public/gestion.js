@@ -497,11 +497,13 @@ const SV_KEYS = SERVICES.map(x => x[0]);
 const svOf = c => { const o = {}; Object.entries(c.services || {}).forEach(([k, v]) => { const n = SV_KEYS.includes(k) ? k : k === "50" ? "meta" : k === "30" ? "print" : k === "60" ? "site" : "sur"; if (!(n in o) || (v && (!o[n] || v < o[n]))) o[n] = v || o[n] || ""; }); return o; };
 /* Ce que chaque pack remplit tout seul dans la fiche (Formule, Publications / mois, Tournage, Réseaux), d'après les Offres */
 const PACK_FILL = {
-  perf:     { formula:"Pack Performance (999 € HT / mois)", perMonth:"8 (2 par semaine)", shoot:"1 visite, 4 vidéos / mois", networks:"Facebook, Instagram" },
-  perfplus: { formula:"Pack Performance + (1 999 € HT / mois)", perMonth:"12 (3 par semaine)", shoot:"Sur mesure, 8 vidéos / mois", networks:"3 réseaux" },
-  gestion:  { formula:"Pack Gestion (650 € HT / mois)", perMonth:"8 (2 par semaine)", shoot:"1 visite, 4 vidéos / mois", networks:"Facebook, Instagram" },
-  meta:     { formula:"Pack Meta (450 € HT / mois au plus)", perMonth:"", shoot:"Tournage des publicités", networks:"Publicité Facebook et Instagram" },
+  perf:     { formula:"Pack Performance", perMonth:"9 (2 par semaine)", shoot:"1 visite, 4 vidéos / mois", networks:"Facebook, Instagram" },
+  perfplus: { formula:"Pack Performance +", perMonth:"13 (3 par semaine)", shoot:"Sur mesure, 8 vidéos / mois", networks:"3 réseaux" },
+  gestion:  { formula:"Pack Gestion", perMonth:"9 (2 par semaine)", shoot:"1 visite, 4 vidéos / mois", networks:"Facebook, Instagram" },
+  meta:     { formula:"Pack Meta", perMonth:"", shoot:"Tournage des publicités", networks:"Publicité Facebook et Instagram" },
   sur:      { formula:"Sur mesure", perMonth:"", shoot:"", networks:"" } };
+/* Formule sans les prix (vue du Tableau clients) : « Standard, 500 € HT » → « Standard » ; une formule qui n'est qu'un prix → « — » */
+const noPrice = t => String(t || "").replace(/\s*\([^)]*€[^)]*\)/g, "").replace(/(?:[,;:]|\s+à)?\s*\d[\d \u202f.]*\s*€(?:\s*HT)?(?:\s*\/\s*mois)?(?:\s*\([^)]*\))?/gi, "").replace(/^[\s,;:+]+|[\s,;:+]+$/g, "").replace(/\s{2,}/g, " ").trim() || (t ? "—" : "");
 function packFill(keys){
   const on = SV_KEYS.filter(k => keys.includes(k) && PACK_FILL[k]); if (!on.length) return null;
   const main = PACK_FILL[on.find(k => k !== "meta" && k !== "sur") || on.find(k => k !== "sur") || "sur"];
@@ -732,7 +734,7 @@ function vFiches(root){
     const so = svOf(c), ks = SV_KEYS.filter(k => k in so), sv = el("div","fi-sv");
     ks.forEach(k => { const s = SERVICES.find(x => x[0] === k); const p = el("b","fi-code",s[2]); p.title = s[1] + (so[k] ? ", depuis " + fmtFR(so[k]) : ""); sv.appendChild(p); });
     if (!ks.length) sv.appendChild(el("span","muted","À renseigner"));
-    td(tr, sv,"nw"); const nl = netLinks(c); if (!nl.childNodes.length) nl.appendChild(el("span","muted","À renseigner")); td(tr, nl,"nw"); line(tr, c.formula, "hm"); line(tr, c.perMonth, "hm"); line(tr, [c.remember, c.ask ? "À demander : " + c.ask : ""].filter(Boolean).join(" "), "hm");
+    td(tr, sv,"nw"); const nl = netLinks(c); if (!nl.childNodes.length) nl.appendChild(el("span","muted","À renseigner")); td(tr, nl,"nw"); { const fz = noPrice(c.formula); line(tr, fz === "—" ? (ks.map(k => SERVICES.find(x => x[0] === k)[1]).join(" + ") || "—") : fz, "hm"); } line(tr, c.perMonth, "hm"); line(tr, [c.remember, c.ask ? "À demander : " + c.ask : ""].filter(Boolean).join(" "), "hm");
     tb.appendChild(tr); });
   w.classList.add("fi-tw");
   root.appendChild(list.length ? w : el("p","empty","Aucun client pour ce service."));
