@@ -2601,7 +2601,7 @@ function vMessagerie(root){
   const ty = el("div","wa-typing"); ty.id = "wa-typing"; ty.hidden = true; ty.append(el("i"), el("i"), el("i"), el("span")); list.appendChild(ty);
   main.appendChild(list);
   const down = el("button","wa-down"); down.type = "button"; down.setAttribute("aria-label","Aller aux derniers messages"); down.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
-  down.onclick = () => list.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
+  down.onclick = () => { list.scrollTop = list.scrollHeight; };
   list.addEventListener("scroll", () => down.classList.toggle("on", list.scrollHeight - list.scrollTop - list.clientHeight > 240), { passive: true });
   main.appendChild(down);
 
@@ -2655,7 +2655,7 @@ function vMessagerie(root){
   const same = keep && keep.ch === ch;
   if (same && !keep.bottom) list.scrollTop = keep.top;
   requestAnimationFrame(() => { const l = document.getElementById("chat-list");
-    if (l){ if (!same || keep.bottom) l.scrollTo({ top: l.scrollHeight, behavior: same ? "smooth" : "auto" }); else l.scrollTop = keep.top; }
+    if (l){ if (!same || keep.bottom) l.scrollTo({ top: l.scrollHeight, behavior: "auto" }); else l.scrollTop = keep.top; }
     if (ta.value){ ta.style.height = "auto"; ta.style.height = Math.min(140, ta.scrollHeight) + "px"; }
     if (keepIn && same){ ta.focus({ preventScroll: true }); try { ta.setSelectionRange(keepIn.a, keepIn.b); } catch(e){} }
     liveFill(); });

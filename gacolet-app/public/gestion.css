@@ -1262,7 +1262,7 @@ a.bl-row:active{transform:scale(.99)}
 @keyframes card-in{from{opacity:0;transform:translateY(10px)}}
 html{-webkit-tap-highlight-color:transparent}
 /* Messagerie en direct */
-.wa-line.new{animation:msg-in .26s cubic-bezier(.2,.8,.3,1.15)}
+.wa-line.new{animation:none}
 .wa-line.new.mine{transform-origin:100% 100%}.wa-line.new:not(.mine){transform-origin:0 100%}
 @keyframes msg-in{from{opacity:0;transform:translateY(10px) scale(.94)}}
 .wa-line.flash .wa-bub{animation:flash 1.1s ease}
