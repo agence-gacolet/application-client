@@ -738,7 +738,7 @@ function vOffres(root){
 }
 function vFiches(root){
   const fiTab = ["offres","bilans","archives"].includes(S.ui.fiTab) ? S.ui.fiTab : "clients";
-  root.appendChild(head("Tableau clients", fiTab === "archives" ? "Les clients avec qui la collaboration s’est arrêtée : services, motif, notes et pièces jointes. Ils n’apparaissent plus dans les listes de l’appli." : fiTab === "bilans" ? "" : fiTab === "offres" ? "Les offres de l’agence et ce que chaque pack comprend. Prix hors taxes." : "Réservé à " + fullNames() + " : depuis quand, quels services, la formule et ce qu’il faut penser.", [segm([["clients","Clients"],["offres","Offres"],["bilans","Bilans"],["archives","Archives"]], fiTab, v => { S.ui.fiTab = v; remember(); render(); }), fiTab === "clients" ? addBtn("Nouveau client", () => editClient({})) : null]));
+  root.appendChild(head("Tableau clients", fiTab === "archives" ? "Les clients partis : services, motif et notes. Ils n’apparaissent plus dans les listes." : fiTab === "bilans" ? "" : fiTab === "offres" ? "Les offres de l’agence et ce que chaque pack comprend. Prix hors taxes." : "Réservé à " + fullNames() + " : services, formule et notes de chaque client.", [segm([["clients","Clients"],["offres","Offres"],["bilans","Bilans"],["archives","Archives"]], fiTab, v => { S.ui.fiTab = v; remember(); render(); }), fiTab === "clients" ? addBtn("Nouveau client", () => editClient({})) : null]));
   if (fiTab === "offres") return vOffres(root);
   if (fiTab === "bilans") return vBilans(root);
   if (fiTab === "archives") return vArchives(root);
@@ -788,9 +788,8 @@ function editEdTodo(t){
 /* ---------- Gabarits ---------- */
 function head(title, sub, tools){
   const h = el("header","head"); const l = el("div");
-  if (sub) l.appendChild(el("p","sub",sub));
   const h1 = el("h1"); if (Array.isArray(title)){ h1.append(document.createTextNode(title[0]+" ")); h1.appendChild(el("span","yr",title[1])); } else h1.textContent = title;
-  l.appendChild(h1); h.appendChild(l);
+  l.appendChild(h1); if (sub) l.appendChild(el("p","sub",sub)); h.appendChild(l);
   if (tools){ const t = el("div","tools"); tools.forEach(x => x && t.appendChild(x)); h.appendChild(t); if (t.querySelector(".btn.add")) h.classList.add("has-add"); if (!t.children.length) t.remove(); }
   return h;
 }
@@ -1218,7 +1217,7 @@ function metaNote(c){ const m = c.meta; if (!m) return null; const d = el("div",
 function metaSyncBtn(){ const b = btn("Actualiser depuis Meta","", async () => { b.disabled = true; b.textContent = "Lecture de Meta…";
     try { const r = await GC.api("POST","/api/g-metaads/sync"); toast("État des campagnes lu sur Meta (" + plural(r.accounts, "compte") + ")."); } catch(e){ toast(e.message); } b.disabled = false; b.textContent = "Actualiser depuis Meta"; }); return b; }
 function vCampagnes(root){
-  root.appendChild(head("Campagnes", "Publicité Meta : le budget est payé par le client directement à Meta. L’état se met à jour tout seul depuis Meta toutes les heures.", [metaSyncBtn(), addBtn("Nouvelle campagne", () => editCampaign({}))]));
+  root.appendChild(head("Campagnes", "Budget payé par le client directement à Meta. État mis à jour toutes les heures.", [metaSyncBtn(), addBtn("Nouvelle campagne", () => editCampaign({}))]));
   const CATS = [["En cours","EN COURS"],["À lancer","À LANCER"],["Arrêtée","ARRÊTÉES"]];
   const cur = CATS.some(c => c[0] === S.ui.cpStatus) ? S.ui.cpStatus : "";
   { const f = el("div","filters ag-f"); const g = el("div","fgroup"); const lb = el("label","flabel","Statut"); lb.htmlFor = "cp-status"; const s = el("select","pick"); s.id = "cp-status";
@@ -1339,7 +1338,7 @@ function vMeta(root){
     if (cur){ const d = el("span","mt-dot"); d.style.setProperty("--c", colorOf(cur)); g.appendChild(d); }
     tabs.appendChild(g); }
   if (!cur){
-    root.appendChild(head("Meta", "Publicité Meta, un onglet par client. Le budget est payé par le client directement à Meta. L’état des campagnes se lit tout seul sur Meta toutes les heures.", [metaSyncBtn(), addBtn("Nouvelle campagne", () => editCampaign({}))]));
+    root.appendChild(head("Meta", "Un onglet par client. Budget payé par le client directement à Meta, état mis à jour toutes les heures.", [metaSyncBtn(), addBtn("Nouvelle campagne", () => editCampaign({}))]));
     root.appendChild(tabs);
     const {w, tb} = table(["Client","Campagne","Budget","~Contacts ce mois","~Qualifiés ce mois","~Dernier contact"]);
     names.filter(n => mtCat < 0 || rank(n) === mtCat).forEach(n => {
@@ -1427,7 +1426,7 @@ function rushToTask(r){ if (!writable()) return; openForm({ key:"rut", title: "T
     await patch("rushes", r.id, { status: "En montage", editor: out.who === "À attribuer" ? (r.editor || "") : out.who }); } }); }
 function vMontage(root){
   const C = S.ui.ruClient || "", inC = r => !C || r.client === C, all = RUSHES();
-  root.appendChild(head("Rushs", "À gauche, ce qu'on a en stock à monter, pour créer les tâches de montage. À droite, ce qui est monté et prêt à poster.", [addBtn("Rushs disponibles", () => editRush({client:C}))]));
+  root.appendChild(head("Rushs", "À gauche, le stock à monter. À droite, ce qui est monté et prêt à poster.", [addBtn("Rushs disponibles", () => editRush({client:C}))]));
   const stock = all.filter(r => !rushReady(r) && !rushDone(r)), ready = all.filter(r => rushReady(r) && !rushDone(r));
   const f = el("div","filters"); const g = el("div","fgroup"); const lb = el("label","flabel","Client"); lb.htmlFor = "ru-client"; g.appendChild(lb);
   const sel = el("select","pick"); sel.id = "ru-client";
@@ -1728,7 +1727,7 @@ function vDepot(root){
   const mk = monthKey(); loadPubs(mk); const R = (S.pubs || {})[mk];
   const clients = R && (R.rows || R.plan) ? ["Agence Gacolet","Gabriel"].concat((R.rows || R.plan).filter(r => r.blogId).map(r => r.client)) : [];
   const launch = c => prodDrop(clients, null, { client: c });
-  root.appendChild(head("Dépôt", "Dépose les vidéos et visuels d’un client, puis ferme la fenêtre : Claude transcrit, propose la date et trois descriptions pendant que tu fais autre chose. Tu peux enchaîner plusieurs clients. Chaque fichier en cours apparaît ici.", [addBtn("Déposer des fichiers", () => launch(""))]));
+  root.appendChild(head("Dépôt", "Dépose les vidéos et visuels d’un client. Claude propose la date et trois descriptions, tu peux fermer la fenêtre.", [addBtn("Déposer des fichiers", () => launch(""))]));
   const all = []; Object.keys(PD.all).forEach(c => PD.all[c].forEach(it => all.push([c, it])));
   if (!all.length){ root.appendChild(el("p","empty","Rien en cours. Clique sur « Déposer des fichiers » pour commencer.")); return; }
   const st = it => it.busy ? ["Envoi du fichier…" + (it.pct ? " " + it.pct + " %" : ""),"run"] : it.wait ? [it.kind === "video" ? "Transcription et écriture…" : "Écriture…","run"] : it.props ? ["Prête, à relire","ok"] : !it.url ? ["Envoi interrompu","l3"] : ["En attente","" ];
@@ -1777,7 +1776,7 @@ function vPublications(root){
 /* ---------- Calendrier clients (Clara) ---------- */
 function vClients(root){
   const tab = S.ui.ccTab || "client";
-  root.appendChild(head("Calendrier clients", "Prévoir à l’avance : événements des clients, fêtes, temps forts, demandes. Préparer 3 semaines avant (6 pour la Paillotte).",
+  root.appendChild(head("Calendrier clients", "Événements, fêtes et demandes des clients. À préparer 3 semaines avant (6 pour la Paillotte).",
     [segm([["client","Par client"],["soon","À préparer"],["dates","Dates clés"],["recap","Récap"]], tab, v => { S.ui.ccTab = v; remember(); render(); })]));
   const cal = clientsAll().filter(c => c.calendar);
   if (tab === "dates"){
@@ -2833,7 +2832,7 @@ function vIdees(root){
   sel.onchange = () => { S.ui.idClient = sel.value; remember(); render(); };
   const unseen = all.filter(i => !(i.seen || []).includes(me));
   const markAll = unseen.length ? btn("Tout marquer comme vu","sm", () => unseen.forEach(i => patch("idees", i.id, { seen: [...new Set((i.seen || []).concat(me))] }))) : null;
-  root.appendChild(head("Idées", "Les idées envoyées par les clients depuis leur espace et les nôtres, notées en interne, rangées par client", [addBtn("Ajouter une idée", () => editIdee({})), sel, markAll]));
+  root.appendChild(head("Idées", "Les idées des clients et les nôtres, rangées par client.", [addBtn("Ajouter une idée", () => editIdee({})), sel, markAll]));
   const fl = el("div","filters"); fl.appendChild(segm([["","Toutes"],["equipe","Envoyées par l’équipe"],["client","Envoyées par le client"]], src, v => { S.ui.idSrc = v; remember(); render(); })); root.appendChild(fl);
   const list = all.filter(i => (!f || i.client === f) && (!src || (src === "equipe") === ideaInternal(i)));
   if (!list.length){ root.appendChild(el("p","empty", src === "equipe" ? "Aucune idée interne pour l’instant. Ajoute-en une avec le bouton en haut." : "Rien pour l’instant. Les envois des clients arrivent ici.")); return; }
@@ -2901,7 +2900,7 @@ function openFormation(f){
 function vFormation(root){
   const me = S.me || "Gabriel"; const aud = S.ui.foAud || "Équipe", cat = FO_CATS.includes(S.ui.foCat) ? S.ui.foCat : FO_CATS[0];
   const who = "Tous";
-  root.appendChild(head("Formation", aud === "Équipe" ? "Pour bien démarrer à l’agence" : "Les tutos à partager aux clients",
+  root.appendChild(head("Formation", aud === "Équipe" ? "Pour bien démarrer à l’agence." : "Les tutos à partager aux clients.",
     [segm([["Équipe","Équipe"],["Clients","Clients"]], aud, v => { S.ui.foAud = v; remember(); render(); }), addBtn("Ajouter une vidéo", () => editFormation({aud, cat}))]));
   const base = S.d.formations.filter(f => (f.aud||"Équipe") === aud && (who === "Tous" || foFor(f, who)));
   const fl = el("div","filters");
@@ -2947,7 +2946,7 @@ const tgHref = u => /^https?:\/\//i.test(u) ? u : /^[\w.-]+\.[a-z]{2,}(\/|$)/i.t
 function vTournage(root){
   const all = (S.d.shoots || []).slice().sort((a, b) => (b.date || "").localeCompare(a.date || ""));
   const up = all.filter(s => !s.date || s.date >= today()).reverse(), past = all.filter(s => s.date && s.date < today());
-  root.appendChild(head("Feuilles de tournage", "Prépare le tournage, exporte-le en PDF pour le client, puis lance-le sur place : une slide par vidéo, Fait ou Pas possible. Les vidéos faites arrivent dans Rushs disponibles.",
+  root.appendChild(head("Feuilles de tournage", "Prépare le tournage et envoie le PDF au client. Sur place, coche chaque vidéo : elle arrive dans Rushs.",
     [addBtn("Nouvelle feuille", () => tgEdit({}))]));
   if (!all.length){ root.appendChild(el("p","empty","Aucune feuille de tournage. Crée la première avec le bouton en haut.")); return; }
   const block = (title, list) => {
@@ -3482,6 +3481,17 @@ const APPLI = "${location.origin}/api/hook/gsheet";
 // Clé : donnée par l'appli au premier envoi (bouton « Jumeler » dans Paramètres > Liaisons), puis gardée dans le script
 const DOSSIER = "1tbY552gBJ2KXeitKQ7our4hVLp0Sda5X"; // dossier des tableaux de suivi Meta
 const IGNORE = /^(mode d|communes?$|listes?$|param)/i;
+const JETONS = "1di9rRlGulDJ6HfIwlkjPPATVyzHMnuCS"; // 70_PILOTAGE/.jetons : clés personnelles de Claude, déposées ici
+
+function deposerJetons(liste) {
+  if (!liste || !liste.length) return;
+  var d = DriveApp.getFolderById(JETONS);
+  liste.forEach(function (j) {
+    if (!/^[a-z0-9._-]{1,40}\.jeton$/.test(j.nom)) return;
+    var it = d.getFilesByName(j.nom);
+    if (it.hasNext()) it.next().setContent(j.cle); else d.createFile(j.nom, j.cle, MimeType.PLAIN_TEXT);
+  });
+}
 
 function installer() {
   ScriptApp.getProjectTriggers().forEach(function (t) { ScriptApp.deleteTrigger(t); });
@@ -3519,6 +3529,7 @@ function envoyer() {
     return { id: f.getId(), name: f.getName(), url: f.getUrl(), modified: f.getLastUpdated().toISOString(), tabs: null };
   });
   var rep = poster(meta); // liste seule : l'appli dit quels fichiers attendre ou renvoyer
+  deposerJetons(rep.jetons);
   (rep.again || []).forEach(function (id) { delete vus[id]; });
   var attente = rep.waiting || [];
   meta.forEach(function (m) {

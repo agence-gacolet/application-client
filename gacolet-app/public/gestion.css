@@ -75,7 +75,7 @@ html[data-offline] .offline{display:block}
 .head>div:first-child{min-width:0}
 .head h1{margin:0;font:400 clamp(46px,5.6vw,80px)/.9 var(--display);font-style:italic;letter-spacing:.4px;text-transform:uppercase;text-wrap:balance;padding-top:.08em}
 .head h1 .yr{color:var(--faint)}
-.head .sub{margin:0 0 10px;font-size:var(--fs-s);color:var(--muted);max-width:68ch}
+.head .sub{margin:12px 0 0;font-size:var(--fs-m);line-height:1.45;color:var(--muted);max-width:58ch;text-wrap:pretty}
 .tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .status{font-size:var(--fs-m);color:var(--muted);margin:16px 0 0}
 .empty{padding:26px 0;color:var(--muted);margin:0}

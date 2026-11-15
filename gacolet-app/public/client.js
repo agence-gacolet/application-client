@@ -24,9 +24,9 @@ let toastT; function toast(msg){ let t = $(".toast"); if (!t){ t = el("div","toa
 function btn(label, cls, fn){ const b = el("button","btn "+(cls||""), label); b.type = "button"; b.onclick = fn; return b; }
 function segm(options, value, onPick){ const s = el("div","seg"); s.setAttribute("role","group"); options.forEach(([v,l]) => { const b = el("button",null,l); b.type = "button"; b.setAttribute("aria-pressed", String(v === value)); b.onclick = () => onPick(v); s.appendChild(b); }); return s; }
 function head(title, sub, tools){
-  const h = el("header","head"); const l = el("div"); if (sub) l.appendChild(el("p","sub",sub));
+  const h = el("header","head"); const l = el("div");
   const h1 = el("h1"); if (Array.isArray(title)){ h1.append(document.createTextNode(title[0]+" ")); h1.appendChild(el("span","yr",title[1])); } else h1.textContent = title;
-  l.appendChild(h1); h.appendChild(l);
+  l.appendChild(h1); if (sub) l.appendChild(el("p","sub",sub)); h.appendChild(l);
   if (tools){ const t = el("div","tools"); tools.forEach(x => x && t.appendChild(x)); h.appendChild(t); }
   return h;
 }
@@ -158,7 +158,7 @@ async function decideShoot(s, status, note){
 function vTournages(root){
   const list = shoots(), f = S.shf || "wait";
   const cnt = k => list.filter(s => k === "mod" ? (s.status === "mod" || s.status === "no") : s.status === k).length;
-  root.appendChild(head(["Vos", "tournages"], "Ce que l’agence prévoit de filmer chez vous. Relisez la feuille, puis validez ou dites ce qu’il faut changer avant le jour du tournage.",
+  root.appendChild(head(["Vos", "tournages"], "Ce que l’agence prévoit de filmer chez vous. Validez ou dites ce qu’il faut changer avant le jour J.",
     [segm([["wait","À valider" + (cnt("wait") ? " " + cnt("wait") : "")],["mod","Retours" + (cnt("mod") ? " " + cnt("mod") : "")],["ok","Validées"]], f, v => { S.shf = v; render(); })]));
   const rows = list.filter(s => f === "mod" ? (s.status === "mod" || s.status === "no") : s.status === f);
   if (!rows.length){ root.appendChild(el("p","empty", f === "wait" ? "Aucune feuille de tournage à valider pour l’instant." : "Rien ici pour l’instant.")); return; }
@@ -445,7 +445,7 @@ function vVisio(root){
 /* ---------- Mes idées : idées, photos, vidéos pour les prochains contenus ---------- */
 const KINDS = [["Idée","Idée"],["Photos","Photos"],["Vidéos","Vidéos"],["Inspiration","Inspiration"]];
 function vIdees(root){
-  root.appendChild(head(["Mes", "idées"], "Une idée de publication, des photos d’un chantier, une vidéo prise sur le vif : déposez tout ici, l’équipe s’en sert pour vos prochains contenus."));
+  root.appendChild(head(["Mes", "idées"], "Une idée, des photos de chantier, une vidéo prise sur le vif : l’équipe s’en sert pour vos prochains contenus."));
   const card = el("form","cl-drop");
   card.appendChild(segm(KINDS, S.kind, v => { S.kind = v; render(); }));
   const ta = el("textarea"); ta.rows = 3; ta.id = "idee-input"; ta.value = S.idDraft;
