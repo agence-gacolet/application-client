@@ -3,7 +3,7 @@
 // Clé Claude : ANTHROPIC_API_KEY (Paramètres > Liaisons). Clé Metricool : METRICOOL_USER_TOKEN (déjà en place).
 const Anthropic = require("@anthropic-ai/sdk");
 
-module.exports = function production({ app, auth, wrap, db, current, put, pubPlan, persistKey, macAuth }) {
+module.exports = function production({ app, auth, wrap, db, current, put, pubPlan, persistKey, macAuth, upDir }) {
   const norm = s => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\([^)]*\)/g, "").replace(/[^a-z0-9]+/g, " ").trim();
   const docsOf = async col => (await db.all("SELECT id, data FROM docs WHERE col = ? AND deleted = 0", [col])).map(r => { try { return Object.assign({ id: r.id }, JSON.parse(r.data || "{}")); } catch (e) { return null; } }).filter(Boolean);
   // Marques hors Publications (pas d'objectif mensuel) : l'agence et Gabriel
@@ -128,11 +128,31 @@ module.exports = function production({ app, auth, wrap, db, current, put, pubPla
       if (nets.includes("facebook")) info.facebookData = { type: video ? "REEL" : "POST" };
       try { const r = await mc("POST", "/v2/scheduler/posts", { blogId: blog }, info); const id = r && (r.id || (r.data && r.data.id));
         if (mode === "review" && id) await put("_prodrev", "mc" + id, { blog, client: name, at: new Date().toISOString() });
+        if (id) { await put("_purge", url.slice(3).replace(/\W/g, "_"), { file: url.slice(3), blog, post: String(id), date: it.date, at: new Date().toISOString() }); setTimeout(purgeFiles, 30000).unref(); }
         out.push({ ok: true, date: it.date, time: it.time, mode }); }
       catch (e) { out.push({ ok: false, error: e.message }); }
     }
     res.json({ results: out });
   }));
+
+  // Le serveur n'est qu'un intermédiaire : dès que Metricool a sa propre copie du média (static.metricool.com), on supprime la nôtre
+  const fsP = require("fs"), pathP = require("path");
+  async function purgeFiles() {
+    if (!upDir || !process.env.METRICOOL_USER_TOKEN) return;
+    for (const q of (await docsOf("_purge")).filter(q => !q.done)) {
+      const f = pathP.join(upDir, pathP.basename(q.file || "")), age = Date.now() - Date.parse(q.at || 0);
+      let post = null;
+      try { const j = await mc("GET", "/v2/scheduler/posts", { blogId: q.blog, start: q.date + "T00:00:00", end: q.date + "T23:59:59", timezone: "Europe/Paris", extendedRange: true });
+        post = ((j && j.data) || []).find(x => String(x.id) === q.post) || null; } catch (e) { continue; }
+      const copied = post && (post.media || []).length && post.media.every(u => /^https:\/\/static\.metricool\.com\//.test(u));
+      const gone = !post && age > 3 * 86400000;   // publication supprimée dans Metricool : le fichier ne sert plus
+      if (!copied && !gone) continue;
+      try { fsP.unlinkSync(f); } catch (e) {}
+      await put("_purge", q.id, Object.assign({}, q, { id: undefined, done: true, doneAt: new Date().toISOString(), why: copied ? "copie Metricool" : "publication introuvable" }));
+    }
+  }
+  setInterval(() => purgeFiles().catch(() => {}), 120000).unref();
+  setTimeout(() => purgeFiles().catch(() => {}), 20000).unref();
 
   // Clé Claude (propositions de description)
   app.get("/api/g-prod/status", auth, (req, res) => res.json({ claude: !!process.env.ANTHROPIC_API_KEY, queue: true, metricool: !!process.env.METRICOOL_USER_TOKEN }));

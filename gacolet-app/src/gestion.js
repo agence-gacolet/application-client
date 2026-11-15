@@ -1141,7 +1141,7 @@ module.exports = function (app, { db, wrap, root }) {
   // Dépôt de productions (descriptions Claude + programmation Metricool)
   const persistKey = (name, val) => { const ENV = path.join(root, ".env"); let txt = ""; try { txt = fs.readFileSync(ENV, "utf8"); } catch (e) {}
     txt = txt.split("\n").filter(l => l && !l.startsWith(name + "=")).join("\n") + "\n" + name + "='" + val + "'\n"; fs.writeFileSync(ENV, txt.replace(/^\n+/, ""), { mode: 0o600 }); process.env[name] = val; };
-  require("./production")({ app, auth, wrap, db, current, put, pubPlan: PUB_PLAN, persistKey, macAuth: (req, res, next) => deployAuth(req, res, next) });
+  require("./production")({ app, auth, wrap, db, current, put, pubPlan: PUB_PLAN, persistKey, upDir: DIR, macAuth: (req, res, next) => deployAuth(req, res, next) });
   require("./metaads")({ app, auth, ownerOnly, wrap, db, put, current, persistKey });
   app.get("/api/g-pubs", auth, wrap(async (req, res) => {
     const mk = /^\d{4}-\d{2}$/.test(String(req.query.month || "")) ? req.query.month : new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Paris" }).slice(0, 7);
