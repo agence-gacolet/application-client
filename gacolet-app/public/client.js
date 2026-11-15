@@ -542,30 +542,14 @@ function vStats(root){
   comStats(root, false);
 }
 const SAMPLE_LEADS = [["2026-10-28","Demande de devis rénovation","Maison 120 m², Nîmes"],["2026-10-27","Rappel souhaité","Disponible après 18 h"],["2026-10-25","Devis salle de bain","Budget 8 000 €"],["2026-10-24","Question tarif","Uzès"]];
+/* Page Meta du client : seulement le nombre de contacts reçus dans le mois (pas de jugement qualifié / pas qualifié côté client) */
 function metaBody(root, sample){
   const month = (S.d && S.d.month) || today().slice(0, 7);
-  const leads = sample ? SAMPLE_LEADS.map(([date, title, detail], i) => ({ id: i, date, title, detail, qualified: i < 2 ? 1 : null })) : ((S.d && S.d.leads) || []).filter(l => String(l.date).slice(0, 7) === month);
-  const q = leads.filter(l => l.qualified === 1).length, goal = sample ? 20 : (S.d.client.contactsGoal || 0);
-  const hero = el("div","st-hero"); const top = el("div","st-row"); top.append(el("span",null,"Contacts qualifiés"), el("span",null, goal ? "Objectif : " + goal : ""));
-  hero.append(top, el("b",null, String(sample ? 14 : q)), el("em",null,"selon la définition de votre contrat, " + perL(month)));
-  if (goal){ const g = el("div","st-gauge"); const i = el("i"); i.style.width = Math.min(100, Math.round((sample ? 14 : q) / goal * 100)) + "%"; g.appendChild(i); hero.appendChild(g); }
+  const n = sample ? 14 : ((S.d && S.d.leads) || []).filter(l => String(l.date).slice(0, 7) === month).length;
+  const hero = el("div","st-hero"); const top = el("div","st-row"); top.append(el("span",null,"Contacts reçus"));
+  hero.append(top, el("b",null, String(n)), el("em",null,"grâce à vos publicités Facebook et Instagram, " + perL(month)));
   root.appendChild(hero);
-  const st = sample ? { data: { depense: 420, budget: 450, touchees: 18300, annonces: 3 } } : ((S.d && S.d.stats) || []).filter(s => s.module === "meta" && s.period === month)[0];
-  if (st){ const d = st.data; root.appendChild(kpis([[d.depense != null ? fmtN(d.depense) + " €" : "", "dépensés chez Meta", d.budget ? "sur " + fmtN(d.budget) + " € prévus" : ""],[d.depense && (sample ? 14 : q) ? (d.depense / (sample ? 14 : q)).toLocaleString("fr-FR", { maximumFractionDigits: 2 }) + " €" : "", "par contact qualifié"],[d.touchees != null ? fmtN(d.touchees) : "", "personnes touchées"],[d.annonces, "annonces actives"]])); }
-  root.appendChild(el("h2","cl-h2","Vos contacts"));
-  const list = el("div","st-leads");
-  if (!leads.length) list.appendChild(el("p","empty","Aucun contact ce mois-ci pour l’instant."));
-  leads.forEach(c => { const r = el("div","st-lead"); const tx = el("div"); tx.append(el("b",null,c.title), el("small",null, fmtD(c.date) + (c.detail ? ", " + c.detail : "")));
-    const a = el("div","st-la");
-    [[true,"Qualifié"],[false,"Pas qualifié"]].forEach(([v, lab]) => { const b = el("button","st-q" + (v ? " yes" : " no"), lab); b.type = "button"; b.setAttribute("aria-pressed", String(c.qualified === (v ? 1 : 0)));
-      if (!sample) b.onclick = async () => { if (S.f && S.f.preview){ toast("Aperçu de l’agence : rien n’est envoyé."); return; } const nv = c.qualified === (v ? 1 : 0) ? null : v; try { await api("/api/lead/" + c.id, { body: { qualified: nv } }); c.qualified = nv == null ? null : nv ? 1 : 0; render(); } catch(e){ toast(e.message); } };
-      a.appendChild(b); });
-    r.append(tx, a); list.appendChild(r); });
-  root.appendChild(list);
-  if (!sample){
-    if (S.d.client.qualifiedDefinition) root.appendChild(el("p","st-src","Contact qualifié : " + S.d.client.qualifiedDefinition));
-    root.appendChild(el("p","st-src","Le budget publicitaire est payé par vous, directement à Meta. Contacts reçus via vos publicités, " + perL(month) + "."));
-  }
+  if (!sample) root.appendChild(el("p","st-src","Le budget publicitaire est payé par vous, directement à Meta."));
 }
 function vMeta(root){
   root.appendChild(head(["Publicité", "Meta"], "Vos contacts reçus grâce à la publicité Facebook et Instagram."));
