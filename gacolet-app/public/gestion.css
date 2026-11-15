@@ -2053,3 +2053,5 @@ html.tg-lock,html.tg-lock body{overflow:hidden}
 @media (max-width:900px){ .wa-list{background:#1C1C1C!important} .wa-row::after{left:66px} }
 /* Queue des bulles bleues : découpe du bon côté (la règle générale l'emportait, bosse ronde) */
 .wa-line.tail.mine .wa-bub:not(:has(>.wa-img)):not(:has(>.wa-vid))::before{right:-6px;left:auto;-webkit-mask:radial-gradient(circle at 100% 0,transparent 13.5px,#000 14px);mask:radial-gradient(circle at 100% 0,transparent 13.5px,#000 14px)}
+/* Conversation sélectionnée : reste bleue au survol */
+.wa-row[aria-pressed="true"],.wa-row[aria-pressed="true"]:hover{background:#0A84FF!important}
