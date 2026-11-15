@@ -497,9 +497,9 @@ const SV_KEYS = SERVICES.map(x => x[0]);
 const svOf = c => { const o = {}; Object.entries(c.services || {}).forEach(([k, v]) => { const n = SV_KEYS.includes(k) ? k : k === "50" ? "meta" : k === "30" ? "print" : k === "60" ? "site" : "sur"; if (!(n in o) || (v && (!o[n] || v < o[n]))) o[n] = v || o[n] || ""; }); return o; };
 /* Ce que chaque pack remplit tout seul dans la fiche (Formule, Publications / mois, Tournage, Réseaux), d'après les Offres */
 const PACK_FILL = {
-  perf:     { formula:"Pack Performance", perMonth:"9 (2 par semaine)", shoot:"1 visite, 4 vidéos / mois", networks:"Facebook, Instagram" },
-  perfplus: { formula:"Pack Performance +", perMonth:"13 (3 par semaine)", shoot:"Sur mesure, 8 vidéos / mois", networks:"3 réseaux" },
-  gestion:  { formula:"Pack Gestion", perMonth:"9 (2 par semaine)", shoot:"1 visite, 4 vidéos / mois", networks:"Facebook, Instagram" },
+  perf:     { formula:"Pack Performance", perMonth:"8 (dont 4 vidéos)", shoot:"1 visite, 4 vidéos / mois", networks:"Facebook, Instagram" },
+  perfplus: { formula:"Pack Performance +", perMonth:"12 (dont 8 vidéos)", shoot:"Sur mesure, 8 vidéos / mois", networks:"3 réseaux" },
+  gestion:  { formula:"Pack Gestion", perMonth:"8 (dont 4 vidéos)", shoot:"1 visite, 4 vidéos / mois", networks:"Facebook, Instagram" },
   meta:     { formula:"Pack Meta", perMonth:"", shoot:"Tournage des publicités", networks:"Publicité Facebook et Instagram" },
   sur:      { formula:"Sur mesure", perMonth:"", shoot:"", networks:"" },
   print:    { formula:"Graphisme et print", perMonth:"", shoot:"", networks:"" },
