@@ -1304,11 +1304,14 @@ function vMeta(root){
   const month = today().slice(0, 7);
   const leadsOf = n => { const c = mc(n); return c ? M.leads.filter(l => l.client_id === c.id) : []; };
 
-  /* Choix du client : un menu déroulant, classé par état des campagnes */
-  const tabs = el("div","filters ag-f mt-pick"); { const g = el("div","fgroup"); const lb = el("label","flabel","Client"); lb.htmlFor = "mt-client"; const sel = el("select","pick"); sel.id = "mt-client";
-    const o0 = el("option", null, "Vue d’ensemble, " + plural(names.length, "client")); o0.value = ""; sel.appendChild(o0);
-    const rank = n => Math.min(...S.d.campaigns.filter(c => c.client === n).map(c => CAMP_RANK[c.status] ?? 3), 3);
-    [[0,"Campagnes en cours"],[1,"À lancer"],[2,"Arrêtées"],[3,"Sans campagne"]].forEach(([r, lab]) => { const ns = names.filter(n => rank(n) === r); if (!ns.length) return; const og = el("optgroup"); og.label = lab;
+  /* Onglets par état des campagnes, puis le choix du client dans l'onglet */
+  const rank = n => Math.min(...S.d.campaigns.filter(c => c.client === n).map(c => CAMP_RANK[c.status] ?? 3), 3);
+  const CATS4 = [[-1,"Toutes"],[0,"En cours"],[1,"À lancer"],[2,"Arrêtées"],[3,"Sans campagne"]].filter(([r]) => r < 0 || names.some(n => rank(n) === r));
+  const mtCat = CATS4.some(([r]) => r === S.ui.mtCat) ? S.ui.mtCat : -1;
+  const tabs = el("div","filters ag-f mt-pick");
+  tabs.appendChild(segm(CATS4.map(([r, l]) => [String(r), l + " " + (r < 0 ? names.length : names.filter(n => rank(n) === r).length)]), String(mtCat), v => { S.ui.mtCat = Number(v); S.ui.mtTab = ""; remember(); render(); })); { const g = el("div","fgroup"); const lb = el("label","flabel","Client"); lb.htmlFor = "mt-client"; const sel = el("select","pick"); sel.id = "mt-client";
+    const o0 = el("option", null, "Vue d’ensemble, " + plural(names.filter(n => mtCat < 0 || rank(n) === mtCat).length, "client")); o0.value = ""; sel.appendChild(o0);
+    [[0,"Campagnes en cours"],[1,"À lancer"],[2,"Arrêtées"],[3,"Sans campagne"]].forEach(([r, lab]) => { const ns = names.filter(n => rank(n) === r && (mtCat < 0 || r === mtCat)); if (!ns.length) return; const og = el("optgroup"); og.label = lab;
       ns.forEach(n => { const o = el("option", null, n); o.value = n; og.appendChild(o); }); sel.appendChild(og); });
     sel.value = cur; sel.onchange = () => { S.ui.mtTab = sel.value; remember(); render(); }; g.append(lb, sel);
     if (cur){ const d = el("span","mt-dot"); d.style.setProperty("--c", colorOf(cur)); g.appendChild(d); }
@@ -1317,7 +1320,7 @@ function vMeta(root){
     root.appendChild(head("Meta", "Publicité Meta, un onglet par client. Le budget est payé par le client directement à Meta.", [addBtn("Nouvelle campagne", () => editCampaign({}))]));
     root.appendChild(tabs);
     const {w, tb} = table(["Client","Campagne","Budget","~Contacts ce mois","~Qualifiés ce mois","~Dernier contact"]);
-    names.forEach(n => {
+    names.filter(n => mtCat < 0 || rank(n) === mtCat).forEach(n => {
       const cs = S.d.campaigns.filter(c => c.client === n).sort((a, b) => (CAMP_RANK[a.status] ?? 3) - (CAMP_RANK[b.status] ?? 3));
       const top = cs[0], ls = leadsOf(n), lm = ls.filter(l => (l.date || "").slice(0, 7) === month), c = mc(n), ms = msStats(n, month);
       const tr = el("tr","row"); tr.onclick = () => { S.ui.mtTab = n; remember(); render(); };
@@ -1330,7 +1333,7 @@ function vMeta(root){
       tb.appendChild(tr); });
     root.appendChild(names.length ? w : el("p","empty","Aucune campagne pour l’instant."));
     if (M.error) root.appendChild(el("p","status","Suivi des contacts indisponible : " + M.error));
-    else root.appendChild(el("p","status","Contacts : ceux de l’espace client (module Meta). Ouvre un client pour le détail."));
+    else root.appendChild(el("p","status","Contacts : lus dans les tableaux de suivi Google Sheets, mis à jour toutes les 10 minutes. Ouvre un client pour le détail."));
     return;
   }
 
