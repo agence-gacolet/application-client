@@ -544,30 +544,70 @@ const biLabel = m => { const [y, mo] = m.split("-"); return MONTHS[Number(mo) - 
 function biLoadTodo(){ BI.todo = 0; GC.api("GET","/api/g-bilans?m=" + biPrev()).then(r => { const done = new Set((r.bilans || []).filter(b => b.savedAt).map(b => b.cid)); BI.todo = (S.cgroups || []).filter(g => !done.has(g.id)).length; renderSoon(); }).catch(() => {}); }
 function biLoadList(m){ BI.m = m; BI.list = null; GC.api("GET","/api/g-bilans?m=" + m).then(r => { BI.list = r.bilans || []; renderSoon(); }).catch(e => { BI.list = []; toast(e.message); }); }
 function biLoad(cid, m){ const k = cid + "|" + m; if (BI.loading[k]) return; BI.loading[k] = 1; GC.api("GET","/api/g-bilan/" + cid + "?m=" + m).then(r => { BI.data[k] = r; }).catch(e => { BI.data[k] = { error: e.message }; }).finally(() => { delete BI.loading[k]; renderSoon(); }); }
-/* La page du bilan : la même mise en page que celle que voit le client */
-function bilanPage(d, x){
-  x = x || {}; const p = el("article","bi-page");
-  const hd = el("header","bi-hd"); hd.append(el("span","bi-kick","Bilan du mois"), el("h2", null, biLabel(d.month)), el("p","bi-cl", d.client.name)); p.appendChild(hd);
-  const kpis = el("div","bi-kpis"); const kpi = (n, l, sub) => { const k = el("div","bi-kpi"); k.append(el("b", null, n == null || n === "" ? "—" : String(n)), el("span", null, l)); if (sub) k.appendChild(el("small", null, sub)); kpis.appendChild(k); };
-  if (d.client.modules.includes("com")) kpi(d.posts.count, d.posts.count > 1 ? "publications" : "publication", Object.entries(d.posts.nets).map(([k, v]) => k + " " + v).join(" · "));
-  if (d.meta) kpi(d.meta.total, d.meta.total > 1 ? "demandes reçues" : "demande reçue", d.meta.qualified + " qualifiée" + (d.meta.qualified > 1 ? "s" : "") + (d.meta.goal ? " sur " + d.meta.goal + " visées" : ""));
-  if (x.appels != null) kpi(x.appels, "appels reçus", "via la fiche Google");
-  if (x.avis != null) kpi(x.avis, x.avis > 1 ? "nouveaux avis" : "nouvel avis", x.note ? "note Google " + x.note : "");
-  if (d.shoots.count) kpi(d.shoots.videos, d.shoots.videos > 1 ? "vidéos tournées" : "vidéo tournée", d.shoots.count > 1 ? d.shoots.count + " visites" : "1 visite");
-  p.appendChild(kpis);
-  if (d.meta && d.meta.goal){ const pc = Math.min(100, Math.round(100 * d.meta.qualified / d.meta.goal)); const g = el("section","bi-sec"); g.appendChild(el("h3", null, "Objectif de contacts"));
-    const bar = el("div","bi-bar"); const f = el("span"); f.style.width = pc + "%"; bar.appendChild(f); g.append(bar, el("p","bi-note", d.meta.qualified + " contacts qualifiés sur " + d.meta.goal + " visés, soit " + pc + " % de l’objectif." + (d.meta.def ? " Contact qualifié : " + d.meta.def : "")));
-    const wk = el("div","bi-weeks"); const mx = Math.max(1, ...d.meta.byWeek); d.meta.byWeek.forEach((v, i) => { const c = el("div","bi-wk"); const b = el("i"); b.style.height = Math.round(100 * v / mx) + "%"; c.append(el("span","bi-wv", String(v)), b, el("small", null, "S" + (i + 1))); wk.appendChild(c); }); g.appendChild(wk); p.appendChild(g); }
-  if (d.client.modules.includes("com")){ const g = el("section","bi-sec"); g.appendChild(el("h3", null, "Ce qui a été publié"));
-    if (d.posts.error) g.appendChild(el("p","bi-note", d.posts.error));
-    else if (!d.posts.list.length) g.appendChild(el("p","bi-note","Aucune publication ce mois-ci."));
-    else { const ul = el("ul","bi-posts"); d.posts.list.forEach(it => { const li = el("li"); li.append(el("span","bi-pd", fmtD(it.date)), el("span","bi-pt", it.title), el("span","bi-pn", it.type + (it.net ? " · " + it.net : ""))); ul.appendChild(li); }); g.appendChild(ul); }
-    if (d.validations.ok || d.validations.mod) g.appendChild(el("p","bi-note", "Validées par le client : " + d.validations.ok + (d.validations.mod ? ", modifications demandées : " + d.validations.mod : "") + "."));
-    p.appendChild(g); }
-  if (x.mot){ const g = el("section","bi-sec"); g.append(el("h3", null, "Le mot de l’agence"), el("p","bi-txt", x.mot)); p.appendChild(g); }
-  if (x.next){ const g = el("section","bi-sec"); g.append(el("h3", null, "Le mois prochain"), el("p","bi-txt", x.next)); p.appendChild(g); }
-  p.appendChild(el("p","bi-src", "Période : du 1er au dernier jour de " + biLabel(d.month) + ". Sources : planning Metricool (publications), validations dans l’espace client, contacts saisis par l’agence (demandes Meta), feuilles de tournage ; avis et appels relevés par l’agence sur la fiche Google."));
-  return p;
+/* Le bilan en diapositives 16:9, sur le modèle des bilans faits à la main (Paillote Bassamoise, Locamex) :
+   couverture, chiffres du mois, demandes Meta, ce qui a été livré, ce qui a fonctionné / moins fonctionné,
+   le mois prochain, ce dont on a besoin, en résumé. L'appli remplit ce qu'elle sait ; l'agence complète le reste. */
+const biNum = v => { const n = Number(String(v == null ? "" : v).replace(/\s/g, "").replace(",", ".")); return isFinite(n) && String(v).trim() !== "" ? n : null; };
+const biFmt = n => n == null ? "—" : Math.round(n).toLocaleString("fr-FR");
+const biLines = t => String(t || "").split(/\n+/).map(l => l.trim()).filter(Boolean);
+const biRange = m => { const [y, mo] = m.split("-").map(Number); const last = new Date(y, mo, 0).getDate(); return "01/" + String(mo).padStart(2, "0") + " au " + last + "/" + String(mo).padStart(2, "0") + "/" + y; };
+function biEvo(label, a, b){ if (a == null || b == null) return null; const d = b - a; if (/abonn|demandes|publications|vidéos|réels|avis|appels|ventes|devis/i.test(label) || Math.abs(a) < 1) return { t: (d > 0 ? "+" : "") + biFmt(d), up: d >= 0 }; const p = Math.round(100 * d / a); return { t: (p > 0 ? "+" : "") + p + " %", up: p >= 0 }; }
+function bilanSlides(d, x){
+  x = x || {}; const W = el("div","bs-deck"); const name = d.client.name, mo = biLabel(d.month), moName = MONTHS[Number(d.month.slice(5, 7)) - 1], pv = d.prev, pvLabel = pv ? biLabel(pv.month) : "";
+  const slide = (dark, kick, title) => { const s = el("section","bs" + (dark ? " dark" : "")); if (kick) s.appendChild(el("p","bs-kick", kick)); if (title){ const h = el("h3","bs-h"); h.innerHTML = ""; h.textContent = title; s.appendChild(h); }
+    if (!dark){ const f = el("footer","bs-foot"); f.append(el("span", null, name + " · Bilan du mois"), el("span", null, "Agence Gacolet")); s.appendChild(f); } W.appendChild(s); return s; };
+  // 1. Couverture
+  { const s = slide(true); const top = el("div","bs-top"); top.append(el("span","bs-brand","AGENCE GACOLET"), el("span","bs-cli", name)); s.appendChild(top);
+    const h = el("h2","bs-cover"); h.append(document.createTextNode("Le bilan"), el("br"), document.createTextNode((/^[aeiouyéè]/i.test(moName) ? "d’" : "de ")), el("em", null, moName)); s.appendChild(h);
+    s.appendChild(el("p","bs-lead","Les chiffres du mois, ce qui a été livré, ce qui a fonctionné, et ce que l’on propose pour le mois prochain."));
+    s.appendChild(el("p","bs-small","Période du " + biRange(d.month) + (pv ? ", comparée à " + pvLabel + "." : "."))); }
+  // 2. Les chiffres du mois
+  { const rows = [];
+    if (d.client.modules.includes("com")) { rows.push(["Publications", "sur la période", pv ? pv.posts : null, d.posts.count]); const v = n => (n && (n["Réel"] || 0) + (n["Réel test"] || 0)) || 0; rows.push(["Réels", "vidéos publiées", pv ? v(pv.types) : null, v(d.posts.types)]); }
+    if (d.meta){ rows.push(["Demandes Meta", "reçues sur la période", pv && pv.meta ? pv.meta.total : null, d.meta.total]); rows.push(["Demandes qualifiées", d.meta.goal ? "objectif : " + d.meta.goal : "validées", pv && pv.meta ? pv.meta.qualified : null, d.meta.qualified]); }
+    biLines(x.chiffres).forEach(l => { const p = l.split(";").map(t => t.trim()); if (p[0]) rows.push([p[0], p[3] || "", biNum(p[1]), biNum(p[2])]); });
+    const s = slide(false, "", "Les chiffres du mois"); const g = el("div","bs-grid2");
+    const t = el("div","bs-table" + (rows.length > 7 ? " xdense" : rows.length > 5 ? " dense" : "")); const hd = el("div","bs-tr bs-th"); ["Indicateur","Avant","Ce mois","Évolution"].forEach(c => hd.appendChild(el("span", null, c))); t.appendChild(hd);
+    rows.forEach(([l, sub, a, b]) => { const r = el("div","bs-tr"); const c1 = el("span"); c1.append(el("b", null, l), el("small", null, sub)); const e = biEvo(l, a, b); const ev = el("span"); if (e) ev.appendChild(el("i","bs-evo" + (e.up ? " up" : ""), e.t)); r.append(c1, el("span","bs-a", biFmt(a)), el("span","bs-b", biFmt(b)), ev); t.appendChild(r); });
+    const box = el("div","bs-box dark"); box.append(el("p","bs-kick", x.topLabel || "Ce mois-ci"), el("b","bs-big", x.topNum || String(d.posts.count || (d.meta ? d.meta.total : 0))), el("p", null, x.topTxt || (x.topNum ? "" : d.posts.count ? "publications sur la période" : "demandes reçues")));
+    g.append(t, box); s.insertBefore(g, s.querySelector(".bs-foot"));
+    s.insertBefore(el("p","bs-src","Source : Metricool (publications) et relevés de l’agence, du " + biRange(d.month) + (pv ? ", comparé à " + pvLabel : "") + "."), s.querySelector(".bs-foot")); }
+  // 3. Demandes Meta
+  if (d.meta){ const m = d.meta, pc = m.goal ? Math.round(100 * m.qualified / m.goal) : null, bud = biNum(x.budget), cpl = bud != null && m.total ? bud / m.total : null;
+    const s = slide(false, "Publicité Meta", m.total + " demande" + (m.total > 1 ? "s" : "") + " reçue" + (m.total > 1 ? "s" : "") + " en " + moName); const k = el("div","bs-cards");
+    const card = (n, txt, cls) => { const c = el("div","bs-card " + (cls || "")); c.append(el("b","bs-big", n), el("p", null, txt)); k.appendChild(c); };
+    card(String(m.total), "demandes reçues du " + biRange(d.month) + (pv && pv.meta ? " (" + pv.meta.total + " en " + MONTHS[Number(pv.month.slice(5, 7)) - 1] + ")" : ""));
+    card(String(m.qualified), "demande" + (m.qualified > 1 ? "s" : "") + " qualifiée" + (m.qualified > 1 ? "s" : "") + (m.goal ? " pour " + m.goal + " visées" : ""), "dark");
+    if (pc != null) card(pc + " %", "de l’objectif de contacts qualifiés atteint");
+    if (cpl != null) card(cpl.toFixed(2).replace(".", ",") + " €", "par demande, pour " + biFmt(bud) + " € de budget sur la période", "lemon");
+    s.insertBefore(k, s.querySelector(".bs-foot"));
+    const wk = el("div","bs-bars"); const mx = Math.max(1, ...m.byWeek); m.byWeek.forEach((v, i) => { const r = el("div","bs-bar"); const tr = el("span","bs-track"); const f = el("i"); f.style.width = Math.round(100 * v / mx) + "%"; tr.appendChild(f); r.append(el("span", null, "Semaine " + (i + 1)), tr, el("b", null, v + " demande" + (v > 1 ? "s" : ""))); wk.appendChild(r); });
+    s.insertBefore(wk, s.querySelector(".bs-foot"));
+    if (m.def) s.insertBefore(el("p","bs-quote","Demande qualifiée : " + m.def), s.querySelector(".bs-foot"));
+    s.insertBefore(el("p","bs-src","Source : demandes saisies par l’agence dans l’appli, du " + biRange(d.month) + (bud != null ? " ; budget relevé dans le gestionnaire de publicités Meta" : "") + "."), s.querySelector(".bs-foot")); }
+  // 4. Ce qui a été livré
+  if (d.client.modules.includes("com")){ const s = slide(false, "", "Ce qui a été livré"); const g = el("div","bs-flow");
+    const pr = el("div","bs-box light"); pr.append(el("p","bs-kick","Prévu"), el("b","bs-mid", x.prevu ? x.prevu.split("\n")[0] : d.fiche && d.fiche.perMonth ? d.fiche.perMonth + " publications" : "À préciser"), el("p", null, x.prevu ? biLines(x.prevu).slice(1).join(" ") : d.fiche && d.fiche.formula ? d.fiche.formula : "Le rythme prévu se renseigne dans la fiche du client."));
+    const ar = el("div","bs-arrow"); ar.append(el("span","bs-pill","Sur la période"), el("i"));
+    const lv = el("div","bs-box lemon"); const ty = Object.entries(d.posts.types).map(([k, v]) => v + " " + (k === "Réel test" ? "réel" + (v > 1 ? "s" : "") + " test" : k.toLowerCase() + (v > 1 ? "s" : ""))).join(", ");
+    lv.append(el("p","bs-kick","Livré"), el("b","bs-mid", d.posts.count + " publication" + (d.posts.count > 1 ? "s" : "")), el("p", null, ty || "Aucune publication sur la période"));
+    g.append(pr, ar, lv); s.insertBefore(g, s.querySelector(".bs-foot"));
+    const nDays = new Date(Number(d.month.slice(0, 4)), Number(d.month.slice(5, 7)), 0).getDate(), vids = (d.posts.types["Réel"] || 0) + (d.posts.types["Réel test"] || 0);
+    const f3 = el("div","bs-facts"); const fact = (b, t) => { const p = el("p"); p.append(el("b", null, b + " : "), document.createTextNode(t)); f3.appendChild(p); };
+    fact("Rythme", d.posts.count + " publications en " + nDays + " jours, soit " + (d.posts.count * 7 / nDays).toFixed(1).replace(".", ",") + " par semaine.");
+    if (d.posts.count) fact("Vidéo", vids + " réel" + (vids > 1 ? "s" : "") + " sur " + d.posts.count + " publications, soit " + Math.round(100 * vids / d.posts.count) + " %.");
+    if (x.remarques) fact("À noter", x.remarques); else if (d.shoots.count) fact("Tournage", d.shoots.videos + " vidéo" + (d.shoots.videos > 1 ? "s" : "") + " tournée" + (d.shoots.videos > 1 ? "s" : "") + " sur " + d.shoots.count + " visite" + (d.shoots.count > 1 ? "s" : "") + ".");
+    s.insertBefore(f3, s.querySelector(".bs-foot")); }
+  // 5 et 6. Ce qui a fonctionné / moins fonctionné
+  [["okPhrase","okList","Ce qui a marché","Ce qui a fonctionné"],["koPhrase","koList","À corriger","Ce qui a moins fonctionné"]].forEach(([p, l, k, t]) => { if (!x[p] && !x[l]) return;
+    const s = slide(false, k, t); const g = el("div","bs-grid2 wide"); const b = el("div","bs-box dark"); b.append(el("p","bs-sub","En une phrase"), el("p","bs-txt", x[p] || "")); const ul = el("ul","bs-ul"); biLines(x[l]).forEach(i => ul.appendChild(el("li", null, i.replace(/^[-•]\s*/, "")))); g.append(b, ul); s.insertBefore(g, s.querySelector(".bs-foot")); });
+  // 7. Le mois prochain
+  { const ds = biLines(x.decisions).slice(0, 4); if (ds.length){ const s = slide(false, "", "Le mois prochain, on propose"); const g = el("div","bs-cards dec"); ds.forEach((l, i) => { const [a, ...b] = l.split(":"); const c = el("div","bs-card " + (i === ds.length - 1 ? "lemon" : "dark")); c.append(el("p","bs-kick","Décision " + (i + 1)), el("b","bs-sub", b.length ? a.trim() : "Décision " + (i + 1)), el("p", null, (b.length ? b.join(":") : a).trim())); g.appendChild(c); }); s.insertBefore(g, s.querySelector(".bs-foot")); } }
+  // 8. Ce dont on a besoin
+  { const bs = biLines(x.besoins); if (bs.length){ const s = slide(false, "", "Ce dont on a besoin de votre part"); const g = el("div","bs-checks"); bs.forEach(i => { const c = el("div","bs-check"); c.append(el("i"), el("span", null, i)); g.appendChild(c); }); s.insertBefore(g, s.querySelector(".bs-foot")); } }
+  // 9. En résumé
+  if (x.resumeTitre || x.resumeTxt){ const s = slide(true, "En résumé"); const h = el("h2","bs-cover sm"); const ls = biLines(x.resumeTitre); ls.forEach((l, i) => { if (i) h.appendChild(el("br")); h.appendChild(i === ls.length - 1 && ls.length > 1 ? el("em", null, l) : document.createTextNode(l)); }); s.append(h, el("p","bs-lead", x.resumeTxt || "")); }
+  return W;
 }
 function vBilans(root){
   const months = []; { const d = new Date(); d.setDate(1); for (let i = 0; i < 7; i++){ months.push(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0")); d.setMonth(d.getMonth() - 1); } }
@@ -577,7 +617,7 @@ function vBilans(root){
   months.forEach(x => { const o = el("option", null, biLabel(x)); o.value = x; sel.appendChild(o); }); sel.value = m; sel.onchange = () => { S.ui.biM = sel.value; remember(); render(); }; g.append(lb, sel); f.appendChild(g); root.appendChild(f);
   const cls = (S.cgroups || []).slice().sort((a, b) => a.name.localeCompare(b.name, "fr"));
   if (!cls.length){ root.appendChild(el("p","empty","Aucun client relié à un espace client pour l’instant : le bilan se calcule à partir de son planning Metricool et de ses contacts Meta.")); return; }
-  const st = cid => { const b = (BI.list || []).find(x => x.cid === cid); return !b ? "todo" : "saved"; };
+  const st = cid => (BI.list || []).some(x => x.cid === cid) ? "saved" : "todo";
   const cur = cls.some(c => c.id === S.ui.biC) ? S.ui.biC : cls[0].id;
   const wrap = el("div","bi-wrap"); const side = el("div","bi-side");
   cls.forEach(c => { const s = BI.list ? st(c.id) : ""; const b = el("button","bi-ci" + (c.id === cur ? " on" : "")); b.type = "button";
@@ -588,18 +628,35 @@ function vBilans(root){
   if (!r){ biLoad(cur, m); main.appendChild(el("div","sk sk-page")); return; }
   if (r.error){ main.appendChild(el("p","empty", r.error)); return; }
   const sv = r.saved || {}, x = Object.assign({}, sv.extra || {});
-  const form = el("div","bi-form");
-  const fld = (key, label, ph, type) => { const l = el("label", null, label); const i = type === "area" ? el("textarea") : el("input"); if (type === "area") i.rows = 3; else i.type = "text"; i.placeholder = ph; i.value = x[key] == null ? "" : x[key]; i.oninput = () => { x[key] = i.value; prev.replaceWith(prev = bilanPage(r.data, norm2(x))); }; l.appendChild(i); return l; };
-  const norm2 = o => ({ avis: o.avis === "" || o.avis == null ? null : Number(o.avis), note: o.note || "", appels: o.appels === "" || o.appels == null ? null : Number(o.appels), mot: o.mot || "", next: o.next || "" });
-  const r1 = el("div","row2"); r1.append(fld("avis","Nouveaux avis Google","Ex. 4"), fld("note","Note Google","Ex. 4,8")); form.appendChild(r1);
-  const r2 = el("div","row2"); r2.append(fld("appels","Appels via la fiche Google","Ex. 12")); form.appendChild(r2);
-  form.append(fld("mot","Le mot de l’agence","Ce qui a marché, ce qu’on retient du mois","area"), fld("next","Le mois prochain","Ce qu’on prévoit : tournage, campagne, temps fort","area"));
+  const form = el("div","bi-form"); let deck;
+  const redraw = () => { const n = bilanSlides(r.data, x); deck.replaceWith(n); deck = n; };
+  const sec = t => form.appendChild(el("h4","bi-fs", t));
+  const fld = (key, label, ph, rows, help) => { const l = el("label", null, label); const i = rows ? el("textarea") : el("input"); if (rows) i.rows = rows; else i.type = "text"; i.placeholder = ph || ""; i.value = x[key] || ""; i.oninput = () => { x[key] = i.value; redraw(); }; l.appendChild(i); if (help) l.appendChild(el("small", null, help)); form.appendChild(l); return l; };
+  sec("Les chiffres du mois");
+  fld("chiffres","Autres indicateurs","Abonnés Instagram ; 2782 ; 2878 ; fin de période\nVues Instagram ; 54590 ; 32212 ; sur la période", 4, "Une ligne par indicateur : nom ; avant ; ce mois ; précision. L’évolution se calcule seule. Publications, réels et demandes Meta sont déjà comptés par l’appli.");
+  { const r3 = el("div","row2"); form.appendChild(r3); r3.append(fld("topNum","Chiffre fort","1 551"), fld("topLabel","Au-dessus","Carrousel du 05/10")); }
+  fld("topTxt","Sous le chiffre fort","vues pour le menu Côte d’Ivoire, la publication la plus vue");
+  if (r.data.meta) { sec("Publicité Meta"); fld("budget","Budget dépensé sur la période (€)","485", 0, "Sert à calculer le coût par demande."); }
+  sec("Ce qui a été livré");
+  fld("prevu","Prévu","3 publications par semaine\nle contenu de la formule reste à confirmer", 2, "1re ligne en gros, la suite en dessous. Vide : le rythme de la fiche client.");
+  fld("remarques","À noter","4 publications affichent encore un autre numéro");
+  sec("Ce qui a fonctionné");
+  fld("okPhrase","En une phrase","L’édition Côte d’Ivoire et Facebook portent la période.");
+  fld("okList","Les faits","Carrousel du 05/10 : 1 551 vues et 47 interactions\nAbonnés : +96 sur Instagram", 3, "Une ligne par point.");
+  sec("Ce qui a moins fonctionné");
+  fld("koPhrase","En une phrase","Moins de vues sur Instagram, et pas encore de cuisine filmée.");
+  fld("koList","Les faits","Vues Instagram : 32 212 contre 54 590", 3);
+  sec("Le mois prochain");
+  fld("decisions","Décisions proposées","En cuisine : un réel tourné en cuisine chaque semaine\nPlus de vidéo : au moins 7 réels par mois", 4, "Une ligne par décision, « Titre : texte », 4 au plus.");
+  fld("besoins","Ce dont on a besoin du client","Validation du calendrier sous 3 jours ouvrés\nUn créneau de tournage en novembre", 3);
+  sec("En résumé");
+  fld("resumeTitre","Titre (la dernière ligne en citron)","Moins de vues sur Instagram,\nplus sur Facebook,\nla cuisine d’abord", 3);
+  fld("resumeTxt","Phrase","L’édition Côte d’Ivoire a porté la période.", 2);
   const acts = el("div","bi-acts");
   const send = async () => { try { const out = await GC.api("PUT","/api/g-bilan/" + cur, { m, extra: x }); r.saved = out.saved; BI.list = null; biLoadList(m); BI.todo = null; toast("Bilan enregistré."); render(); } catch(e){ toast(e.message); } };
   acts.append(btn("Enregistrer","lemon", send), btn("Imprimer ou PDF","", () => window.print()));
   if (sv.savedAt) acts.appendChild(el("span","muted bi-pubd","Enregistré le " + fmtFR(sv.savedAt.slice(0, 10)) + " par " + (sv.savedBy || "")));
-  let prev = bilanPage(r.data, norm2(x));
-  const col = el("div","bi-col"); col.append(form, acts); main.append(col, prev);
+  const col = el("div","bi-col"); col.append(acts, form); deck = bilanSlides(r.data, x); main.append(col, deck);
 }
 
 /* Offres de l'agence, d'après la plaquette v12 du 03/11/2026 ; le Pack Meta (campagnes seules, hors pack) n'y figure pas : conditions tirées de agence.md (campagnes Meta). */
@@ -607,7 +664,7 @@ const OFFRES = [
   { k:"perf", name:"Pack Performance", price:"999 €", per:"HT par mois", tag:"L’offre principale", sub:"dont 450 € payés au résultat",
     items:["1 visite par mois chez le client","4 vidéos tournées sur son lieu de travail, chaque mois","2 publications par semaine sur Facebook et Instagram","Fiche Google tenue à jour, réponse à chaque avis","Avis clients récoltés chaque mois","Publicité Facebook et Instagram, payée au résultat","Bilan mensuel des demandes"],
     notes:["Budget publicitaire en plus, conseillé à partir de 17 € par jour, payé par le client directement à Meta.","Payé au résultat : objectif de contacts fixé ensemble ; s’il n’est pas atteint, les 450 € baissent d’autant."] },
-  { k:"perfplus", name:"Pack Performance +", price:"1 999 €", per:"HT par mois", tag:"Le service communication complet", sub:"23 988 € HT par an",
+  { k:"perfplus", name:"Pack Performance +", price:"1 999 €", per:"HT par mois", tag:"Le service communication complet", sub:"",
     items:["Visites sur mesure, selon l’activité","8 vidéos par mois","3 publications par semaine sur 3 réseaux","Fiche Google, avis clients et bilan mensuel","Un témoignage client filmé chaque trimestre","Un point toutes les deux semaines","Publicité en option : 450 € payés au résultat, soit 2 449 € au plus"],
     notes:["Argument : moins cher qu’un chargé de communication (32 700 à 34 650 € bruts par an en Occitanie hors charges, Michael Page, étude de rémunérations 2027)."] },
   { k:"gestion", name:"Pack Gestion", price:"650 €", per:"HT par mois", tag:"Sans publicité", sub:"« Sans publicité » dans la plaquette",
@@ -627,7 +684,7 @@ function vOffres(root){
   OFFRES.forEach(o => { const c = el("article","of-card" + (o.k === "meta" ? " hors" : ""));
     c.append(el("span","of-tag", o.tag), el("h2", null, o.name));
     const pr = el("div","of-pr"); pr.append(el("b", null, o.price), el("span", null, o.per)); c.appendChild(pr);
-    c.appendChild(el("p","of-sub", o.sub));
+    if (o.sub) c.appendChild(el("p","of-sub", o.sub));
     const ul = el("ul","of-ul"); o.items.forEach(x => ul.appendChild(el("li", null, x))); c.appendChild(ul);
     o.notes.forEach(x => c.appendChild(el("p","of-note", x)));
     const cl = el("button","of-n", plural(n(o.k), "client") + " sur ce pack"); cl.type = "button"; cl.onclick = () => { S.ui.fiTab = "clients"; S.ui.fiSv = o.k; remember(); render(); }; c.appendChild(cl);
@@ -2037,7 +2094,7 @@ function vVocal(root){
     more.onclick = e => { e.stopPropagation(); VX_MENU = !VX_MENU; if (VX_MENU && (S.role === "owner" || canSee("commercial")) && !S.invites && !S.invLoading){ S.invLoading = true; GC.api("GET","/api/rtc/invites").then(r => { S.invites = r.invites; }).catch(() => { S.invites = []; }).finally(() => { S.invLoading = false; render(); }); } render(); };
     const wrapM = el("div","vx-mw"); wrapM.appendChild(more); if (VX_MENU) wrapM.appendChild(vxMenu()); a.appendChild(wrapM);
     tx.appendChild(a); h.append(orb, tx); root.appendChild(h);
-    const others = VOICE.filter(([k]) => k !== "reunion").concat((S.d.vrooms || []).filter(r => (r.members || []).includes(S.me || "Gabriel")).map(r => [r.room, r.name])).concat((S.cgroups || []).map(x => [x.room, "Visio, " + x.name])).concat((S.invites || []).map(x => [x.room, x.label])).filter(([k]) => voiceHere(k).length && VC.room !== k);
+    const others = [].concat((S.d.vrooms || []).filter(r => (r.members || []).includes(S.me || "Gabriel")).map(r => [r.room, r.name])).concat((S.cgroups || []).map(x => [x.room, "Visio, " + x.name])).concat((S.invites || []).map(x => [x.room, x.label])).filter(([k]) => voiceHere(k).length && VC.room !== k);
     if (others.length){ const lv = el("div","vx-live"); others.forEach(([k, l]) => { const c = el("button","vx-chip"); c.type = "button"; c.append(el("i"), el("span", null, l + " : " + voiceHere(k).join(", "))); c.onclick = () => vcJoin(k, l); lv.appendChild(c); }); root.appendChild(lv); }
   }
   root.appendChild(el("p","status","Le son et l’image passent directement d’un ordinateur à l’autre. On peut changer d’onglet pendant un appel : une barre reste en bas de l’écran."));
@@ -2060,8 +2117,6 @@ function vxMenu(){
     if (r.by === me){ x = el("span","vx-cp","Supprimer"); x.onclick = e => { e.stopPropagation(); if (x.dataset.armed){ remove("vrooms", r.id).then(() => toast("Salon « " + r.name + " » supprimé.")); VX_MENU = false; render(); return; } x.dataset.armed = "1"; x.textContent = "Confirmer"; x.classList.add("armed"); }; }
     item(r.name, "Avec " + (others.length ? others.join(", ") : "toi seul"), r.room, r.name, x); });
   const nr = el("button","vx-mi vx-new"); nr.type = "button"; nr.setAttribute("role","menuitem"); nr.append(el("span","vx-plus","+"), el("b", null, "Créer un salon")); nr.onclick = () => { VX_MENU = false; render(); newVroom(); }; m.appendChild(nr);
-  sec("Salons de l’équipe");
-  VOICE.filter(([k]) => k !== "reunion").forEach(([k, l, sub]) => item(l, sub, k));
   const cv = (S.cgroups || []).filter(x => (x.people || []).length);
   if (cv.length){ sec("Visios clients"); cv.forEach(x => item(x.name, "Le client la rejoint depuis son espace", x.room, "Visio, " + x.name)); }
   if (S.role === "owner" || canSee("commercial")){
