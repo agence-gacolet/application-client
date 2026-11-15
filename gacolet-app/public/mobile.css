@@ -127,6 +127,8 @@
   /* ---------- Menu Plus : catégories, rien ne bouge, la page derrière est bloquée ---------- */
   .dr{overflow-x:hidden;overscroll-behavior:contain;touch-action:pan-y;-webkit-overflow-scrolling:touch}
   .dr-wrap{touch-action:none;overscroll-behavior:none}
+  .dr{left:auto!important;right:0;border-right:0;border-left:1px solid var(--line);transform:translateX(102%);box-shadow:-20px 0 60px rgba(0,0,0,.5)}
+  .dr-wrap.open .dr{transform:none}
   .dr-list{margin:4px 0 6px}
   .dr-lab{display:block;margin:18px 0 4px;font-size:var(--fs-xs);font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
   .dr-list a{gap:16px;padding:10px 0;font-size:var(--fs-xl);font-weight:600}
