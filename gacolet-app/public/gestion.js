@@ -418,7 +418,7 @@ function coCat(c){
 function editCommercial(c){
   const me = S.me || "Gabriel", own = S.role === "owner" ? SALES : [me];
   openForm({ key:"co", title: c.id ? "Modifier, "+c.company : "Nouveau prospect", values: Object.assign({kind:"Prospect", relance:"", owner: SALES.includes(me) ? me : "Gabriel"}, c, {owner: c.id ? coOwner(c) : (SALES.includes(me) ? me : (S.ui.coWho && SALES.includes(S.ui.coWho) ? S.ui.coWho : "Gabriel"))}),
-    fields:[{k:"company",label:"Entreprise",req:"Indique l’entreprise."},{k:"owner",label:"Commercial",type:"select",options:own,half:true},{k:"kind",label:"Type",type:"select",options:["Prospect","Client"],half:true},{k:"cat",label:"Si client : catégorie",type:"select",options:[["","Selon le Tableau clients"]].concat(CO_CATS),half:true},{k:"stage",label:"Étape",half:true,list:["à contacter","à rappeler","rendez-vous pris","proposition envoyée","à clore","client actif","signé"]},
+    fields:[{k:"company",label:"Entreprise",req:"Indique l’entreprise."},{k:"owner",label:"Commercial",type:"select",options:own,half:true},{k:"kind",label:"Type",type:"select",options:["Prospect","Client"],half:true},{k:"cat",label:"Si client : catégorie",type:"select",options:[["","Selon le Tableau clients"]].concat(CO_CATS),half:true},{k:"stage",label:"Étape",half:true,type:"select",options:[["","À choisir"]].concat(["à contacter","à rappeler","rendez-vous pris","proposition envoyée","à clore","client actif","signé"].concat(c.stage && !["à contacter","à rappeler","rendez-vous pris","proposition envoyée","à clore","client actif","signé"].includes(c.stage) ? [c.stage] : []).map(x => [x, x.charAt(0).toUpperCase() + x.slice(1)]))},
       {k:"nextAction",label:"Prochaine action"},{k:"nextDate",label:"Date",type:"date",half:true},{k:"j0",label:"J0 (contact de départ)",type:"date",half:true},
       {k:"relance",label:"Relance",half:true,list:["0 sur 4","1 sur 4","2 sur 4","3 sur 4","4 sur 4"]},{k:"contact",label:"Contact",half:true},{k:"source",label:"Provenance",type:"select",options:[["","Non précisée"],"Réseaux sociaux","Recommandation","Prospection directe","Salon ou événement","Autre"]},
       {k:"lastContact",label:"Dernier contact",type:"textarea",rows:2},{k:"notes",label:"Notes",type:"textarea",rows:4}],
@@ -1465,7 +1465,7 @@ function pubRecap(r, mk, ok){
     const n = (f) => items.filter(f).length, refused = decs.filter(d => d.status === "no"), mods = decs.filter(d => d.status === "mod");
     const k = el("div","pr-kpis"); [[n(x => x.st === "done"), "postées"], [n(x => x.st === "sched"), "programmées"], [refused.length, "refusées"], [mods.length, "à modifier"]].concat(n(x => x.st === "err") ? [[n(x => x.st === "err"), "en erreur"]] : [])
       .forEach(([v, l]) => { const c = el("div","pr-kpi"); c.append(el("b", null, String(v)), el("span", null, l)); k.appendChild(c); }); m.appendChild(k);
-    m.appendChild(el("p","muted", "Prévu au mois : " + r.stat + " statique" + (r.stat > 1 ? "s" : "") + " et " + r.video + " vidéo" + (r.video > 1 ? "s" : "") + " Paul Audio. Posté : " + (r.statDone || 0) + " et " + (r.vidDone || 0) + "."));
+    { const pl = (Number(r.stat) || 0) + (Number(r.video) || 0), dn = (r.statDone || 0) + (r.vidDone || 0); m.appendChild(el("p","muted", "Prévu au mois : " + pl + " post" + (pl > 1 ? "s" : "") + ". Publié" + (dn > 1 ? "s" : "") + " : " + dn + ".")); }
     if (decs.length){ m.appendChild(el("h4","pr-h","Retours du client dans son espace"));
       const ul = el("ul","pr-list"); decs.slice().sort((a, b) => (a.date || "").localeCompare(b.date || "")).forEach(d => { const li = el("li");
         li.append(el("span","pill " + (d.status === "ok" ? "ok" : d.status === "mod" ? "l2" : d.status === "no" ? "l3" : "l1"), { ok: "Validée", mod: "À modifier", no: "Refusée", wait: "À valider" }[d.status] || d.status));
@@ -1477,7 +1477,7 @@ function pubRecap(r, mk, ok){
     else if (!items.length) m.appendChild(el("p","empty","Rien de posté ni de programmé ce mois-ci."));
     else { const ul = el("ul","pr-list"); items.forEach(x => { const li = el("li");
         li.append(el("span","pill " + (x.st === "done" ? "ok" : x.st === "err" ? "l3" : "l1"), x.st === "done" ? "Postée" : x.st === "err" ? "Erreur" : "Programmée"));
-        const tx = el("div"); tx.append(el("b", null, (x.vid ? "Vidéo" : "Statique") + (x.d ? ", " + fmtFR(x.d.slice(0, 10)) + " à " + x.d.slice(11, 16).replace(":", " h ") : "")), el("div","note", x.text || "(sans texte)")); li.appendChild(tx);
+        const tx = el("div"); tx.append(el("b", null, (x.d ? fmtFR(x.d.slice(0, 10)) + " à " + x.d.slice(11, 16).replace(":", " h ") : "")), el("div","note", x.text || "(sans texte)")); li.appendChild(tx);
         if (x.url){ const a = el("a","pr-lnk","Voir"); a.href = x.url; a.target = "_blank"; a.rel = "noopener"; li.appendChild(a); }
         ul.appendChild(li); }); m.appendChild(ul); }
     const act = el("div","actions");
@@ -1494,7 +1494,8 @@ function vPublications(root){
   const mk = S.ui.pubM || monthKey(), R = (S.pubs || {})[mk]; loadPubs(mk);
   const nav = [btn("‹","icon", () => { S.ui.pubM = addMonths(mk + "-01", -1).slice(0, 7); render(); }), btn("Ce mois","", () => { S.ui.pubM = ""; render(); }), btn("›","icon", () => { S.ui.pubM = addMonths(mk + "-01", 1).slice(0, 7); render(); }), btn("Actualiser","", () => { loadPubs(mk, true); toast("Lecture de Metricool…"); })];
   const rows = R ? (R.rows || R.plan || []) : [], tot = k => rows.reduce((a, r) => a + (Number(r[k]) || 0), 0);
-  root.appendChild(head(["Publications", monthLabel(mk)], "Statiques et vidéos Paul Audio prévues au mois pour chaque client, comparées à ce qui est réellement posté sur Metricool (une publication comptée une fois, sur Instagram, ou Facebook à défaut). Stories exclues. " + tot("stat") + " statiques et " + tot("video") + " vidéos prévues.", nav));
+  const plan = r => (Number(r.stat) || 0) + (Number(r.video) || 0), done = r => (r.statDone || 0) + (r.vidDone || 0), sched = r => (r.statSched || 0) + (r.vidSched || 0), totP = rows.reduce((a, r) => a + plan(r), 0);
+  root.appendChild(head(["Publications", monthLabel(mk)], "Le nombre de posts prévus au mois pour chaque client, face à ce qui est réellement posté sur Metricool (un post compté une fois, sur Instagram, ou Facebook à défaut ; stories exclues). " + totP + " posts prévus. Clique sur un client pour le détail.", nav));
   if (!R){ root.appendChild(el("p","empty","Lecture de Metricool…")); return; }
   if (!R.ok) root.appendChild(el("p","status", R.reason === "no-token" ? "Metricool n’est pas encore relié au serveur : il manque la clé API Metricool (METRICOOL_USER_TOKEN) dans les variables d’environnement Infomaniak. Le prévu s’affiche, les compteurs se rempliront dès que la clé sera ajoutée." : "Metricool ne répond pas pour l’instant."));
   const t = today(), past = mk < monthKey(), cur = mk === monthKey();
@@ -1502,14 +1503,14 @@ function vPublications(root){
   const cell = (done, sched, plan) => { const c = el("div"); if (!plan && !done && !sched){ c.textContent = "—"; return c; }
     const b = el("b", null, (R.ok ? done : "—") + " / " + plan); b.style.color = !R.ok ? "" : done >= plan ? "var(--ok, #9BD85C)" : ""; c.appendChild(b);
     if (R.ok && sched) c.appendChild(el("div","note", "+ " + sched + " programmée" + (sched > 1 ? "s" : ""))); return c; };
-  const {w, tb} = table(["Client","Statiques postés","Vidéos Paul Audio postées","Reste à poster","Prochaine"]);
+  const {w, tb} = table(["Client","Posts publiés","Reste à poster","Prochaine"]);
   rows.forEach(r => { const tr = el("tr","row"); tr.style.cursor = "pointer"; tr.title = "Voir le récap du mois"; tr.onclick = () => pubRecap(r, mk, R.ok); td(tr, clientTag(r.client),"nw");
-    td(tr, cell(r.statDone || 0, r.statSched || 0, r.stat),"nw"); td(tr, cell(r.vidDone || 0, r.vidSched || 0, r.video),"nw");
-    const left = Math.max(0, r.stat - (r.statDone || 0)) + Math.max(0, r.video - (r.vidDone || 0)), unplanned = Math.max(0, r.stat - (r.statDone || 0) - (r.statSched || 0)) + Math.max(0, r.video - (r.vidDone || 0) - (r.vidSched || 0));
+    td(tr, cell(done(r), sched(r), plan(r)),"nw");
+    const left = Math.max(0, plan(r) - done(r)), unplanned = Math.max(0, plan(r) - done(r) - sched(r));
     const lc = el("div"); if (!R.ok) lc.textContent = "—"; else if (!left) lc.appendChild(el("span","pill ok","Complet")); else { lc.appendChild(el("span","pill " + (unplanned ? "l3" : "l1"), left + " à poster")); if (unplanned) lc.appendChild(el("div","note", unplanned + " pas encore programmée" + (unplanned > 1 ? "s" : ""))); }
     td(tr, lc,"nw");
     td(tr, r.err ? el("span","note", r.err) : r.next ? fmtD(r.next) : "","nw"); tb.appendChild(tr); });
-  const band2 = el("tr","band"); const c = el("td"); c.colSpan = 5; c.textContent = "TOTAL : " + tot("stat") + " STATIQUES ET " + tot("video") + " VIDÉOS PAUL AUDIO PRÉVUES" + (R.ok ? ", " + (tot("statDone") + tot("vidDone")) + " POSTÉES, " + (tot("statSched") + tot("vidSched")) + " PROGRAMMÉES" : ""); band2.appendChild(c); tb.appendChild(band2);
+  const band2 = el("tr","band"); const c = el("td"); c.colSpan = 4; c.textContent = "TOTAL : " + totP + " POSTS PRÉVUS" + (R.ok ? ", " + (tot("statDone") + tot("vidDone")) + " PUBLIÉS, " + (tot("statSched") + tot("vidSched")) + " PROGRAMMÉS" : ""); band2.appendChild(c); tb.appendChild(band2);
   root.appendChild(w);
   if (R.ok) root.appendChild(el("p","note", "Lu dans Metricool à " + hhmm(new Date(R.at)) + ". Se met à jour toutes les 3 minutes tant que la page est ouverte, ou avec Actualiser. Les compteurs repartent de zéro chaque 1er du mois."));
   if (cur && R.ok){ clearTimeout(window.__pubT); window.__pubT = setTimeout(() => { if (S.view === "publications") { loadPubs(mk, true); } }, 3 * 60000); }

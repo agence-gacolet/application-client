@@ -1044,7 +1044,6 @@ module.exports = function (app, { db, wrap, root }) {
           const vid = t === "REEL" || t === "TRIAL_REEL" || (!t && Array.isArray(p.media) && p.media.some(u => /\.(mp4|mov|webm)(\?|$)/i.test(u)));
           const done = prov.status === "PUBLISHED", d = ((p.publicationDate && p.publicationDate.dateTime) || "").slice(0, 10);
           // Étiquette Metricool « Paul Audio » (ou « PA ») : si le client en utilise, seules les vidéos étiquetées comptent comme vidéos Paul Audio
-          if (vid && tagged && !isPA(p)) return;
           if (vid) done ? out.vidDone++ : out.vidSched++; else done ? out.statDone++ : out.statSched++;
           // Détail pour la fiche récap du client (Publications) : date, type, état Metricool, début du texte, lien publié
           out.items.push({ d: (p.publicationDate && p.publicationDate.dateTime) || "", vid, st: done ? "done" : /ERROR|FAIL/i.test(prov.status || "") ? "err" : "sched", net: prov.network || main,
