@@ -75,8 +75,9 @@ module.exports = function production({ app, auth, wrap, db, current, put, pubPla
   const RULES = "Règles : français, au ton du client, deux émojis au plus, pas de tiret long, pas de formule toute faite ni de marque d'écriture automatique, pas de superlatif non sourcé, pas de prénom de l'équipe de l'agence, aucun chiffre sans source. 3 à 6 lignes, une accroche courte en première ligne, une invitation à agir à la fin quand c'est naturel, 3 à 6 mots-dièse locaux et métier à la fin. Trois descriptions aux angles différents.";
   app.get("/api/g-prod/describe/:id", auth, wrap(async (req, res) => { const q = await current("_descq", String(req.params.id)); if (!q) return res.status(404).json({ error: "Demande introuvable." }); res.json({ status: q.status, propositions: q.propositions || [], error: q.error || "" }); }));
   app.get("/api/g-prod/queue", macAuth, wrap(async (req, res) => {
+    const base = (req.get("x-forwarded-proto") || req.protocol) + "://" + req.get("host");
     const list = (await docsOf("_descq")).filter(q => q.status === "wait").sort((a, b) => String(a.at).localeCompare(String(b.at))).slice(0, 10);
-    const out = []; for (const q of list) { const { fiche, strat } = await clientContext(q.client); out.push({ id: q.id, client: q.client, kind: q.kind, subject: q.subject, fiche: { formula: fiche.formula || "", networks: fiche.networks || "", remember: fiche.remember || "" }, strategie: strat.slice(0, 6000) }); }
+    const out = []; for (const q of list) { const { fiche, strat } = await clientContext(q.client); out.push({ id: q.id, client: q.client, kind: q.kind, subject: q.subject || "", media: q.url ? base + q.url : "", file: q.file || "", fiche: { formula: fiche.formula || "", networks: fiche.networks || "", remember: fiche.remember || "" }, strategie: strat.slice(0, 6000) }); }
     res.json({ rules: RULES, items: out });
   }));
   app.post("/api/g-prod/queue/:id", macAuth, wrap(async (req, res) => {
@@ -88,9 +89,11 @@ module.exports = function production({ app, auth, wrap, db, current, put, pubPla
   // Trois propositions de description, au ton du client, d'après sa fiche et sa stratégie
   app.post("/api/g-prod/describe", auth, wrap(async (req, res) => {
     const b = req.body || {}, name = String(b.client || "").slice(0, 120), subject = String(b.subject || "").slice(0, 1500), kind = b.kind === "video" ? "vidéo (réel)" : "visuel";
-    if (!name || !subject) return res.status(400).json({ error: "Indique le client et de quoi parle la production." });
-    if (!process.env.ANTHROPIC_API_KEY) { const id = "q" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-      await put("_descq", id, { client: name, subject, kind, status: "wait", at: new Date().toISOString(), by: (req.user && req.user.name) || "" }); return res.json({ queued: id }); }
+    const url = /^\/f\/[a-f0-9]{32}(\.[a-z0-9]{1,7})?$/.test(String(b.url || "")) ? String(b.url) : "", file = String(b.file || "").slice(0, 200);
+    if (!name || (!subject && !url)) return res.status(400).json({ error: "Indique le client et le fichier." });
+    // Sans texte de sujet, Claude Code sur le Mac regarde le fichier lui-même (transcription de la vidéo, ou l'image) : on passe toujours par la file
+    if (!process.env.ANTHROPIC_API_KEY || !subject) { const id = "q" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      await put("_descq", id, { client: name, subject, url, file, kind, status: "wait", at: new Date().toISOString(), by: (req.user && req.user.name) || "" }); return res.json({ queued: id }); }
     const { fiche, strat } = await clientContext(name);
     const system = "Tu écris les descriptions des publications Instagram et Facebook de l'Agence Gacolet pour ses clients (entreprises locales du Gard). "
       + "Règles : français, au ton du client, deux émojis au plus, pas de tiret long, pas de formule toute faite ni de marque d'écriture automatique, pas de superlatif non sourcé, pas de prénom de l'équipe de l'agence, "
