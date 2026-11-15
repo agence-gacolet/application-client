@@ -2055,3 +2055,10 @@ html.tg-lock,html.tg-lock body{overflow:hidden}
 .wa-line.tail.mine .wa-bub:not(:has(>.wa-img)):not(:has(>.wa-vid))::before{right:-6px;left:auto;-webkit-mask:radial-gradient(circle at 100% 0,transparent 13.5px,#000 14px);mask:radial-gradient(circle at 100% 0,transparent 13.5px,#000 14px)}
 /* Conversation sélectionnée : reste bleue au survol */
 .wa-row[aria-pressed="true"],.wa-row[aria-pressed="true"]:hover{background:#0A84FF!important}
+
+/* Queue des bulles dessinée comme Messages d'Apple (pointe qui s'enroule vers l'extérieur) */
+.wa-line.tail .wa-bub:not(:has(>.wa-img)):not(:has(>.wa-vid))::before{width:14px;height:17px;bottom:0;-webkit-mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2014%2017%27%3E%3Cpath%20d%3D%27M14%200V17H3.2C1.6%2017%20.5%2016.6%200%2016.1%203.6%2014.6%206%2010.8%206%204.5V0Z%27/%3E%3C/svg%3E") no-repeat center/100% 100%;mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2014%2017%27%3E%3Cpath%20d%3D%27M14%200V17H3.2C1.6%2017%20.5%2016.6%200%2016.1%203.6%2014.6%206%2010.8%206%204.5V0Z%27/%3E%3C/svg%3E") no-repeat center/100% 100%}
+.wa-line.tail:not(.mine) .wa-bub:not(:has(>.wa-img)):not(:has(>.wa-vid))::before{left:-6px;right:auto}
+.wa-line.tail.mine .wa-bub:not(:has(>.wa-img)):not(:has(>.wa-vid))::before{right:-6px;left:auto;-webkit-mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2014%2017%27%3E%3Cpath%20d%3D%27M0%200V17H10.8C12.4%2017%2013.5%2016.6%2014%2016.1%2010.4%2014.6%208%2010.8%208%204.5V0Z%27/%3E%3C/svg%3E") no-repeat center/100% 100%;mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2014%2017%27%3E%3Cpath%20d%3D%27M0%200V17H10.8C12.4%2017%2013.5%2016.6%2014%2016.1%2010.4%2014.6%208%2010.8%208%204.5V0Z%27/%3E%3C/svg%3E") no-repeat center/100% 100%}
+.wa-line.tail:not(.mine) .wa-bub:not(:has(>.wa-img)):not(:has(>.wa-vid)){border-bottom-left-radius:8px!important}
+.wa-line.tail.mine .wa-bub:not(:has(>.wa-img)):not(:has(>.wa-vid)){border-bottom-right-radius:8px!important}
