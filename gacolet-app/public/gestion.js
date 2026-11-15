@@ -716,8 +716,10 @@ function vOffres(root){
     const cl = el("button","of-n", plural(n(o.k), "client") + " sur ce pack"); cl.type = "button"; cl.onclick = () => { S.ui.fiTab = "clients"; S.ui.fiSv = o.k; remember(); render(); }; c.appendChild(cl);
     g.appendChild(c); });
   root.appendChild(g);
-  root.appendChild(el("h2","fin-h of-uh","Prestations à l’unité"));
+  root.appendChild(el("h2","fin-h of-uh","Sur mesure et prestations à l’unité"));
   const u = el("div","of-units");
+  { const b = el("div","of-ub of-sm"); b.appendChild(el("h3", null, "Sur mesure")); [["Prix","Sur devis"],["Pour","Un besoin hors packs"],["Contenu","Prestations choisies avec le client"],["Clients d’avant les packs","Anciennes formules gardées"]].forEach(([l, p]) => { const r = el("div","of-ur"); r.append(el("span", null, l), el("b", null, p)); b.appendChild(r); });
+    const cl = el("button","of-n", plural(n("sur"), "client") + " en sur mesure"); cl.type = "button"; cl.onclick = () => { S.ui.fiTab = "clients"; S.ui.fiSv = "sur"; remember(); render(); }; b.appendChild(cl); u.appendChild(b); }
   UNITES.forEach(([t, rows]) => { const b = el("div","of-ub"); b.appendChild(el("h3", null, t)); rows.forEach(([l, p]) => { const r = el("div","of-ur"); r.append(el("span", null, l), el("b", null, p)); b.appendChild(r); }); u.appendChild(b); });
   root.appendChild(u);
   root.appendChild(el("p","status","Source : plaquette des offres v12 du 03/11/2026 ; Pack Meta d’après les règles de l’agence (agence.md). Acompte de 30 % sur les prestations à l’unité ; déplacement compris jusqu’à 10 km, puis +15 € à +40 € jusqu’à 50 km."));
