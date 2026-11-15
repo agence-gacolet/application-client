@@ -526,6 +526,8 @@ details.box[open] summary::after{content:"\2212"}
 .pm-card{background:var(--card);border:1px solid var(--line-2);border-radius:14px;padding:20px 22px}
 .pm-card h2{margin:0 0 6px;font:italic 400 28px/1 var(--display);text-transform:uppercase;letter-spacing:.3px}
 .pm-card>.muted{margin:0 0 12px}
+.pp-list{list-style:none;margin:4px 0 0;padding:0;display:grid;gap:14px}.pp-list li{display:flex;gap:12px;align-items:flex-start}.pp-list .muted{margin:4px 0 0}.pp-list .pm-actions{margin-top:8px}
+.pp-mark{flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:13px;background:var(--line-2);color:var(--ink)}.pp-done{opacity:.55}.pp-done .pp-mark{background:#C6FF33;color:#1D1D1B}
 .pm-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:12px 0 16px}
 .pm-f{display:flex;flex-direction:column;gap:6px;font-size:var(--fs-s);font-weight:600;color:var(--ink-2)}
 .pm-f input,.pm-f select{border:1px solid var(--line-2);background:var(--paper);color:var(--ink);border-radius:8px;padding:9px 12px;font-size:var(--fs-base);max-width:none;width:100%}

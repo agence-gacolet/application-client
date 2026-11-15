@@ -3481,18 +3481,6 @@ const APPLI = "${location.origin}/api/hook/gsheet";
 // Clé : donnée par l'appli au premier envoi (bouton « Jumeler » dans Paramètres > Liaisons), puis gardée dans le script
 const DOSSIER = "1tbY552gBJ2KXeitKQ7our4hVLp0Sda5X"; // dossier des tableaux de suivi Meta
 const IGNORE = /^(mode d|communes?$|listes?$|param)/i;
-const JETONS = "1di9rRlGulDJ6HfIwlkjPPATVyzHMnuCS"; // 70_PILOTAGE/.jetons : clés personnelles de Claude, déposées ici
-
-function deposerJetons(liste) {
-  if (!liste || !liste.length) return;
-  var d = DriveApp.getFolderById(JETONS);
-  liste.forEach(function (j) {
-    if (!/^[a-z0-9._-]{1,40}\.jeton$/.test(j.nom)) return;
-    var it = d.getFilesByName(j.nom);
-    if (it.hasNext()) it.next().setContent(j.cle); else d.createFile(j.nom, j.cle, MimeType.PLAIN_TEXT);
-  });
-}
-
 function installer() {
   ScriptApp.getProjectTriggers().forEach(function (t) { ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger("envoyer").timeBased().everyMinutes(10).create();
@@ -3529,7 +3517,6 @@ function envoyer() {
     return { id: f.getId(), name: f.getName(), url: f.getUrl(), modified: f.getLastUpdated().toISOString(), tabs: null };
   });
   var rep = poster(meta); // liste seule : l'appli dit quels fichiers attendre ou renvoyer
-  deposerJetons(rep.jetons);
   (rep.again || []).forEach(function (id) { delete vus[id]; });
   var attente = rep.waiting || [];
   meta.forEach(function (m) {
@@ -3633,6 +3620,27 @@ function pmLiaisons(w){
   pmMaj(w);
 }
 
+/* Premiers pas : les réglages à faire une fois par compte, cochés tout seuls quand ils sont faits ; la carte disparaît quand tout est fait */
+function pmPremiersPas(w, info){
+  if (standalone()) store.set("gc-installe", true);
+  const mcp = location.origin + "/mcp";
+  const steps = [
+    ["Ajouter ta photo de profil", !!info.avatar, "Juste en dessous, « Ajouter une photo »."],
+    ["Renseigner ton téléphone et ton courriel", !!(info.tel && info.email), "Plus bas sur cette page, dans tes coordonnées."],
+    ["Relier Claude à ton compte", !!info.claude, "Dans Claude (site, appli ou Cowork) : Paramètres, puis Connecteurs, « Gacolet », Se connecter, et tes identifiants de l’appli. Claude peut ensuite créer et modifier tes tâches et tes rendez-vous à ta place, avec tes accès. Si « Gacolet » n’apparaît pas, demande à Matis.", mcp],
+    ["Installer l’appli sur ton téléphone", store.get("gc-installe") === true, isIOS() ? "Dans Safari : Partager, puis « Sur l’écran d’accueil », et ouvre l’appli depuis son icône." : "Sur ton téléphone, ouvre l’appli dans le navigateur puis « Ajouter à l’écran d’accueil »."],
+    ["Activer les notifications", pushOn(), "Plus bas sur cette page, « Notifications sur ton téléphone et ton ordinateur », sur chaque appareil."]
+  ];
+  const left = steps.filter(x => !x[1]).length; if (!left) return;
+  const c = pmCard("Premiers pas", left === 1 ? "Il reste une étape pour que ton compte soit prêt." : "Il reste " + left + " étapes pour que ton compte soit prêt. Elles se cochent toutes seules.");
+  const ol = el("ol","pp-list");
+  steps.forEach(([t, done, how, copie]) => {
+    const li = el("li", done ? "pp-done" : null); li.appendChild(el("span","pp-mark", done ? "✓" : String(steps.findIndex(x => x[0] === t) + 1)));
+    const box = el("div"); box.appendChild(el("strong",null,t)); if (!done){ box.appendChild(el("p","muted",how));
+      if (copie){ const a = el("div","pm-actions"); a.appendChild(btn("Copier l’adresse du connecteur","", async () => { try { await navigator.clipboard.writeText(copie); toast("Adresse copiée : " + copie); } catch(e){ toast(copie); } })); box.appendChild(a); } }
+    li.appendChild(box); ol.appendChild(li); });
+  c.appendChild(ol); w.appendChild(c);
+}
 function pmCompte(w){
   if (S.secours){
     const c = pmCard("Accès de secours", "Tu es connecté avec le mot de passe commun de l’agence. Il sert seulement à créer les comptes ou à dépanner. Définis ton mot de passe dans Équipe et accès, puis reconnecte-toi avec ton identifiant.");
@@ -3640,6 +3648,7 @@ function pmCompte(w){
   }
   if (S.preview){ w.appendChild(pmCard("Aperçu", "Les réglages du compte ne sont pas disponibles pendant un aperçu.")); return; }
   const u = S.user || {}, info = u.info || {};
+  pmPremiersPas(w, info);
   const cp = pmCard("Photo de profil", "Elle apparaît dans la messagerie et dans le menu.");
   const pr = el("div","pm-av"); pr.appendChild(avatarEl(u.name, 76, { src: info.avatar || "" }));
   const pfi = el("input"); pfi.type = "file"; pfi.accept = "image/*"; pfi.hidden = true;

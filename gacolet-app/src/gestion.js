@@ -186,22 +186,8 @@ module.exports = function (app, { db, wrap, root }) {
     return "";
   }
 
-  // ---------- Clés de Claude ----------
-  // Chaque personne qui se connecte ou ouvre l'appli reçoit une clé personnelle (180 jours, ses propres droits), déposée par le
-  // script Google de l'agence dans le Drive : 70_PILOTAGE/.jetons/<identifiant>.jeton. Claude (70_PILOTAGE/tache.py) s'en sert
-  // pour agir au nom de la personne qui lui parle, sans connexion à faire. Au plus un dépôt par semaine et par personne.
-  const JETONS_A_DEPOSER = new Map(), JETONS_DEPOSES = new Map();
-  function jetonClaude(u, force) {
-    const nom = String(u.username || "").toLowerCase();
-    if (!/^[a-z0-9._-]{1,40}$/.test(nom) || Number(u.disabled) || !u.pass) return;
-    if (!force && Date.now() - (JETONS_DEPOSES.get(nom) || 0) < 7 * 864e5) return;
-    JETONS_A_DEPOSER.set(nom, makeToken(u));
-  }
-  function jetonsPourScript() {
-    const out = [...JETONS_A_DEPOSER].map(([nom, cle]) => ({ nom: nom + ".jeton", cle }));
-    out.forEach(j => JETONS_DEPOSES.set(j.nom.slice(0, -6), Date.now())); JETONS_A_DEPOSER.clear();
-    return out;
-  }
+  // ---------- Connecteur Claude (MCP + OAuth, voir src/mcp.js) ----------
+  require("./mcp")({ app, wrap, db, ensure, who, checkPw, makeToken, sign, eq });
 
   // ---------- Connexion ----------
   const tries = new Map();
@@ -212,7 +198,7 @@ module.exports = function (app, { db, wrap, root }) {
     if (t.n >= 10) return res.status(429).json({ error: "Trop d’essais. Réessaie dans quelques minutes." });
     const username = String((req.body && req.body.username) || "").trim().toLowerCase(), pw = String((req.body && req.body.password) || "");
     const u = username ? await db.one("SELECT * FROM gusers WHERE username = ?", [username]) : null;
-    if (u && !Number(u.disabled) && u.pass && checkPw(pw, u.pass)) { tries.delete(ip); jetonClaude(u, true); return res.json({ key: makeToken(u) }); }
+    if (u && !Number(u.disabled) && u.pass && checkPw(pw, u.pass)) { tries.delete(ip); return res.json({ key: makeToken(u) }); }
     if (process.env.ADMIN_PASSWORD && pw === process.env.ADMIN_PASSWORD) { tries.delete(ip); return res.json({ key: legacyKey(), secours: true }); }
     t.n++; tries.set(ip, t);
     if (u && Number(u.disabled)) return res.status(401).json({ error: "Ce compte est suspendu. Vois avec Gabriel ou Matis." });
@@ -233,7 +219,6 @@ module.exports = function (app, { db, wrap, root }) {
   app.get("/api/g-me", auth, wrap(async (req, res) => {
     const team = (await db.all("SELECT name, role, info FROM gusers WHERE disabled = 0 ORDER BY created_at")).map(r => { const i = infoOf(r); return { name: r.name, role: r.role, avatar: i.avatar || "", email: i.email || "", tel: i.tel || "", poste: i.poste || "" }; });
     const row = req.user.secours ? null : await db.one("SELECT * FROM gusers WHERE id = ?", [req.user.id]);
-    if (row && !req.user.preview) jetonClaude(row, false);
     res.json({ user: Object.assign({}, req.user, row ? { info: infoOf(row) } : {}), team });
   }));
   app.patch("/api/g-me", auth, wrap(async (req, res) => {
@@ -671,7 +656,7 @@ module.exports = function (app, { db, wrap, root }) {
     await ensure(); const key = await GS.pushKey(), got = String(req.get("x-gacolet-key") || req.query.key || "");
     if (!got && Date.now() < pairUntil) { pairUntil = 0; return res.json({ pairKey: key }); }
     if (got.length !== key.length || !crypto.timingSafeEqual(Buffer.from(got), Buffer.from(key))) return res.status(401).json({ error: "Clé refusée." });
-    res.json(Object.assign(await GS.push(req.body), { jetons: jetonsPourScript() }));
+    res.json(await GS.push(req.body));
   }));
   app.put("/api/g-keys/gsheets", auth, ownerOnly, wrap(async (req, res) => {
     let k; try { k = JSON.parse(String((req.body || {}).json || "")); } catch (e) { return res.status(400).json({ error: "Ce n’est pas un fichier de clé JSON valide." }); }
