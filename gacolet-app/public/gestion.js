@@ -1132,7 +1132,8 @@ function vCalls(root, rows, who, full){
   if (!show.length){ root.appendChild(el("p","empty", st === "" ? "Toute la liste est appelée. Bravo." : "Personne dans cette case.")); return; }
   const {w, tb} = table(["Entreprise","Ville","Téléphone","Résultat","Note"].concat(full ? ["Commercial"] : []).concat([""]));
   show.forEach(c => { const tr = el("tr","row");
-    const c0 = el("div"); c0.append(el("div","ttl", c.company), el("div","note", c.contact || "")); td(tr, c0, "w"); td(tr, c.city || "", "nw");
+    const c0 = el("div"); c0.append(el("div","ttl", c.company)); const sub = el("div","note"); [c.contact, c.rating ? "★ " + c.rating : ""].filter(Boolean).forEach((t, i) => sub.append((i ? " · " : "") + t));
+    if (c.web){ const a = el("a","cl-web","site"); a.href = c.web; a.target = "_blank"; a.rel = "noopener"; a.onclick = e => e.stopPropagation(); sub.append(sub.childNodes.length ? " · " : "", a); } else if (c.rating) sub.append(" · sans site"); c0.appendChild(sub); td(tr, c0, "w"); td(tr, c.city || "", "nw");
     const ph = el("div","cl-ph"); if (c.phone){ const a = el("a","cl-tel", c.phone); a.href = "tel:" + c.phone.replace(/[^\d+]/g, ""); ph.appendChild(a); }
     const pi = el("input","inl cl-pin"); pi.type = "tel"; pi.placeholder = c.phone ? "Changer" : "Numéro"; pi.value = ""; pi.onchange = () => { const v = pi.value.trim(); if (v) patch("commercial", c.id, { phone: v }); }; if (!c.phone) ph.appendChild(pi);
     const fd = el("a","cl-find", c.phone ? "" : "Trouver"); fd.href = callFind(c); fd.target = "_blank"; fd.rel = "noopener"; fd.title = "Chercher le numéro sur Google"; if (!c.phone) ph.appendChild(fd); td(tr, ph, "nw");
@@ -1143,7 +1144,7 @@ function vCalls(root, rows, who, full){
     const go2 = btn("Prospect →","sm lemon", () => patch("commercial", c.id, { kind: "Prospect", stage: "rendez-vous pris" === c.stage ? c.stage : "à contacter", source: "Prospection directe", j0: today(), fromList: c.list || "", lastContact: (c.notes ? "Appel du " + fmtFR(today()) + " : " + c.notes : "Appel du " + fmtFR(today())), nextAction: "Rappeler", nextDate: addDays(today(), 3) }).then(() => toast(c.company + " passe en prospect (relance dans 3 jours).")));
     go2.disabled = !writable(); td(tr, go2, "nw"); tb.appendChild(tr); });
   root.appendChild(w);
-  root.appendChild(el("p","status","Le numéro n’est pas dans l’annuaire public : « Trouver » ouvre la recherche Google, colle le numéro dans la case. Tu peux aussi demander à Claude de compléter les numéros d’une liste."));
+  root.appendChild(el("p","status","Le numéro n’est pas dans l’annuaire public : « Trouver » ouvre la recherche Google, colle le numéro dans la case. Avec Google Maps, les numéros, sites et avis arrivent tout seuls. Une entreprise « sans site » est souvent une bonne cible."));
 }
 function callGen(){
   const me = S.me || "Gabriel", full = S.role === "owner";
@@ -1151,8 +1152,13 @@ function callGen(){
     const t = el("h3", null, "Générer une liste d’appels"); t.id = "mtitle"; m.appendChild(t);
     m.appendChild(el("p","muted","Entreprises actives trouvées dans l’annuaire public des entreprises. Celles déjà dans l’appli (clients, prospects, listes) sont écartées."));
     const f = el("div","form"), row = () => { const r = el("div","row2"); f.appendChild(r); return r; }, lab = (txt, inp, r) => { const l = el("label", null, txt); l.appendChild(inp); (r || f).appendChild(l); return inp; };
+    const src = el("select"); [["google","Google Maps : avec téléphone, site et avis"],["annuaire","Annuaire des entreprises : gratuit, avec le dirigeant, sans téléphone"]].forEach(([v, l]) => { const o = el("option", null, l); o.value = v; src.appendChild(o); }); lab("Où chercher", src);
+    const gnote = el("p","note"); f.appendChild(gnote);
+    GC.api("GET","/api/g-places").then(r => { if (!r.ok){ src.value = "annuaire"; src.options[0].text += " (clé Google à ajouter dans Paramètres > Liaisons)"; src.options[0].disabled = true; upd(); } }).catch(() => {});
     const dom = el("select"); CALL_DOMAINS.forEach(([l, v], i) => { const o = el("option", null, l); o.value = String(i); dom.appendChild(o); }); lab("Domaine", dom);
-    const r1 = row(); const kw = lab("Mot-clé en plus (facultatif)", Object.assign(el("input"), { placeholder: "Ex. piscine, pizza, auto-école" }), r1); const zone = lab("Zone (départements ou codes postaux)", Object.assign(el("input"), { value: "30", placeholder: "30, 34 ou 30000 30900" }), r1);
+    const r1 = row(); const kw = lab("Mot-clé en plus (facultatif)", Object.assign(el("input"), { placeholder: "Ex. piscine, pizza, auto-école" }), r1); const zone = lab("Zone", Object.assign(el("input"), { value: "Nîmes" }), r1);
+    const upd = () => { const g = src.value === "google"; zone.parentNode.firstChild.textContent = g ? "Villes (séparées par des virgules)" : "Zone (départements ou codes postaux)"; if (g && /^[\d\s,;]+$/.test(zone.value)) zone.value = "Nîmes"; if (!g && !/^[\d\s,;AB]+$/i.test(zone.value)) zone.value = "30"; zone.placeholder = g ? "Nîmes, Alès, Uzès" : "30, 34 ou 30000 30900"; gnote.textContent = g ? "Google Maps : jusqu’à 60 résultats par ville. La taille de l’entreprise ne s’applique pas." : "Annuaire : le numéro est à trouver ensuite (bouton « Trouver »)."; };
+    src.onchange = upd;
     const r2 = row(); const size = el("select"); [["1","Au moins 1 salarié"],["3","3 salariés et plus"],["10","10 salariés et plus"],["0","Toutes, même sans salarié"]].forEach(([v, l]) => { const o = el("option", null, l); o.value = v; size.appendChild(o); }); lab("Taille", size, r2);
     const n = lab("Nombre", Object.assign(el("input"), { type: "number", value: "30", min: "5", max: "150" }), r2);
     const r3 = row(); const own = el("select"); (full ? SALES : [me]).forEach(p => { const o = el("option", null, p); o.value = p; own.appendChild(o); }); own.value = SALES.includes(S.ui.coWho) ? S.ui.coWho : SALES.includes(me) ? me : SALES[0]; lab("Commercial qui appelle", own, r3);
@@ -1162,13 +1168,15 @@ function callGen(){
     const res = el("div","cl-res"); m.appendChild(res); const err = el("div","err"); m.appendChild(err);
     const act = el("div","actions"); const go = btn("Chercher","lemon"); const mk = btn("Créer la liste",""); mk.disabled = true; act.append(btn("Annuler","", closeModal), go, mk); m.appendChild(act);
     let found = [];
-    const autoName = () => (CALL_DOMAINS[dom.value][1] ? CALL_DOMAINS[dom.value][0].split(",")[0] : (kw.value.trim() || "Liste")) + " " + zone.value.trim().split(/[\s,;]+/).join("-") + " " + fmtD(today());
+    upd();
+    const autoName = () => (CALL_DOMAINS[dom.value][1] ? CALL_DOMAINS[dom.value][0].split(",")[0] : (kw.value.trim() || "Liste")) + " " + zone.value.trim().split(/\s*[,;]\s*|\s+(?=\d)/).join("-") + " " + fmtD(today());
     go.onclick = async () => { err.textContent = ""; go.disabled = true; go.textContent = "Recherche…"; res.textContent = "";
-      try { const q = new URLSearchParams({ naf: CALL_DOMAINS[dom.value][1], q: kw.value.trim(), zone: zone.value.trim(), n: n.value, size: size.value });
+      try { const g = src.value === "google", what = [CALL_DOMAINS[dom.value][1] ? CALL_DOMAINS[dom.value][0].split(",")[0] : "", kw.value.trim()].filter(Boolean).join(" ");
+        const q = g ? new URLSearchParams({ src: "google", what, where: zone.value.trim(), n: n.value }) : new URLSearchParams({ naf: CALL_DOMAINS[dom.value][1], q: kw.value.trim(), zone: zone.value.trim(), n: n.value, size: size.value });
         const r = await GC.api("GET","/api/g-callsearch?" + q); found = r.rows.map(x => Object.assign(x, { on: true }));
-        res.appendChild(el("p","muted", found.length + " entreprise" + (found.length > 1 ? "s" : "") + " retenue" + (found.length > 1 ? "s" : "") + " sur " + r.total + " dans l’annuaire. Décoche celles à écarter."));
+        res.appendChild(el("p","muted", found.length + " entreprise" + (found.length > 1 ? "s" : "") + " retenue" + (found.length > 1 ? "s" : "") + (g ? " sur Google Maps" : " sur " + r.total + " dans l’annuaire") + ", sans celles déjà dans l’appli. Décoche celles à écarter."));
         const ul = el("ul","cl-list"); found.forEach(x => { const li = el("li"); const ck = el("input"); ck.type = "checkbox"; ck.checked = true; ck.onchange = () => { x.on = ck.checked; mk.textContent = "Créer la liste (" + found.filter(y => y.on).length + ")"; };
-          const tx = el("div"); tx.append(el("b", null, x.company), el("span","note", " " + [x.city, x.contact].filter(Boolean).join(", "))); li.append(ck, tx); ul.appendChild(li); }); res.appendChild(ul);
+          const tx = el("div"); tx.append(el("b", null, x.company), el("span","note", " " + [x.city, x.contact, x.phone, x.rating ? "★ " + x.rating : "", x.web ? "" : (g ? "sans site" : "")].filter(Boolean).join(", "))); li.append(ck, tx); ul.appendChild(li); }); res.appendChild(ul);
         if (!name.value.trim()) name.value = autoName(); mk.disabled = !found.length; mk.className = "btn solid"; mk.textContent = "Créer la liste (" + found.length + ")";
       } catch(e){ err.textContent = e.message; } go.disabled = false; go.textContent = "Chercher à nouveau"; };
     mk.onclick = async () => { const rows = found.filter(x => x.on); if (!rows.length) return; mk.disabled = true;
@@ -1186,7 +1194,7 @@ function callImport(){
       const r = await GC.api("POST","/api/g-calllist", { name: o.name, owner: o.owner, target: o.target, rows }); S.ui.coKind = "Appels"; S.ui.clList = o.name; S.ui.clSt = ""; remember(); toast(r.n + " entreprises ajoutées à « " + o.name + " »."); },
     done: "Liste créée." });
 }
-(function(){ const st = document.createElement("style"); st.textContent = ".cl-ph{display:flex;gap:8px;align-items:center}.cl-tel{color:#C6FF33;font-weight:600;white-space:nowrap}.cl-pin{width:120px}.cl-find{font-size:12px;color:var(--muted,#9a9a94);text-decoration:underline}.cl-res .cl-list{list-style:none;margin:6px 0;padding:0;max-height:38vh;overflow:auto;display:grid;gap:4px}.cl-list li{display:flex;gap:10px;align-items:center;padding:4px 0;border-bottom:1px solid var(--line-2)}"; document.head.appendChild(st); })();
+(function(){ const st = document.createElement("style"); st.textContent = ".cl-ph{display:flex;gap:8px;align-items:center}.cl-tel{color:#C6FF33;font-weight:600;white-space:nowrap}.cl-pin{width:120px}.cl-web{color:#C6FF33}.cl-find{font-size:12px;color:var(--muted,#9a9a94);text-decoration:underline}.cl-res .cl-list{list-style:none;margin:6px 0;padding:0;max-height:38vh;overflow:auto;display:grid;gap:4px}.cl-list li{display:flex;gap:10px;align-items:center;padding:4px 0;border-bottom:1px solid var(--line-2)}"; document.head.appendChild(st); })();
 
 /* ---------- Campagnes ---------- */
 function vCampagnes(root){
@@ -2678,7 +2686,7 @@ const foFor = (f, p) => !(f.who || []).length || (f.who || []).includes(p);
 function editFormation(f){
   openForm({ key:"fo", title: f.id ? f.title : "Nouvelle vidéo", intro: f.id ? "" : "Colle le lien d’une vidéo YouTube, Vimeo ou Google Drive.", values: Object.assign({aud: S.ui.foAud || "Équipe", cat: S.ui.foCat || "App"}, f, { cat: f.id ? foCat(f) : (S.ui.foCat || "App") }),
     fields:[{k:"title",label:"Titre",req:"Donne un titre."},{k:"cat",label:"Onglet",type:"select",options:FO_CATS,half:true},{k:"aud",label:"Pour",type:"select",options:["Équipe","Clients"],half:true},
-      {k:"who",label:"Qui doit la voir (aucun choisi : toute l’équipe)",type:"who"},{k:"topic",label:"Thème dans l’onglet",half:true,ph:"Ex. Montage, Metricool"},{k:"duration",label:"Durée",half:true,ph:"Ex. 4 min"},
+{k:"topic",label:"Thème dans l’onglet",half:true,ph:"Ex. Montage, Metricool"},{k:"duration",label:"Durée",half:true,ph:"Ex. 4 min"},
       {k:"url",label:"Lien de la vidéo",ph:"https://",req:"Colle le lien de la vidéo."},{k:"order",label:"Ordre",type:"number",half:true},{k:"desc",label:"Ce qu’on y apprend",type:"textarea"}],
     onDelete: f.id ? () => remove("formations", f.id) : null,
     onSave: out => save("formations", f.id || null, Object.assign(f.id ? strip(f) : {}, out)) });
@@ -2701,17 +2709,16 @@ function openFormation(f){
 }
 function vFormation(root){
   const me = S.me || "Gabriel"; const aud = S.ui.foAud || "Équipe", cat = FO_CATS.includes(S.ui.foCat) ? S.ui.foCat : FO_CATS[0];
-  const people = S.role === "owner" ? PEOPLE : [me], who = aud === "Équipe" ? (S.ui.foWho === "Tous" || people.includes(S.ui.foWho) ? S.ui.foWho : me) : "Tous";
+  const who = "Tous";
   root.appendChild(head("Formation", aud === "Équipe" ? "Pour bien démarrer à l’agence" : "Les tutos à partager aux clients",
     [segm([["Équipe","Équipe"],["Clients","Clients"]], aud, v => { S.ui.foAud = v; remember(); render(); }), addBtn("Ajouter une vidéo", () => editFormation({aud, cat}))]));
   const base = S.d.formations.filter(f => (f.aud||"Équipe") === aud && (who === "Tous" || foFor(f, who)));
   const fl = el("div","filters");
   fl.appendChild(chipBar(FO_CATS.map(c => [c, c]), cat, v => { S.ui.foCat = v; remember(); render(); }, Object.fromEntries(FO_CATS.map(c => [c, base.filter(f => foCat(f) === c).length]))));
-  if (aud === "Équipe" && people.length > 1) fl.appendChild(chipBar(people.concat(["Tous"]).map(p => [p, p]), who, v => { S.ui.foWho = v; remember(); render(); }));
   root.appendChild(fl);
   const rows = base.filter(f => foCat(f) === cat).sort((a,b) => (Number(a.order)||999) - (Number(b.order)||999) || (a.title||"").localeCompare(b.title||""));
-  if (!rows.length){ root.appendChild(el("p","empty", "Aucune vidéo dans « " + cat + " »" + (who !== "Tous" && aud === "Équipe" ? " pour " + who : "") + " pour l’instant.")); return; }
-  const viewer = who === "Tous" ? me : who, seenN = rows.filter(f => (f.seenBy||[]).includes(viewer)).length;
+  if (!rows.length){ root.appendChild(el("p","empty", "Aucune vidéo dans « " + cat + " » pour l’instant.")); return; }
+  const viewer = me, seenN = rows.filter(f => (f.seenBy||[]).includes(viewer)).length;
   if (aud === "Équipe") root.appendChild(el("p","status", seenN + " sur " + rows.length + " vues par " + (viewer === me ? "toi" : viewer) + "."));
   const topics = []; rows.forEach(f => { const t = f.topic || ""; if (!topics.includes(t)) topics.push(t); });
   topics.forEach(tp => {
@@ -2720,7 +2727,7 @@ function vFormation(root){
     rows.filter(f => (f.topic || "") === tp).forEach(f => { const sn = (f.seenBy||[]).includes(viewer);
       const c = el("button","fo-card"+(sn ? " seen" : ""));
       const th = el("span","fo-th"); th.appendChild(el("span","fo-play")); c.appendChild(th);
-      c.appendChild(el("b",null,f.title)); c.appendChild(el("span",null,[f.duration, (f.who||[]).length ? (f.who||[]).join(", ") : "", sn ? "Vue" : ""].filter(Boolean).join(", ")));
+      c.appendChild(el("b",null,f.title)); c.appendChild(el("span",null,[f.duration, sn ? "Vue" : ""].filter(Boolean).join(", ")));
       c.onclick = () => openFormation(f); g.appendChild(c);
     });
     root.appendChild(g);
@@ -3282,6 +3289,16 @@ function envoyer() {
 }
 `;
 }
+/* Clé Google Maps (Places API) pour les listes d'appels */
+function pmPlaces(w){
+  const c = pmCard("Google Maps (listes d’appels)", "Sert à générer les listes d’appels avec le téléphone, le site et les avis Google. Clé à créer dans Google Cloud (API « Places API (New) »). Environ 1 000 recherches gratuites par mois, puis quelques centimes par recherche.");
+  w.appendChild(c);
+  if (S.gpl == null){ S.gpl = ""; GC.api("GET","/api/g-places").then(r => { S.gpl = r.ok ? "on" : "off"; render(); }).catch(() => {}); }
+  c.appendChild(el("p","note", S.gpl === "on" ? "Relié : la recherche Google Maps est disponible dans Commercial > Listes d’appels." : "Pas encore relié."));
+  const f = el("div","form"), l = el("label", null, S.gpl === "on" ? "Remplacer la clé" : "Clé Google Maps"), i = el("input"); i.type = "password"; i.autocomplete = "off"; i.placeholder = "AIza…"; l.appendChild(i); f.appendChild(l); c.appendChild(f);
+  const a = el("div","pm-actions"), b = btn("Enregistrer la clé", S.gpl === "on" ? "" : "lemon", async () => { if (!i.value.trim()) return toast("Colle d’abord la clé."); b.disabled = true; try { await GC.api("PUT","/api/g-keys/places", { key: i.value.trim() }); i.value = ""; S.gpl = "on"; toast("Google Maps relié."); render(); } catch(e){ toast(e.message); b.disabled = false; } });
+  a.appendChild(b); c.appendChild(a);
+}
 /* Tableaux de suivi Meta : un script Google du compte de l'agence les envoie à l'appli toutes les 10 minutes */
 function pmGsheets(w){
   const c = pmCard("Tableaux de suivi Meta (Google Sheets)", "Un petit script Google, installé une fois sur le compte de l’agence, envoie toutes les 10 minutes les tableaux de suivi à l’appli (contacts, statuts, récap dans Campagnes). Rien n’est modifié dans les tableaux.");
@@ -3336,7 +3353,7 @@ function pmLiaisons(w){
   const a = el("div","pm-actions"); const b = btn("Enregistrer la clé","lemon", async () => { const v = inp.value.trim(); if (!v) return toast("Colle d’abord la clé.");
     b.disabled = true; try { await GC.api("PUT","/api/g-keys/metricool",{ token: v }); inp.value = ""; toast("Metricool relié."); S.pubs = {}; pubAt = {}; render(); } catch(x){ toast(x.message || "Enregistrement impossible."); b.disabled = false; } });
   a.appendChild(b); c.appendChild(a); w.appendChild(c);
-  pmGsheets(w);
+  pmGsheets(w); pmPlaces(w);
   pmMaj(w);
 }
 

@@ -730,8 +730,35 @@ module.exports = function (app, { db, wrap, root }) {
   // Recherche d'entreprises dans l'annuaire public de l'État (recherche-entreprises.api.gouv.fr, gratuit, sans clé) :
   // activité (codes NAF), zone (départements ou codes postaux), taille ; les entreprises déjà dans l'appli sont écartées.
   const nk = s => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\([^)]*\)/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+  // Recherche Google Maps (Places API, clé GOOGLE_PLACES_KEY) : nom, adresse, téléphone, site, note Google ; 60 résultats au plus par recherche
+  async function placesSearch(text, want, known) {
+    const key = process.env.GOOGLE_PLACES_KEY; if (!key) throw Object.assign(new Error("Clé Google Maps absente : ajoute-la dans Paramètres > Liaisons."), { status: 400 });
+    const out = [], seen = new Set(); let token = "";
+    for (let i = 0; i < 3 && out.length < want; i++) {
+      const body = { textQuery: text, languageCode: "fr", regionCode: "FR", pageSize: 20 }; if (token) body.pageToken = token;
+      const r = await fetch("https://places.googleapis.com/v1/places:searchText", { method: "POST", headers: { "Content-Type": "application/json", "X-Goog-Api-Key": key,
+        "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.websiteUri,places.rating,places.userRatingCount,places.businessStatus,nextPageToken" }, body: JSON.stringify(body) });
+      const j = await r.json().catch(() => ({})); if (!r.ok) throw Object.assign(new Error("Google Maps refuse la recherche : " + ((j.error && j.error.message) || r.status)), { status: 502 });
+      for (const p of j.places || []) { if (p.businessStatus && p.businessStatus !== "OPERATIONAL") continue;
+        const name = ((p.displayName && p.displayName.text) || "").trim(), k = nk(name); if (!name || known.has(k) || seen.has(k)) continue; seen.add(k);
+        const addr = p.formattedAddress || "", city = (addr.match(/\d{5}\s+([^,]+)/) || [])[1] || "";
+        out.push({ company: name, phone: p.nationalPhoneNumber || "", city, address: addr.replace(/,\s*France$/, ""), web: p.websiteUri || "", rating: p.rating ? String(p.rating).replace(".", ",") + " (" + (p.userRatingCount || 0) + " avis)" : "" });
+        if (out.length >= want) break; }
+      token = j.nextPageToken || ""; if (!token) break;
+    }
+    return out;
+  }
   app.get("/api/g-callsearch", auth, wrap(async (req, res) => {
     const no = allowed(req.user, "commercial", null, { kind: "Appel", owner: req.user.name }, null); if (no) return refuse(res, no);
+    if (req.query.src === "google") {
+      const what = String(req.query.what || "").trim().slice(0, 80), where = String(req.query.where || "").split(/[,;]+/).map(x => x.trim()).filter(Boolean).slice(0, 5);
+      if (!what || !where.length) return res.status(400).json({ error: "Indique quoi chercher et où (une ou plusieurs villes)." });
+      const want = Math.max(1, Math.min(150, Number(req.query.n) || 30));
+      const known = new Set((await db.all("SELECT data FROM docs WHERE col IN ('commercial','clients') AND deleted = 0")).map(r => { try { const d = JSON.parse(r.data); return nk(d.company || d.name); } catch (e) { return ""; } }).filter(Boolean));
+      try { let rows = []; for (const w of where) { if (rows.length >= want) break; const got = await placesSearch(what + " " + w, want - rows.length, known); got.forEach(x => known.add(nk(x.company))); rows = rows.concat(got); }
+        return res.json({ total: rows.length, rows, src: "google" }); }
+      catch (e) { return res.status(e.status || 500).json({ error: e.message }); }
+    }
     const naf = String(req.query.naf || "").split(",").map(x => x.trim()).filter(x => /^\d{2}\.\d{2}[A-Z]$/.test(x)).slice(0, 12).join(",");
     const q = String(req.query.q || "").trim().slice(0, 60), zone = String(req.query.zone || "").split(/[\s,;]+/).filter(Boolean).slice(0, 10);
     const deps = zone.filter(z => /^(\d{2}|2[AB]|97\d)$/i.test(z)), cps = zone.filter(z => /^\d{5}$/.test(z));
@@ -780,7 +807,7 @@ module.exports = function (app, { db, wrap, root }) {
       const rows = (Array.isArray(b.rows) ? b.rows : []).slice(0, 300); let n = 0; const st = String(b.stamp || "").slice(0, 40);
       const S2 = (v, k) => String(v == null ? "" : v).trim().slice(0, k);
       for (const r of rows) { const company = S2(r.company, 120); if (!company) continue;
-        await put("commercial", newId(), { kind: "Appel", list: name, owner, company, phone: S2(r.phone, 40), city: S2(r.city, 80), address: S2(r.address, 200), contact: S2(r.contact, 120), activity: S2(r.activity, 20), siren: S2(r.siren, 12), notes: S2(r.notes, 1000), target: S2(b.target, 300), callStatus: "", createdAt: stamp(), createdBy: req.user.name, order: 999 }); n++; }
+        await put("commercial", newId(), { kind: "Appel", list: name, owner, company, phone: S2(r.phone, 40), web: S2(r.web, 200), rating: S2(r.rating, 40), city: S2(r.city, 80), address: S2(r.address, 200), contact: S2(r.contact, 120), activity: S2(r.activity, 20), siren: S2(r.siren, 12), notes: S2(r.notes, 1000), target: S2(b.target, 300), callStatus: "", createdAt: stamp(), createdBy: req.user.name, order: 999 }); n++; }
       bump(); return res.json({ ok: true, n });
     }
     const list = await mine(); if (!list.length) return res.status(404).json({ error: "Liste vide ou introuvable." });
@@ -1140,7 +1167,16 @@ module.exports = function (app, { db, wrap, root }) {
     const data = { ok: true, at: Date.now(), days }; comCache = { at: Date.now(), data }; res.json(data);
   }));
   // Liaisons : clé API Metricool collée par un propriétaire dans Paramètres, gardée dans le fichier .env du serveur (jamais renvoyée au navigateur)
-  app.get("/api/g-keys", auth, ownerOnly, (req, res) => res.json({ metricool: !!process.env.METRICOOL_USER_TOKEN }));
+  app.get("/api/g-keys", auth, ownerOnly, (req, res) => res.json({ metricool: !!process.env.METRICOOL_USER_TOKEN, places: !!process.env.GOOGLE_PLACES_KEY }));
+  app.get("/api/g-places", auth, (req, res) => res.json({ ok: !!process.env.GOOGLE_PLACES_KEY }));
+  app.put("/api/g-keys/places", auth, ownerOnly, wrap(async (req, res) => {
+    const k = String((req.body || {}).key || "").trim(); if (!/^AIza[\w-]{30,45}$/.test(k)) return res.status(400).json({ error: "Une clé Google commence par « AIza »." });
+    const r = await fetch("https://places.googleapis.com/v1/places:searchText", { method: "POST", headers: { "Content-Type": "application/json", "X-Goog-Api-Key": k, "X-Goog-FieldMask": "places.displayName" }, body: JSON.stringify({ textQuery: "boulangerie Nîmes", pageSize: 1 }) });
+    if (!r.ok) { const j = await r.json().catch(() => ({})); return res.status(400).json({ error: "Google refuse la clé : " + ((j.error && j.error.message) || r.status) }); }
+    const ENV = path.join(root, ".env"); let txt = ""; try { txt = fs.readFileSync(ENV, "utf8"); } catch (e) {}
+    txt = txt.split("\n").filter(l => l && !/^GOOGLE_PLACES_KEY=/.test(l)).join("\n") + "\nGOOGLE_PLACES_KEY='" + k + "'\n";
+    fs.writeFileSync(ENV, txt.replace(/^\n+/, ""), { mode: 0o600 }); process.env.GOOGLE_PLACES_KEY = k; res.json({ ok: true });
+  }));
   app.put("/api/g-keys/metricool", auth, ownerOnly, wrap(async (req, res) => {
     const tok = String((req.body || {}).token || "").trim();
     if (!/^[A-Za-z0-9_\-.]{10,300}$/.test(tok)) return res.status(400).json({ error: "Cette clé ne ressemble pas à une clé Metricool." });
@@ -1290,6 +1326,9 @@ module.exports = function (app, { db, wrap, root }) {
     if (changed.length) { const cp = await run("cp", ["-R", "gacolet-app/.", "./"]); log.push("$ cp -R gacolet-app/. ./\n" + cp.out); if (cp.code) return res.status(500).json({ ok: false, log: log.join("\n") }); }
     if (changed.some(f => /package(-lock)?\.json$/.test(f))) { const ni = await run("npm", ["install", "--omit=dev"]); log.push("$ npm install\n" + ni.out.slice(-2000)); }
     const restart = changed.some(f => /^gacolet-app\/(src\/|server\.js|package)/.test(f));
-    res.json({ ok: true, from: before.slice(0, 7), to: after.slice(0, 7), changed, restart, log: log.join("\n") });
+    // Sous le gardien (supervisor.js) : le serveur s'arrête après la réponse et repart tout seul avec le nouveau code
+    const auto = restart && !!process.env.GACOLET_SUPERVISED;
+    res.json({ ok: true, from: before.slice(0, 7), to: after.slice(0, 7), changed, restart, auto, log: log.join("\n") });
+    if (auto) setTimeout(() => process.exit(75), 600);
   }));
 };
