@@ -1590,7 +1590,7 @@ function prodDrop(clients){
     items.forEach((it, i) => { const c = el("div","pd-it");
       const top = el("div","pd-top"); const th = it.kind === "video" ? el("video","pd-th") : el("img","pd-th"); if (it.url){ th.src = it.url; if (it.kind === "video"){ th.muted = true; th.preload = "metadata"; } } top.appendChild(th);
       const meta = el("div","pd-meta"); meta.appendChild(el("b", null, it.name)); meta.appendChild(el("span","note", it.busy ? "Envoi du fichier…" : it.kind === "video" ? "Réel" : "Publication"));
-      const dr = el("div","pd-dt"); if (it.reco) dr.appendChild(el("span","note pd-reco","Date conseillée" + (typeof it.reco === "string" ? " : " + it.reco : ""))); const di = el("input"); di.type = "date"; di.value = it.date || ""; di.onchange = () => it.date = di.value; const ti = el("input"); ti.type = "time"; ti.value = it.time || ""; ti.onchange = () => it.time = ti.value; dr.append(di, ti); meta.appendChild(dr);
+      const dr = el("div","pd-dt"); if (it.reco) dr.appendChild(el("span","note pd-reco","Date conseillée")); const di = el("input"); di.type = "date"; di.value = it.date || ""; di.onchange = () => it.date = di.value; const ti = el("input"); ti.type = "time"; ti.value = it.time || ""; ti.onchange = () => it.time = ti.value; dr.append(di, ti); meta.appendChild(dr);
       const rm = btn("Retirer","sm", () => { items.splice(i, 1); draw(); }); meta.appendChild(rm); top.appendChild(meta); c.appendChild(top);
       const sj = el("input"); sj.placeholder = "De quoi parle cette production ? (ex. chantier de terrasse à Uzès, avant/après)"; sj.value = it.subject || ""; sj.oninput = () => it.subject = sj.value; c.appendChild(sj);
       const gb = btn(it.props ? "Autres propositions" : "Proposer des descriptions","sm lemon", async () => { if (!it.subject){ toast("Écris d’abord de quoi parle la production."); return; } gb.disabled = true; gb.textContent = "Claude écrit…";
@@ -1627,7 +1627,7 @@ function prodDrop(clients){
     const rrow = el("div","pd-dt"); const rd = el("input"); rd.type = "date"; const rt = el("input"); rt.type = "time"; const rwhy = el("span","note pd-reco");
     rd.onchange = () => { next.date = rd.value; next.edited = true; }; rt.onchange = () => { next.time = rt.value; next.edited = true; };
     rrow.append(rd, rt); rl.append(rrow, rwhy); f.appendChild(rl); m.appendChild(f);
-    showNext = () => { rd.value = next.date || ""; rt.value = next.time || ""; rwhy.textContent = next.why ? "Pourquoi : " + next.why : ""; };
+    showNext = () => { rd.value = next.date || ""; rt.value = next.time || ""; rwhy.textContent = ""; };
     loadNext();
     m.appendChild(el("div","pd-body"));
     const act = el("div","actions"); const go = btn("Programmer dans Metricool","lemon pd-go", async () => {
