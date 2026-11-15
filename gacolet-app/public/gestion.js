@@ -1601,7 +1601,7 @@ const PD = { all: (() => { const a = store.get("pdDrafts") || {}; const old = st
 function pdPoll(){ if (PD.t) return; const tick = async () => { PD.t = 0; const w = Object.values(PD.all).flat().filter(x => x.wait); if (!w.length) return;
     for (const it of w){ try { const q = await GC.api("GET","/api/g-prod/describe/" + it.wait); if (q.status !== "done") continue;
       it.wait = ""; it.props = q.propositions; it.transcript = q.transcript || ""; if (!it.text && it.props[0]) it.text = it.props[0]; PD.save();
-      if (!(PD.redraw && PD.redraw())) { toast("Descriptions prêtes pour « " + it.name + " » : rouvre « Déposer des productions »."); if (S.view === "publications" || S.view === "depot") render(); } } catch(e){} }
+      if (!(PD.redraw && PD.redraw())) { toast("Descriptions prêtes pour « " + it.name + " » : elles sont dans l’onglet Dépôt."); if (S.view === "publications" || S.view === "depot") render(); } } catch(e){} }
     PD.t = setTimeout(tick, 15000); };
   PD.t = setTimeout(tick, 2000); }
 setTimeout(pdPoll, 8000);
@@ -1637,7 +1637,7 @@ function prodDrop(clients, host, opts){ opts = opts || {};
     try { const r = await GC.api("GET","/api/g-prod/slots?client=" + encodeURIComponent(client) + "&n=" + items.length);
     const used = new Set(items.filter(x => x.date).map(x => x.date)); const free = r.slots.filter(s => !used.has(s.date)); need.forEach(x => { const s = free.shift(); if (s){ x.date = s.date; x.time = s.time; x.reco = s.why || true; } }); draw(); } catch(e){ toast(e.message); } };
   const build = m => { m0 = m; m.classList.add(host ? "pd-page" : "pd-modal");
-    if (!host){ const t = el("h3", null, "Déposer des productions"); t.id = "mtitle"; m.appendChild(t); }
+    if (!host){ const t = el("h3", null, "Déposer des vidéos"); t.id = "mtitle"; m.appendChild(t); }
     m.appendChild(el("p","muted","Les dates suivent le rythme de la formule du client, après ce qui est déjà programmé. Tout est modifiable avant l’envoi." + (host ? "" : " Tu peux fermer cette fenêtre et faire autre chose : Claude continue, et tu retrouves tout ici en la rouvrant.")));
     const f = el("div","form"); const l = el("label", null, "Client"); const sel = el("select"); if (!client){ const o0 = el("option", null, "Choisir le client…"); o0.value = ""; sel.appendChild(o0); } clients.forEach(n => { const o = el("option", null, n + (PD.count(n) ? " (" + plural(PD.count(n), "fichier") + " en cours)" : "")); o.value = n; sel.appendChild(o); }); sel.value = client;
     sel.onchange = () => { client = sel.value; if (!client) return; const z = sel.querySelector("option[value='']"); if (z) z.remove(); S.ui.prodC = client; remember(); items = PD.list(client); next = {}; loadNext(); slots(); draw(); }; l.appendChild(sel); f.appendChild(l);
@@ -1714,16 +1714,16 @@ function vDepot(root){
   const mk = monthKey(); loadPubs(mk); const R = (S.pubs || {})[mk];
   const clients = R && (R.rows || R.plan) ? ["Agence Gacolet","Gabriel"].concat((R.rows || R.plan).filter(r => r.blogId).map(r => r.client)) : [];
   const launch = c => prodDrop(clients, null, { client: c });
-  root.appendChild(head("Dépôt", "Lance une production par client : dépose les vidéos et visuels, puis ferme la fenêtre. Claude transcrit, propose la date et trois descriptions pendant que tu fais autre chose. Chaque fichier en cours apparaît ici.", [addBtn("Nouvelle production", () => launch(""))]));
+  root.appendChild(head("Dépôt", "Dépose les vidéos et visuels d’un client, puis ferme la fenêtre : Claude transcrit, propose la date et trois descriptions pendant que tu fais autre chose. Tu peux enchaîner plusieurs clients. Chaque fichier en cours apparaît ici.", [addBtn("Déposer des vidéos", () => launch(""))]));
   const all = []; Object.keys(PD.all).forEach(c => PD.all[c].forEach(it => all.push([c, it])));
-  if (!all.length){ root.appendChild(el("p","empty","Rien en cours. Clique sur « Nouvelle production » pour déposer les vidéos d’un client.")); return; }
+  if (!all.length){ root.appendChild(el("p","empty","Rien en cours. Clique sur « Déposer des vidéos » pour commencer.")); return; }
   const st = it => it.busy ? ["Envoi du fichier…","run"] : it.wait ? [it.kind === "video" ? "Transcription et écriture…" : "Écriture…","run"] : it.props ? ["Prête, à relire","ok"] : !it.url ? ["Envoi interrompu","l3"] : ["En attente","" ];
   const order = it => it.busy || it.wait ? 1 : it.props ? 0 : 2;
   all.sort((a, b) => order(a[1]) - order(b[1]) || a[0].localeCompare(b[0], "fr"));
   const n = k => all.filter(([, it]) => k(it)).length;
   root.appendChild(el("p","note dp-sum", [plural(all.length, "fichier") + " en cours", n(it => it.props) ? plural(n(it => it.props), "prêt", "prêts") + " à relire" : "", n(it => it.busy || it.wait) ? n(it => it.busy || it.wait) + " chez Claude" : ""].filter(Boolean).join(" · ")));
   const g = el("div","dp-grid");
-  all.forEach(([c, it]) => { const t = el("button","dp-tile"); t.type = "button"; t.title = "Ouvrir la production de " + c;
+  all.forEach(([c, it]) => { const t = el("button","dp-tile"); t.type = "button"; t.title = "Ouvrir le dépôt de " + c;
     const th = el("div","dp-th"); if (it.url){ const v = it.kind === "video" ? el("video") : el("img"); v.src = it.url + (it.kind === "video" ? "#t=1" : ""); if (it.kind === "video"){ v.muted = true; v.preload = "metadata"; } th.appendChild(v); }
     const [lab, cls] = st(it); th.appendChild(el("span","dp-st " + cls, lab)); t.appendChild(th);
     const b = el("div","dp-b"); b.append(clientTag(c), el("div","dp-n", it.name.replace(/\.[a-z0-9]+$/i, "").replace(/_/g, " ")), el("div","note", it.date ? fmtD(it.date) + (it.time ? " à " + it.time : "") : "date à choisir")); t.appendChild(b);
@@ -3513,7 +3513,7 @@ function envoyer() {
 }
 /* Clé Claude (API Anthropic) : descriptions proposées dans le dépôt de productions */
 function pmClaude(w){
-  const c = pmCard("Claude (descriptions des publications)", "Facultatif. Sans clé, les descriptions de Publications > Déposer des productions sont écrites par Claude depuis le Mac de l’agence, avec l’abonnement, en 10 minutes au plus. Une clé (console.anthropic.com, payée à l’usage) les rend instantanées.");
+  const c = pmCard("Claude (descriptions des publications)", "Facultatif. Sans clé, les descriptions de l’onglet Dépôt sont écrites par Claude depuis le Mac de l’agence, avec l’abonnement, en 10 minutes au plus. Une clé (console.anthropic.com, payée à l’usage) les rend instantanées.");
   w.appendChild(c);
   if (S.cla == null){ S.cla = ""; GC.api("GET","/api/g-prod/status").then(r => { S.cla = r.claude ? "on" : "off"; render(); }).catch(() => {}); }
   c.appendChild(el("p","note", S.cla === "on" ? "Relié : propositions instantanées." : "Pas de clé : les propositions passent par le Mac de l’agence (10 minutes au plus)."));
