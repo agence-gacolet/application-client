@@ -1622,6 +1622,9 @@ function pdPoll(){ if (PD.t) return; const tick = async () => { PD.t = 0; const 
     PD.t = setTimeout(tick, 15000); };
   PD.t = setTimeout(tick, 2000); }
 setTimeout(pdPoll, 8000);
+async function pdDelete(client, it){ if (!confirm("Supprimer « " + it.name + " » ? Le fichier est effacé du serveur, ses descriptions aussi.")) return false;
+  if (it.url) await GC.api("POST","/api/g-prod/delete", { url: it.url });
+  const l = PD.list(client), k = l.indexOf(it); if (k >= 0) l.splice(k, 1); PD.save(); toast("« " + it.name + " » supprimé."); return true; }
 function prodDrop(clients, host, opts){ opts = opts || {};
   if (!clients.length){ if (host){ host.appendChild(el("p","empty","Lecture de la liste des clients…")); return; } toast("Liste des clients Metricool en cours de chargement, réessaie dans un instant."); return; }
   let next = {}, showNext = () => {};
@@ -1637,19 +1640,18 @@ function prodDrop(clients, host, opts){ opts = opts || {};
       const meta = el("div","pd-meta"); meta.appendChild(el("b", null, it.name)); const pst = el("span","note pd-st" + (it.props ? " ok" : it.wait ? " run" : ""), it.busy ? "Envoi du fichier…" + (it.pct ? " " + it.pct + " %" : "") : !it.url && it.err ? "Envoi interrompu, redépose ce fichier" : it.wait ? (it.kind === "video" ? "Claude transcrit la vidéo et écrit…" : "Claude regarde le visuel et écrit…") : it.props ? "Descriptions prêtes" : it.kind === "video" ? "Réel" : "Publication"); if (it.busy) pst.dataset.pdPct = it.name; meta.appendChild(pst);
       const dr = el("div","pd-dt"); if (it.reco) dr.appendChild(el("span","note pd-reco","Date conseillée")); const di = el("input"); di.type = "date"; di.value = it.date || ""; di.onchange = () => { it.date = di.value; PD.save(); }; const ti = el("input"); ti.type = "time"; ti.value = it.time || ""; ti.onchange = () => { it.time = ti.value; PD.save(); }; dr.append(di, ti); meta.appendChild(dr);
       const rm = btn("Retirer","sm", () => { items.splice(i, 1); draw(); }); meta.appendChild(rm);
-      const del = btn("Supprimer","sm rmb", async () => { if (!confirm("Supprimer « " + it.name + " » ? Le fichier est effacé du serveur, ses descriptions aussi.")) return; del.disabled = true;
-        try { if (it.url) await GC.api("POST","/api/g-prod/delete", { url: it.url }); const k = items.indexOf(it); if (k >= 0) items.splice(k, 1); toast("« " + it.name + " » supprimé."); draw(); } catch(e){ toast(e.message); del.disabled = false; } });
-      del.title = "Effacer le fichier du serveur (Retirer le sort seulement de la liste)"; meta.appendChild(del); top.appendChild(meta); c.appendChild(top);
+      const del = btn("Supprimer","sm rmb", async () => { del.disabled = true; try { if (await pdDelete(client, it)) draw(); else del.disabled = false; } catch(e){ toast(e.message); del.disabled = false; } });
+      del.title = "Effacer le fichier du serveur (Retirer le sort seulement de la liste)"; const bb = el("div","pd-bb"); rm.remove(); bb.append(rm, del); meta.appendChild(bb); top.appendChild(meta); const L = el("div","pd-l"), Rr = el("div","pd-r"); c.append(L, Rr); L.appendChild(top);
       const gb = btn(it.props ? "Autres propositions" : "Proposer des descriptions","sm lemon", async () => { if (!it.url){ toast("Attends la fin de l’envoi du fichier."); return; } gb.disabled = true; gb.textContent = "Claude regarde la vidéo…";
         try { const r = await GC.api("POST","/api/g-prod/describe", { client, url: it.url, file: it.name, kind: it.kind });
           if (r.queued){ it.wait = r.queued; PD.save(); draw(); pdPoll(); return; }
           it.props = r.propositions; if (!it.text && it.props[0]) it.text = it.props[0]; draw(); } catch(e){ toast(e.message); gb.disabled = false; gb.textContent = "Proposer des descriptions"; } });
       if (it.wait){ gb.disabled = true; gb.textContent = it.kind === "video" ? "Claude écoute la vidéo et écrit les descriptions (2 à 4 min)…" : "Claude regarde le visuel et écrit les descriptions (2 à 4 min)…"; }
-      c.appendChild(gb);
+      L.appendChild(gb);
       if (it.url && !it.props && !it.wait && !it.asked){ it.asked = true; setTimeout(() => gb.click(), 0); }   // dès que le fichier est envoyé, Claude s'en occupe sans qu'on lui explique
-      if (it.transcript){ const d = el("details","pd-tr"); d.appendChild(el("summary", null, "Ce que Claude a entendu")); d.appendChild(el("p", null, it.transcript)); c.appendChild(d); }
-      if (it.props) { const pp = el("div","pd-props"); it.props.forEach((p, k) => { const o = el("button","pd-prop" + (it.text === p ? " on" : ""), p); o.type = "button"; o.onclick = () => { it.text = p; draw(); }; pp.appendChild(o); }); c.appendChild(pp); }
-      const ta = el("textarea"); ta.rows = 5; ta.placeholder = "Description qui sera publiée"; ta.value = it.text || ""; ta.oninput = () => { it.text = ta.value; PD.save(); }; c.appendChild(ta);
+      if (it.transcript){ const d = el("details","pd-tr"); d.appendChild(el("summary", null, "Ce que Claude a entendu")); d.appendChild(el("p", null, it.transcript)); L.appendChild(d); }
+      if (it.props) { const pp = el("div","pd-props"); it.props.forEach((p, k) => { const o = el("button","pd-prop" + (it.text === p ? " on" : ""), p); o.type = "button"; o.onclick = () => { it.text = p; draw(); }; pp.appendChild(o); }); Rr.appendChild(pp); }
+      const ta = el("textarea"); ta.rows = 5; ta.placeholder = "Description qui sera publiée"; ta.value = it.text || ""; ta.oninput = () => { it.text = ta.value; PD.save(); }; Rr.appendChild(ta);
       body.appendChild(c); });
     const go = m0.querySelector(".pd-go"); go.disabled = !items.length || items.some(x => x.busy || !x.url); const verb = { draft: "Mettre en brouillon", review: "Envoyer en validation", publish: "Programmer" }[mode]; go.textContent = items.length ? verb + " (" + items.length + ")" : verb; };
   const slots = async () => { if (!client) return; const need = items.filter(x => !x.date); if (!need.length) return;
@@ -1691,7 +1693,7 @@ function prodDrop(clients, host, opts){ opts = opts || {};
   };
   if (host){ const m = el("div"); host.appendChild(m); build(m); } else openModal(build);
 }
-(function(){ const st = document.createElement("style"); st.textContent = ".pd-modal{max-width:880px}.pd-drop{display:flex;flex-direction:column;align-items:center;gap:6px;padding:26px;border:1.5px dashed rgba(198,255,51,.45);border-radius:16px;background:rgba(198,255,51,.03);cursor:pointer;text-align:center;transition:border-color .15s,background .15s}.pd-drop:hover,.pd-drop.on{border-color:#C6FF33;background:rgba(198,255,51,.07)}.pd-drop b{font-size:15px}.pd-drop span{font-size:12px;color:var(--muted)}"
+(function(){ const st = document.createElement("style"); st.textContent = ".modal.pd-modal{width:min(1320px,100%);max-width:none}.pd-bb{display:flex;gap:6px;flex-wrap:wrap}.pd-l,.pd-r{display:grid;gap:10px;align-content:start;min-width:0}.pd-l>.btn.lemon,.pd-l>button.lemon{justify-self:start;width:auto;padding-left:16px;padding-right:16px}@media(min-width:900px){.pd-it{grid-template-columns:300px minmax(0,1fr)!important;gap:20px!important}.pd-props{grid-template-columns:repeat(3,minmax(0,1fr))!important}}.dp-del{justify-self:start;margin-top:4px}.pd-drop{display:flex;flex-direction:column;align-items:center;gap:6px;padding:26px;border:1.5px dashed rgba(198,255,51,.45);border-radius:16px;background:rgba(198,255,51,.03);cursor:pointer;text-align:center;transition:border-color .15s,background .15s}.pd-drop:hover,.pd-drop.on{border-color:#C6FF33;background:rgba(198,255,51,.07)}.pd-drop b{font-size:15px}.pd-drop span{font-size:12px;color:var(--muted)}"
   + ".pd-body{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;margin:14px 0;min-width:0}.pd-it{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;min-width:0;padding:16px;border:1px solid var(--line-2);border-radius:16px;background:var(--card)}.pd-top{display:flex;gap:16px}.pd-th{width:90px;height:160px;object-fit:cover;border-radius:10px;background:#000;flex:none}"
   + ".pd-meta{display:flex;flex-direction:column;gap:6px;min-width:0;flex:1}.pd-meta b{overflow-wrap:anywhere;font-size:14px}.pd-meta>.btn,.pd-meta>button{align-self:flex-start;width:auto}.pd-dt{display:flex;gap:6px;flex-wrap:wrap}.pd-dt input{max-width:150px}.pd-it input,.pd-it textarea{width:100%;min-width:0;box-sizing:border-box}.pd-it textarea{background:var(--paper,#0d0d0c);color:var(--ink);border:1px solid var(--line-2);border-radius:12px;padding:12px 14px;font:inherit;font-size:14px;line-height:1.55;resize:vertical;min-height:150px}.pd-it textarea:focus{outline:none;border-color:#C6FF33}.pd-it>.btn.lemon,.pd-it>button.lemon{justify-self:start;width:auto;padding-left:16px;padding-right:16px}.pd-it input::placeholder{text-overflow:ellipsis}"
   + ".pd-props{display:grid;gap:6px}.pd-props{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}.pd-prop{text-align:left;white-space:pre-wrap;font:inherit;font-size:13px;line-height:1.45;padding:12px;border-radius:12px;border:1px solid var(--line-2);background:rgba(255,255,255,.02);color:var(--ink);cursor:pointer}.pd-prop:hover{border-color:rgba(198,255,51,.5)}.pd-prop.on{border-color:#C6FF33;background:rgba(198,255,51,.06)}"; document.head.appendChild(st); })();
@@ -1743,10 +1745,11 @@ function vDepot(root){
   const n = k => all.filter(([, it]) => k(it)).length;
   root.appendChild(el("p","note dp-sum", [plural(all.length, "fichier") + " en cours", n(it => it.props) ? plural(n(it => it.props), "prêt", "prêts") + " à relire" : "", n(it => it.busy || it.wait) ? n(it => it.busy || it.wait) + " chez Claude" : ""].filter(Boolean).join(" · ")));
   const g = el("div","dp-grid");
-  all.forEach(([c, it]) => { const t = el("button","dp-tile"); t.type = "button"; t.title = "Ouvrir le dépôt de " + c;
+  all.forEach(([c, it]) => { const t = el("div","dp-tile"); t.tabIndex = 0; t.setAttribute("role","button"); t.onkeydown = e => { if (e.key === "Enter" && e.target === t) launch(c); }; t.title = "Ouvrir le dépôt de " + c;
     const th = el("div","dp-th"); if (it.url){ const v = it.kind === "video" ? el("video") : el("img"); v.src = it.url + (it.kind === "video" ? "#t=1" : ""); if (it.kind === "video"){ v.muted = true; v.preload = "metadata"; } th.appendChild(v); }
     const [lab, cls] = st(it); th.appendChild(el("span","dp-st " + cls, lab)); t.appendChild(th);
-    const b = el("div","dp-b"); b.append(clientTag(c), el("div","dp-n", it.name.replace(/\.[a-z0-9]+$/i, "").replace(/_/g, " ")), el("div","note", it.date ? fmtD(it.date) + (it.time ? " à " + it.time : "") : "date à choisir")); t.appendChild(b);
+    const b = el("div","dp-b"); b.append(clientTag(c), el("div","dp-n", it.name.replace(/\.[a-z0-9]+$/i, "").replace(/_/g, " ")), el("div","note", it.date ? fmtD(it.date) + (it.time ? " à " + it.time : "") : "date à choisir"));
+    const del = btn("Supprimer","sm rmb dp-del", async e => { e.stopPropagation(); del.disabled = true; try { if (await pdDelete(c, it)) render(); else del.disabled = false; } catch(x){ toast(x.message); del.disabled = false; } }); b.appendChild(del); t.appendChild(b);
     t.onclick = () => launch(c); g.appendChild(t); });
   root.appendChild(g);
 }
