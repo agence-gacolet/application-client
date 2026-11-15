@@ -753,7 +753,9 @@ module.exports = function (app, { db, wrap, root }) {
         const nafs = naf ? naf.split(",") : null;
         const et = (e.matching_etablissements || []).find(x => x.etat_administratif === "A" && (!nafs || nafs.includes(x.activite_principale)) && (!deps.length || deps.some(d => String(x.code_postal || "").startsWith(d))) && (!cps.length || cps.includes(String(x.code_postal || "")))) || null;
         if (!et) continue;
-        const name = ((et.liste_enseignes || [])[0] || e.nom_raison_sociale || e.nom_complet || "").replace(/\s+/g, " ").trim(), key = nk(name);
+        if ((e.nombre_etablissements_ouverts || 1) > 5) continue; // les chaînes et grands groupes ne sont pas la cible
+        const ens = (et.liste_enseignes || []).find(x => x && !/code interne|^\W*\d+\W*$/i.test(x));
+        const name = (ens || e.nom_raison_sociale || e.nom_complet || "").replace(/\s+/g, " ").trim(), key = nk(name);
         if (!name || known.has(key) || seen.has(key)) continue; seen.add(key);
         const pp = (e.dirigeants || []).filter(d => d.type_dirigeant === "personne physique" && !/commissaire|suppl/i.test(d.qualite || ""));
         const dir = pp.find(d => /g[ée]rant|pr[ée]sident|directeur|exploitant/i.test(d.qualite || "")) || pp[0];
