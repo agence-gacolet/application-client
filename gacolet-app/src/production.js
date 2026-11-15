@@ -6,7 +6,9 @@ const Anthropic = require("@anthropic-ai/sdk");
 module.exports = function production({ app, auth, wrap, db, current, put, pubPlan, persistKey, macAuth }) {
   const norm = s => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\([^)]*\)/g, "").replace(/[^a-z0-9]+/g, " ").trim();
   const docsOf = async col => (await db.all("SELECT id, data FROM docs WHERE col = ? AND deleted = 0", [col])).map(r => { try { return Object.assign({ id: r.id }, JSON.parse(r.data || "{}")); } catch (e) { return null; } }).filter(Boolean);
-  const blogOf = name => { const p = pubPlan.find(([n]) => norm(n) === norm(name)) || pubPlan.find(([n]) => norm(name).includes(norm(n)) || norm(n).includes(norm(name))); return p && p[1] ? p[1] : ""; };
+  // Marques hors Publications (pas d'objectif mensuel) : l'agence et Gabriel
+  const EXTRA = [["Agence Gacolet", "6874994", 0, 0], ["Gabriel", "6875110", 0, 0]];
+  const blogOf = name => { const x = EXTRA.find(([n]) => norm(n) === norm(name)); if (x) return x[1]; const p = pubPlan.find(([n]) => norm(n) === norm(name)) || pubPlan.find(([n]) => norm(name).includes(norm(n)) || norm(n).includes(norm(name))); return p && p[1] ? p[1] : ""; };
   const mc = async (method, path, q, body) => {
     const tok = process.env.METRICOOL_USER_TOKEN; if (!tok) throw Object.assign(new Error("La clé Metricool n’est pas sur le serveur."), { status: 400 });
     const qs = new URLSearchParams(Object.assign({ userId: process.env.METRICOOL_USER_ID || "4634230" }, q));
