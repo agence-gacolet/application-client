@@ -87,7 +87,7 @@ const myName = () => (S.f && S.f.me.name) || "";
 const unread = () => S.f ? [...new Set(S.f.messages.map(m => m.ch))].reduce((n, k) => n + unreadIn(k), 0) : 0;
 
 /* ---------- Navigation ---------- */
-const VIEWS = [["accueil","Accueil"],["valider","À valider"],["tournages","Tournages"],["stats","Statistiques"],["meta","Meta"],["messagerie","Messagerie"],["visio","Visio"],["idees","Mes idées"],["prel","Prélèvements"]];
+const VIEWS = [["accueil","Accueil"],["valider","À valider"],["tournages","Tournages"],["stats","Statistiques"],["bilans","Bilans"],["meta","Meta"],["messagerie","Messagerie"],["visio","Visio"],["idees","Mes idées"],["prel","Prélèvements"]];
 const MOBILE = ["accueil","valider","messagerie","stats"];
 const ICONS = {
   accueil:'<path d="M4 11.2 12 4.8l8 6.4V20h-5.6v-5.2H9.6V20H4z"/>',
@@ -99,6 +99,7 @@ const ICONS = {
   meta:'<path d="M4 10v4l3 .4L15 19V5L7 9.6z"/><path d="M18.2 9.4a3.6 3.6 0 0 1 0 5.2"/>',
   plus:'<path d="M5 7h14M5 12h14M5 17h14"/>',
   idees:'<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>',
+  bilans:'<path d="M6 3.5h9l3.5 3.5v13.5H6z"/><path d="M14.5 3.5V7H18M9 17v-3M12 17v-6M15 17v-4"/>',
   tournages:'<rect x="3" y="7" width="13" height="11" rx="2"/><path d="m16 11 5-3v9l-5-3M6 4h7"/>'
 };
 const ico = k => { const s = document.createElementNS("http://www.w3.org/2000/svg","svg"); s.setAttribute("viewBox","0 0 24 24"); s.setAttribute("aria-hidden","true"); s.classList.add("ico"); s.innerHTML = ICONS[k] || ""; return s; };
@@ -641,7 +642,20 @@ function vPrel(root){
 }
 
 /* ---------- Rendu ---------- */
-const R = { accueil: vAccueil, valider: vValider, tournages: vTournages, stats: vStats, meta: vMeta, messagerie: vMessagerie, visio: vVisio, idees: vIdees, prel: vPrel };
+/* ---------- Bilans : le point du mois préparé par l’agence ---------- */
+function vBilans(root){
+  const list = (S.f && S.f.bilans) || [], ml = m => { const d = new Date(m + "-15"); const t = d.toLocaleDateString("fr-FR", { month: "long", year: "numeric" }); return t.charAt(0).toUpperCase() + t.slice(1); };
+  root.appendChild(head(["Vos", "bilans"], "Le point de chaque mois préparé par l’agence : ce qui a été fait, ce qui a marché, et la suite."));
+  if (!list.length){ root.appendChild(el("p","empty","Pas encore de bilan. Il arrive ici à la fin de chaque mois.")); return; }
+  const cur = list.find(b => b.m === S.biM) || list[0];
+  if (list.length > 1){ const bar = el("div","chips"); list.forEach(b => { const c = el("button","chip", ml(b.m)); c.type = "button"; c.setAttribute("aria-pressed", String(b.m === cur.m)); c.onclick = () => { S.biM = b.m; render(); }; bar.appendChild(c); }); root.appendChild(bar); }
+  const box = el("div","cb-deck"); root.appendChild(box);
+  S.biHtml = S.biHtml || {};
+  const show = () => { box.innerHTML = S.biHtml[cur.m]; const a = el("div","actions"); a.appendChild(btn("Imprimer ou PDF","", () => window.print())); box.appendChild(a); };
+  if (S.biHtml[cur.m]) show();
+  else { box.appendChild(el("p","muted","Chargement du bilan…")); api("/api/c/bilan/" + cur.m).then(r => { S.biHtml[cur.m] = r.html; if (S.view === "bilans") render(); }).catch(e => { box.textContent = e.message; }); }
+}
+const R = { bilans: vBilans, accueil: vAccueil, valider: vValider, tournages: vTournages, stats: vStats, meta: vMeta, messagerie: vMessagerie, visio: vVisio, idees: vIdees, prel: vPrel };
 function fromHash(){ const h = location.hash.replace("#",""); S.view = R[h] ? h : "accueil"; }
 function render(){
   if (!S.d || !S.f) return;

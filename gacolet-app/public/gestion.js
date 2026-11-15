@@ -671,8 +671,11 @@ function vBilans(root){
   fld("resumeTxt","Phrase","L’édition Côte d’Ivoire a porté la période.", 2);
   const acts = el("div","bi-acts");
   const send = async () => { try { const out = await GC.api("PUT","/api/g-bilan/" + cur, { m, extra: x }); r.saved = out.saved; BI.list = null; biLoadList(m); BI.todo = null; toast("Bilan enregistré."); render(); } catch(e){ toast(e.message); } };
-  acts.append(btn("Enregistrer","lemon", send), btn("Imprimer ou PDF","", () => window.print()));
-  if (sv.savedAt) acts.appendChild(el("span","muted bi-pubd","Enregistré le " + fmtFR(sv.savedAt.slice(0, 10)) + " par " + (sv.savedBy || "")));
+  let armed = false; const sendB = btn(sv.sent ? "Renvoyer au client" : "Envoyer au client","", async () => {
+    if (!armed){ armed = true; sendB.textContent = "Confirmer l’envoi"; sendB.classList.add("armed"); toast("Le bilan apparaîtra dans l’onglet Bilans de l’espace de " + r.data.client.name + "."); return; }
+    sendB.disabled = true; try { const out = await GC.api("PUT","/api/g-bilan/" + cur, { m, extra: x, send: true, html: deck.outerHTML }); r.saved = out.saved; BI.list = null; biLoadList(m); toast("Bilan envoyé dans l’espace du client."); render(); } catch(e){ toast(e.message); sendB.disabled = false; } });
+  acts.append(btn("Enregistrer","lemon", send), sendB, btn("Imprimer ou PDF","", () => window.print()));
+  if (sv.savedAt) acts.appendChild(el("span","muted bi-pubd","Enregistré le " + fmtFR(sv.savedAt.slice(0, 10)) + " par " + (sv.savedBy || "") + (sv.sent ? ", envoyé au client le " + fmtFR(sv.sent.at.slice(0, 10)) : "")));
   const col = el("div","bi-col"); col.append(acts, form); deck = bilanSlides(r.data, x); main.append(col, deck);
 }
 
@@ -2573,10 +2576,17 @@ function embedUrl(u){
   if ((m = u.match(/drive\.google\.com\/file\/d\/([\w-]+)/))) return "https://drive.google.com/file/d/" + m[1] + "/preview";
   return "";
 }
+/* Onglets de la Formation, et à qui s'adresse chaque vidéo (vide = tout le monde) */
+const FO_CATS = ["Commercial","Stratégie","Visuel","Vidéo","App","Publicité","Web"];
+function foCat(f){ if (FO_CATS.includes(f.cat)) return f.cat; const t = norm((f.topic || "") + " " + (f.title || ""));
+  return /commerc|vente|prospect|devis/.test(t) ? "Commercial" : /strateg|editorial|calendrier/.test(t) ? "Stratégie" : /graph|visuel|canva|print|charte|photo/.test(t) ? "Visuel"
+    : /montage|tournage|video|premiere|rush|derush|son\b|colo/.test(t) ? "Vidéo" : /meta|pub|campagne|ads/.test(t) ? "Publicité" : /site|web|seo|referenc|google/.test(t) ? "Web" : "App"; }
+const foFor = (f, p) => !(f.who || []).length || (f.who || []).includes(p);
 function editFormation(f){
-  openForm({ key:"fo", title: f.id ? f.title : "Nouvelle vidéo", intro: f.id ? "" : "Colle le lien d’une vidéo YouTube, Vimeo ou Google Drive.", values: Object.assign({aud: S.ui.foAud || "Équipe"}, f),
-    fields:[{k:"title",label:"Titre",req:"Donne un titre."},{k:"aud",label:"Pour",type:"select",options:["Équipe","Clients"],half:true},{k:"topic",label:"Thème",half:true,ph:"Ex. Montage, Metricool, Tournage"},
-      {k:"url",label:"Lien de la vidéo",ph:"https://",req:"Colle le lien de la vidéo."},{k:"duration",label:"Durée",half:true,ph:"Ex. 4 min"},{k:"order",label:"Ordre",type:"number",half:true},{k:"desc",label:"Ce qu’on y apprend",type:"textarea"}],
+  openForm({ key:"fo", title: f.id ? f.title : "Nouvelle vidéo", intro: f.id ? "" : "Colle le lien d’une vidéo YouTube, Vimeo ou Google Drive.", values: Object.assign({aud: S.ui.foAud || "Équipe", cat: S.ui.foCat || "App"}, f, { cat: f.id ? foCat(f) : (S.ui.foCat || "App") }),
+    fields:[{k:"title",label:"Titre",req:"Donne un titre."},{k:"cat",label:"Onglet",type:"select",options:FO_CATS,half:true},{k:"aud",label:"Pour",type:"select",options:["Équipe","Clients"],half:true},
+      {k:"who",label:"Qui doit la voir (aucun choisi : toute l’équipe)",type:"who"},{k:"topic",label:"Thème dans l’onglet",half:true,ph:"Ex. Montage, Metricool"},{k:"duration",label:"Durée",half:true,ph:"Ex. 4 min"},
+      {k:"url",label:"Lien de la vidéo",ph:"https://",req:"Colle le lien de la vidéo."},{k:"order",label:"Ordre",type:"number",half:true},{k:"desc",label:"Ce qu’on y apprend",type:"textarea"}],
     onDelete: f.id ? () => remove("formations", f.id) : null,
     onSave: out => save("formations", f.id || null, Object.assign(f.id ? strip(f) : {}, out)) });
 }
@@ -2597,21 +2607,27 @@ function openFormation(f){
   });
 }
 function vFormation(root){
-  const me = S.me || "Gabriel"; const aud = S.ui.foAud || "Équipe";
+  const me = S.me || "Gabriel"; const aud = S.ui.foAud || "Équipe", cat = FO_CATS.includes(S.ui.foCat) ? S.ui.foCat : FO_CATS[0];
+  const people = S.role === "owner" ? PEOPLE : [me], who = aud === "Équipe" ? (S.ui.foWho === "Tous" || people.includes(S.ui.foWho) ? S.ui.foWho : me) : "Tous";
   root.appendChild(head("Formation", aud === "Équipe" ? "Pour bien démarrer à l’agence" : "Les tutos à partager aux clients",
-    [segm([["Équipe","Équipe"],["Clients","Clients"]], aud, v => { S.ui.foAud = v; remember(); render(); }), addBtn("Ajouter une vidéo", () => editFormation({aud}))]));
-  const rows = S.d.formations.filter(f => (f.aud||"Équipe") === aud).sort((a,b) => (Number(a.order)||999) - (Number(b.order)||999) || (a.title||"").localeCompare(b.title||""));
-  if (!rows.length){ root.appendChild(el("p","empty", aud === "Équipe" ? "Aucune vidéo pour l’instant. Ajoute la première : outils, règles de nommage, tournage, montage." : "Aucun tuto client pour l’instant. Commence par « Valider une publication » et « Envoyer ses photos »." )); return; }
-  const topics = []; rows.forEach(f => { const t = f.topic || "Général"; if (!topics.includes(t)) topics.push(t); });
-  const seenN = rows.filter(f => (f.seenBy||[]).includes(me)).length;
-  if (aud === "Équipe") root.appendChild(el("p","status", seenN + " sur " + rows.length + " vues par toi."));
+    [segm([["Équipe","Équipe"],["Clients","Clients"]], aud, v => { S.ui.foAud = v; remember(); render(); }), addBtn("Ajouter une vidéo", () => editFormation({aud, cat}))]));
+  const base = S.d.formations.filter(f => (f.aud||"Équipe") === aud && (who === "Tous" || foFor(f, who)));
+  const fl = el("div","filters");
+  fl.appendChild(chipBar(FO_CATS.map(c => [c, c]), cat, v => { S.ui.foCat = v; remember(); render(); }, Object.fromEntries(FO_CATS.map(c => [c, base.filter(f => foCat(f) === c).length]))));
+  if (aud === "Équipe" && people.length > 1) fl.appendChild(chipBar(people.concat(["Tous"]).map(p => [p, p]), who, v => { S.ui.foWho = v; remember(); render(); }));
+  root.appendChild(fl);
+  const rows = base.filter(f => foCat(f) === cat).sort((a,b) => (Number(a.order)||999) - (Number(b.order)||999) || (a.title||"").localeCompare(b.title||""));
+  if (!rows.length){ root.appendChild(el("p","empty", "Aucune vidéo dans « " + cat + " »" + (who !== "Tous" && aud === "Équipe" ? " pour " + who : "") + " pour l’instant.")); return; }
+  const viewer = who === "Tous" ? me : who, seenN = rows.filter(f => (f.seenBy||[]).includes(viewer)).length;
+  if (aud === "Équipe") root.appendChild(el("p","status", seenN + " sur " + rows.length + " vues par " + (viewer === me ? "toi" : viewer) + "."));
+  const topics = []; rows.forEach(f => { const t = f.topic || ""; if (!topics.includes(t)) topics.push(t); });
   topics.forEach(tp => {
-    root.appendChild(el("h2","sec",tp));
+    if (topics.length > 1 || tp) root.appendChild(el("h2","sec", tp || "Général"));
     const g = el("div","fo-grid");
-    rows.filter(f => (f.topic || "Général") === tp).forEach(f => {
-      const c = el("button","fo-card"+((f.seenBy||[]).includes(me) ? " seen" : ""));
+    rows.filter(f => (f.topic || "") === tp).forEach(f => { const sn = (f.seenBy||[]).includes(viewer);
+      const c = el("button","fo-card"+(sn ? " seen" : ""));
       const th = el("span","fo-th"); th.appendChild(el("span","fo-play")); c.appendChild(th);
-      c.appendChild(el("b",null,f.title)); c.appendChild(el("span",null,[f.duration, (f.seenBy||[]).includes(me) ? "Vue" : ""].filter(Boolean).join(", ")));
+      c.appendChild(el("b",null,f.title)); c.appendChild(el("span",null,[f.duration, (f.who||[]).length ? (f.who||[]).join(", ") : "", sn ? "Vue" : ""].filter(Boolean).join(", ")));
       c.onclick = () => openFormation(f); g.appendChild(c);
     });
     root.appendChild(g);

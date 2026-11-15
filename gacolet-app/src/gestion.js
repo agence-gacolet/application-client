@@ -824,8 +824,12 @@ module.exports = function (app, { db, wrap, root }) {
     const vr = visioRoom(c.id), here = RTC.has(vr) ? [...new Set([...RTC.get(vr).values()].map(p => p.name))] : [];
     const bill = await current("billing", "c" + c.id), billing = bill ? { plan: bill.plan || null, docs: bill.docs || [] } : { plan: null, docs: [] };
     const shoots = (await docsLike("shoots", '"sentAt":"')).filter(s => s.sentAt && sameName(s.client, c.name)).map(shootForClient).sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
-    res.json({ visio: { room: vr, here }, me: { name: req.cname, prenom: req.cname.split(" ")[0], entreprise: req.cu.entreprise }, client: { name: c.name, id: c.id }, preview: req.cu.email === PREVIEW_MAIL, messages, idees, team, billing, shoots });
+    const bilans = (await db.all("SELECT data FROM docs WHERE col = '_bilans' AND deleted = 0 AND id LIKE ?", ["c" + c.id + "-%"])).map(r => { try { const d = JSON.parse(r.data || "{}"); return d.sent && Number(d.cid) === c.id ? { m: d.month, at: d.sent.at } : null; } catch (e) { return null; } }).filter(Boolean).sort((a, b) => b.m.localeCompare(a.m));
+    res.json({ bilans, visio: { room: vr, here }, me: { name: req.cname, prenom: req.cname.split(" ")[0], entreprise: req.cu.entreprise }, client: { name: c.name, id: c.id }, preview: req.cu.email === PREVIEW_MAIL, messages, idees, team, billing, shoots });
   }));
+  app.get("/api/c/bilan/:m", cauth, wrap(async (req, res) => { const m = String(req.params.m); if (!okMonth(m)) return res.status(400).json({ error: "Demande invalide." });
+    const d = await current("_bilans", bilanId(req.cl.id, m)); if (!d || !d.sent || Number(d.cid) !== req.cl.id) return res.status(404).json({ error: "Bilan introuvable." });
+    res.json({ m, at: d.sent.at, html: d.sent.html }); }));
   // ---------- Feuilles de tournage envoyées au client : il valide, demande des changements ou refuse, comme une publication ----------
   const normName = s => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   const sameName = (a, b) => !!normName(a) && normName(a) === normName(b);
@@ -892,7 +896,7 @@ module.exports = function (app, { db, wrap, root }) {
   app.get("/api/g-bilans", auth, ownerOnly, wrap(async (req, res) => {
     const m = String(req.query.m || ""); if (!okMonth(m)) return res.status(400).json({ error: "Demande invalide." });
     const rows = await db.all("SELECT id, data FROM docs WHERE col = '_bilans' AND deleted = 0 AND id LIKE ?", ["%-" + m]);
-    res.json({ bilans: rows.map(r => { let d = {}; try { d = JSON.parse(r.data || "{}"); } catch (e) {} return { cid: d.cid, savedAt: d.savedAt || "", savedBy: d.savedBy || "" }; }) });
+    res.json({ bilans: rows.map(r => { let d = {}; try { d = JSON.parse(r.data || "{}"); } catch (e) {} return { cid: d.cid, savedAt: d.savedAt || "", savedBy: d.savedBy || "", sentAt: (d.sent && d.sent.at) || "" }; }) });
   }));
   app.put("/api/g-bilan/:cid", auth, ownerOnly, wrap(async (req, res) => {
     const cid = Number(req.params.cid), b = req.body || {}, m = String(b.m || ""); if (!cid || !okMonth(m)) return res.status(400).json({ error: "Demande invalide." });
@@ -902,6 +906,11 @@ module.exports = function (app, { db, wrap, root }) {
     const KEYS = ["chiffres", "topLabel", "topNum", "topTxt", "prevu", "remarques", "budget", "okPhrase", "okList", "koPhrase", "koList", "decisions", "besoins", "resumeTitre", "resumeTxt", "strategie"];
     const extra = {}; KEYS.forEach(k => { extra[k] = s(b.extra && b.extra[k], 4000); });
     const doc = { cid, month: m, data, extra, savedAt: new Date().toISOString(), savedBy: req.user.name, };
+    // « Envoyer » : le bilan (les diapositives telles qu'affichées) part dans l'espace du client, onglet Bilans ; un nouvel envoi remplace le précédent
+    const prev = await current("_bilans", bilanId(cid, m)); if (prev && prev.sent) doc.sent = prev.sent;
+    if (b.send) { const html = String(b.html || "").slice(0, 800000).replace(/<script[\s\S]*?<\/script>/gi, "").replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "").replace(/javascript:/gi, "");
+      if (!/class="bs-deck"/.test(html)) return res.status(400).json({ error: "Bilan vide." });
+      doc.sent = { at: new Date().toISOString(), by: req.user.name, html }; }
     await put("_bilans", bilanId(cid, m), doc);
     res.json({ ok: true, saved: doc });
   }));
