@@ -1948,3 +1948,22 @@ html.tg-lock,html.tg-lock body{overflow:hidden}
 .form .row2:has(input[type=checkbox][id^="f-cf-sv"]){grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:center}
 .form .row2:has(input[type=checkbox][id^="f-cf-sv"]:not(:checked)) > label:last-child{visibility:hidden}
 @media (max-width:640px){.form .row2:has(input[type=checkbox][id^="f-cf-sv"]:not(:checked)) > label:last-child{display:none}.form .row2:has(input[type=checkbox][id^="f-cf-sv"]:not(:checked)){grid-template-columns:1fr}}
+
+/* Accueil sur téléphone : aéré, texte à taille normale, pas de « gros pâté » */
+@media (max-width:640px){
+  .welcome2{min-height:0;padding:28px 0 20px}
+  .w2-mug{width:40px;height:40px}
+  .w2-date{font-size:var(--fs-s)}
+  .w2-h{font-size:40px;line-height:1}
+  .w2-say{margin-top:14px;font-size:17px;line-height:1.45;font-weight:500;max-width:30ch}
+  .w2-lab{margin-top:28px;font-size:18px}
+  .w2-tiles{gap:10px;flex-wrap:nowrap}
+  .w2-tile{flex:1 1 0;padding:16px 12px 14px;border-radius:16px}
+  .w2-tile b{font-size:42px}
+  .w2-tile span{font-size:var(--fs-s);margin-top:6px}
+  .w2-tile i{font-size:var(--fs-xs)}
+  .cl-install{font-size:var(--fs-xs)}
+}
+.dr-list .n{margin-left:auto;position:static;min-width:22px;height:22px;line-height:22px;font-size:12px;padding:0 6px;border-radius:11px}
+.dr-list .lk-dot{margin-left:auto;font-size:12px;font-weight:600;color:var(--muted)}
+.dr-list .lb{min-width:0}

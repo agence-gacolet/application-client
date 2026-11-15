@@ -88,7 +88,7 @@ const unread = () => S.f ? [...new Set(S.f.messages.map(m => m.ch))].reduce((n, 
 
 /* ---------- Navigation ---------- */
 const VIEWS = [["accueil","Accueil"],["valider","À valider"],["tournages","Tournages"],["stats","Statistiques"],["bilans","Bilans"],["meta","Meta"],["messagerie","Messagerie"],["visio","Visio"],["idees","Mes idées"],["prel","Prélèvements"]];
-const MOBILE = ["accueil","valider","messagerie","stats"];
+const MOBILE = ["accueil","valider","tournages","messagerie"];
 const ICONS = {
   accueil:'<path d="M4 11.2 12 4.8l8 6.4V20h-5.6v-5.2H9.6V20H4z"/>',
   valider:'<rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8.5 12.3l2.4 2.4 4.6-4.9"/>',
@@ -111,9 +111,7 @@ function renderTabs(){
   const n = $("#tabs"); n.textContent = ""; n.appendChild(el("span","navlab","Mon espace")); VIEWS.forEach(v => n.appendChild(link2(v)));
   const m = $("#mtabs"); m.textContent = ""; VIEWS.filter(v => MOBILE.includes(v[0])).forEach(v => m.appendChild(link2(v)));
   const more = el("button","morebtn"); more.type = "button"; more.appendChild(ico("plus")); more.appendChild(el("span","lb","Plus")); if (!MOBILE.includes(S.view)) more.setAttribute("aria-current","page");
-  more.onclick = () => openModal(md => { md.classList.add("sheet"); const t = el("h3",null,"Menu"); t.id = "mtitle"; md.appendChild(t); const l = el("nav","morelist");
-    VIEWS.filter(v => !MOBILE.includes(v[0])).forEach(v => { const a = link2(v); a.onclick = () => closeModal(); l.appendChild(a); }); md.appendChild(l);
-    const o = el("div","actions"); o.appendChild(btn("Se déconnecter","sm", () => { closeModal(); $("#logout").click(); })); md.appendChild(o); });
+  more.onclick = () => openDrawer(link2, badge);
   m.appendChild(more);
   $("#mbar-title").textContent = (VIEWS.find(v => v[0] === S.view) || ["",""])[1];
   $("#acct-name").textContent = myName(); $("#acct-role").textContent = (S.f && S.f.client.name) || "";
@@ -127,18 +125,18 @@ function vAccueil(root){
   const prenom = (S.f && S.f.me.prenom) || "";
   const hello = hr < 5 ? "Bonne nuit" : hr < 12 ? "Bonjour" : hr < 18 ? "Bon après-midi" : "Bonsoir";
   const w = waiting(), u = unread();
-  let say = "Bienvenue dans l’espace " + ((S.f && S.f.client.name) || "de votre entreprise") + ".";
-  const sw = shootsWaiting(); if (sw) say += sw > 1 ? " " + sw + " feuilles de tournage attendent votre accord." : " Une feuille de tournage attend votre accord.";
-  if (w) say += w > 1 ? " " + w + " publications attendent votre accord." : " Une publication attend votre accord.";
-  else if (u) say += u > 1 ? " L’agence vous a écrit " + u + " messages." : " L’agence vous a écrit.";
-  else say += weekend ? " Tout est calé, bon week-end." : " Tout est à jour, l’agence s’occupe du reste.";
+  // Une seule phrase courte : ce qui attend le client, sinon « tout est à jour »
+  const sw = shootsWaiting();
+  const say = sw ? (sw > 1 ? sw + " feuilles de tournage attendent votre accord." : "Une feuille de tournage attend votre accord.")
+    : w ? (w > 1 ? w + " publications attendent votre accord." : "Une publication attend votre accord.")
+    : u ? (u > 1 ? "L’agence vous a écrit " + u + " messages." : "L’agence vous a écrit.")
+    : weekend ? "Tout est calé, bon week-end." : "Tout est à jour, l’agence s’occupe du reste.";
   const W = el("section","welcome2");
   const mark = el("div","w2-mug cl-mark"); mark.innerHTML = LOGO; mark.setAttribute("aria-hidden","true"); W.appendChild(mark);
   const dl = fmtDL(today()); W.appendChild(el("p","w2-date", dl.charAt(0).toUpperCase() + dl.slice(1)));
   const h1 = el("h1","w2-h"); h1.append(document.createTextNode(hello + " "), el("span", null, prenom)); W.appendChild(h1);
   W.appendChild(el("p","w2-say", say));
-  const ideas = (S.f && S.f.idees.length) || 0;
-  const tiles = [[w, w > 1 ? "publications à valider" : "publication à valider", "valider", "Tout est validé"], [u, u > 1 ? "nouveaux messages" : "nouveau message", "messagerie", "Rien de nouveau"], [ideas, ideas > 1 ? "idées partagées" : "idée partagée", "idees", "Partager une idée"]];
+  const tiles = [[w, w > 1 ? "publications à valider" : "publication à valider", "valider", "Tout est validé"], [u, u > 1 ? "nouveaux messages" : "nouveau message", "messagerie", "Rien de nouveau"]];
   W.appendChild(el("h2","w2-lab","En bref"));
   const s = el("div","w2-tiles");
   tiles.forEach(([n, l, v, z], i) => { const t = el("button","w2-tile" + (n ? "" : " zero")); t.type = "button"; t.style.animationDelay = (0.45 + i*0.08) + "s"; t.append(el("b",null,String(n)), el("span",null,l)); if (!n) t.appendChild(el("i",null,z)); t.onclick = () => go(v); s.appendChild(t); });
@@ -642,6 +640,24 @@ function vPrel(root){
 }
 
 /* ---------- Rendu ---------- */
+/* Menu « Plus » du téléphone : tiroir qui glisse depuis la gauche (profil, grandes rubriques, déconnexion), façon appli iPhone */
+function openDrawer(link2, badge){
+  if (document.querySelector(".dr-wrap")) return;
+  const me = (S.f && S.f.me) || {}, wrap = el("div","dr-wrap"), pan = el("aside","dr"); pan.setAttribute("role","dialog"); pan.setAttribute("aria-label","Menu"); wrap.appendChild(pan);
+  const close = () => { wrap.classList.remove("open"); setTimeout(() => wrap.remove(), 260); document.removeEventListener("keydown", esc); };
+  const esc = e => { if (e.key === "Escape") close(); }; document.addEventListener("keydown", esc); wrap.onclick = e => { if (e.target === wrap) close(); };
+  const top = el("div","dr-top"); top.appendChild(avatarEl(me.name || "Vous", 64)); pan.appendChild(top);
+  pan.appendChild(el("b","dr-name", me.name || "")); pan.appendChild(el("span","dr-sub", (S.f && S.f.client && S.f.client.name) || me.entreprise || ""));
+  const w = waiting(), u = unread(), st = el("div","dr-stats");
+  [[w, w > 1 ? "à valider" : "à valider"], [u, u > 1 ? "messages non lus" : "message non lu"]].forEach(([n, l]) => { const x = el("span"); x.append(el("b", null, String(n)), document.createTextNode(" " + l)); st.appendChild(x); }); pan.appendChild(st);
+  const nav = el("nav","dr-list"); VIEWS.filter(v => !MOBILE.includes(v[0])).forEach(v => { const a = link2(v); a.onclick = () => close(); nav.appendChild(a); }); pan.appendChild(nav);
+  const sec = el("nav","dr-sec"), out = el("button"); out.type = "button"; out.innerHTML = '<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M14 4.5H6.5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2H14M10 12h10M16.5 8.5 20 12l-3.5 3.5"/></svg>'; out.appendChild(el("span", null, "Se déconnecter")); out.onclick = () => { close(); $("#logout").click(); };
+  sec.appendChild(out); pan.appendChild(sec);
+  let x0 = null; pan.addEventListener("touchstart", e => { x0 = e.touches[0].clientX; }, { passive: true });
+  pan.addEventListener("touchmove", e => { if (x0 == null) return; pan.style.transform = "translateX(" + Math.min(0, e.touches[0].clientX - x0) + "px)"; }, { passive: true });
+  pan.addEventListener("touchend", e => { if (x0 == null) return; const dx = e.changedTouches[0].clientX - x0; pan.style.transform = ""; x0 = null; if (dx < -70) close(); });
+  document.body.appendChild(wrap); requestAnimationFrame(() => wrap.classList.add("open"));
+}
 /* ---------- Bilans : le point du mois préparé par l’agence ---------- */
 function vBilans(root){
   const list = (S.f && S.f.bilans) || [], ml = m => { const d = new Date(m + "-15"); const t = d.toLocaleDateString("fr-FR", { month: "long", year: "numeric" }); return t.charAt(0).toUpperCase() + t.slice(1); };
