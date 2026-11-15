@@ -28,23 +28,27 @@
   .tw:not(.ms-tw) tr.row td{grid-column:1 / -1}
   .tw:not(.ms-tw) tr.row td.ttl,.tw:not(.ms-tw) tr.row td.w{font-size:var(--fs-l);font-weight:600;line-height:1.3}
   /* Les autres cases : en ligne « étiquette … valeur », sans majuscules */
-  .tw:not(.ms-tw) tr.row td:not(:first-child):not(.ttl):not(.w)[data-label]{display:flex;justify-content:space-between;gap:12px;font-size:var(--fs-m);color:var(--ink)}
+  .tw.fi-tw tr.row td.hm[data-label]:not(:first-child),.tw:not(.ms-tw) tr.row td:not(:first-child):not(.ttl):not(.w):not(.hm)[data-label]{display:flex;justify-content:space-between;gap:12px;font-size:var(--fs-m);color:var(--ink)}
   .tw:not(.ms-tw) tr.row td:not(:first-child):not(.ttl):not(.w)[data-label]::before{display:inline;margin:0;font-size:var(--fs-m);font-weight:400;letter-spacing:0;text-transform:none;color:var(--muted);flex:none}
-  .tw:not(.ms-tw) tr.row td:empty,.tw:not(.ms-tw) tr.row td:has(> .note:empty){display:none!important}
+  .tw:not(.ms-tw):not(.fi-tw) tr.row td.hm,.tw:not(.ms-tw) tr.row td:empty,.tw:not(.ms-tw) tr.row td:has(> .note:empty){display:none!important}
   .tw:not(.ms-tw) tr.r1 td:first-child,.tw:not(.ms-tw) tr.r2 td:first-child,.tw:not(.ms-tw) tr.r3 td:first-child,.tw:not(.ms-tw) tr.pub td:first-child{box-shadow:none}
   .tw:not(.ms-tw) tr.r2,.tw:not(.ms-tw) tr.r3{background:var(--card)}
+
+  /* Première case d'une ligne sans case à cocher = titre de la ligne */
+  .tw:not(.ms-tw) tr.row:not(:has(> td:first-child input[type=checkbox])) > td:first-child{font-size:var(--fs-l);font-weight:600;margin-bottom:4px}
+  .tw:not(.ms-tw) tr.row:not(:has(> td:first-child input[type=checkbox])) > td:first-child::before{display:none!important}
 
   /* Lignes avec case à cocher (tâches…) : case ronde | titre + sous-titre | date */
   .tw:not(.ms-tw) tr.row:has(> td:first-child input[type=checkbox]){grid-template-columns:30px minmax(0,1fr) auto;padding:12px 14px 12px 12px;column-gap:10px}
   .tw:not(.ms-tw) tr.row:has(> td:first-child input[type=checkbox]) > td{grid-column:auto}
   .tw:not(.ms-tw) tr.row:has(> td:first-child input[type=checkbox]) > td:first-child{grid-column:1;grid-row:1 / span 2;align-self:center;padding:0}
   .tw:not(.ms-tw) tr.row:has(> td:first-child input[type=checkbox]) > td.ttl{grid-column:2;grid-row:1 / span 2;align-self:center}
-  .tw:not(.ms-tw) tr.row:has(> td:first-child input[type=checkbox]) > td[data-label="Date"]{grid-column:3;grid-row:1 / span 2;align-self:center;display:block;font-size:var(--fs-s);color:var(--muted);white-space:nowrap}
-  .tw:not(.ms-tw) tr.row:has(> td:first-child input[type=checkbox]) > td[data-label="Date"]::before{display:none}
+  .tw:not(.ms-tw) tr.row:has(> td:first-child input[type=checkbox]) > td[data-label="Date"]{grid-column:3;grid-row:1 / span 2;align-self:center;display:block!important;font-size:var(--fs-s);color:var(--muted);white-space:nowrap}
+  .tw:not(.ms-tw) tr.row:has(> td:first-child input[type=checkbox]) > td[data-label="Date"]::before{display:none!important}
   .tw:not(.ms-tw) tr.row:has(> td:first-child input[type=checkbox]) > td:not(:first-child):not(.ttl):not([data-label="Date"]){grid-column:2 / -1}
   .tw:not(.ms-tw) tr.row:has(> td:first-child input[type=checkbox]).r1 > td[data-label="Date"],
   .tw:not(.ms-tw) tr.row:has(> td:first-child input[type=checkbox]).r2 > td[data-label="Date"],
-  .tw:not(.ms-tw) tr.row:has(> td:first-child input[type=checkbox]).r3 > td[data-label="Date"]{color:#FF6B5E;font-weight:600}
+  .tw:not(.ms-tw) tr.row:has(> td:first-child input[type=checkbox]).r3 > td[data-label="Date"]{color:#FF6B5E!important;font-weight:600}
   .tw:not(.ms-tw) tr.row td .mo{margin-top:3px;font-size:var(--fs-s);font-weight:400;color:var(--muted)}
 
   /* Case à cocher ronde, façon Rappels */
@@ -66,7 +70,7 @@
   .ag-head .tools > .seg{grid-column:1 / -1;grid-row:1;display:grid;grid-template-columns:repeat(3,1fr);overflow:visible;flex-wrap:nowrap}
   .ag-head .tools > .seg button{width:100%}
   .ag-head .tools > .btn:not(.icon):not(.add):not(:nth-child(2)){display:none} /* « En tâches » et « PDF » : réservés à l'ordinateur */
-  .ag-f{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin:0 -16px;padding:0 16px 12px}
+  .ag-f{display:flex!important;flex-wrap:nowrap;gap:8px;overflow-x:auto;scrollbar-width:none;margin:0 -16px;padding:0 16px 12px}
   .ag-f::-webkit-scrollbar{display:none}
   .ag-f .fgroup{flex:none}
   .ag-f .flabel{display:none}
@@ -74,14 +78,35 @@
 
   /* Semaine : un jour par ligne au lieu de 7 colonnes coupées */
   .week{display:flex!important;flex-direction:column;gap:0;overflow:visible;min-width:0;border-radius:14px;background:var(--card);border:0}
-  .week .wcol{display:grid;grid-template-columns:52px minmax(0,1fr);gap:6px 10px;min-height:0;padding:12px 14px;border:0;border-bottom:.5px solid var(--line);background:none}
+  .week .wcol{display:grid;grid-template-columns:52px minmax(0,1fr);gap:6px 10px;min-height:0!important;align-content:start;grid-auto-flow:row dense;padding:12px 14px;border:0;border-bottom:.5px solid var(--line);background:none}
   .week .wcol:last-child{border-bottom:0}
-  .week .wcol .whead{grid-row:1 / span 20;display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:0;border:0;background:none;position:static}
+  .week .wcol .whead{grid-column:1;grid-row:1;display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:0;border:0;background:none;position:static}
   .week .wcol .whead b{font-size:var(--fs-2xl);line-height:1}
   .week .wcol .whead span{font-size:var(--fs-xs);color:var(--muted);text-transform:capitalize}
-  .week .wcol.today .whead b{color:var(--lemon)}
-  .week .wcol:not(:has(.ev))::after{content:"Rien de prévu";align-self:center;font-size:var(--fs-s);color:var(--faint)}
+  .week .wcol.today .whead b{color:var(--lemon);background:none;padding:0}
+  .week .wcol:not(:has(.ev))::after{content:"Rien de prévu";grid-column:2;grid-row:1;align-self:center;font-size:var(--fs-s);color:var(--faint)}
   .week .wcol .ev{grid-column:2;margin:0;width:100%;min-height:0;text-align:left}
+
+
+  /* Mois : grille sans cases, façon Calendrier d'Apple */
+  .dow{padding:10px 0 6px;font-size:var(--fs-2xs);color:var(--faint)}
+  .cal{background:none;border:0;border-radius:0;gap:0;overflow:visible}
+  .cal .day,.cal .day.we,.cal .day.out{background:none;min-height:52px;padding:6px 0 4px;gap:4px;border-top:.5px solid var(--line);border-radius:0}
+  .cal .day .num{width:30px;height:30px;display:grid;place-items:center;border-radius:50%;font-size:var(--fs-l);padding:0;outline:0!important}
+  .cal .day.sel .num{background:var(--ink);color:#111}
+  .cal .day.today .num{background:var(--lemon);color:var(--on-lemon)}
+  .cal .day.sel{background:none}
+  .cal .day .dots{gap:3px}
+  .cal .day .dots .dot{width:5px;height:5px}
+  .daypanel{margin-top:14px;padding:16px;border-radius:14px;background:var(--card)}
+  .daypanel h2{font-size:var(--fs-xl);margin:0 0 10px}
+
+
+  /* ---------- Messagerie : liste sans sélection bleue, titre comme les autres pages ---------- */
+  .wa-row[aria-pressed="true"]{background:none!important}
+  .wa-row[aria-pressed="true"] .wa-rtop small,.wa-row[aria-pressed="true"] .wa-rbot>span:first-child{color:var(--im-txt2,var(--muted))!important}
+  .wa-row:active{background:var(--hover)!important}
+  .wa-tl h1{font:400 clamp(34px,10vw,44px)/.95 var(--display);font-style:italic;text-transform:uppercase;letter-spacing:0}
 
   /* ---------- Fiches / formulaires ---------- */
   .modal{padding-top:10px}
