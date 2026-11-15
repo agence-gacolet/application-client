@@ -1410,8 +1410,8 @@ const RUSHES = () => S.d.rushes.filter(r => r.kind !== "reel");
 const rushTask = r => S.d.tasks.find(t => t.rushId === r.id) || null;
 const rushReady = r => r.status === "Monté" || !!(rushTask(r) || {}).done;
 const rushDone = r => r.status === "Posté";
-/* Nom commun des tâches de montage : « Montage <Client> · <Sujet> » (Agence Gacolet = « Agence ») */
-const montageTitle = (client, what) => "Montage " + (client === AGENCE || /^agence gacolet$/i.test(client || "") ? "Agence" : (client || "")) + " · " + String(what || "").replace(/^(réel|edit)\s*[:«]\s*/i, m => /edit/i.test(m) ? "Edit " : "").replace(/\s*»\s*$/, "").trim();
+/* Nom commun des tâches de montage : « Montage · <Sujet> » (le client est déjà dans sa colonne) */
+const montageTitle = (client, what) => "Montage · " + String(what || "").replace(/^(réel|edit)\s*[:«]\s*/i, m => /edit/i.test(m) ? "Edit " : "").replace(/\s*»\s*$/, "").trim();
 function rushToTask(r){ if (!writable()) return; openForm({ key:"rut", title: "Tâche de montage, " + r.client, intro: "Quand la tâche sera cochée, le réel passera dans Prêt à poster.", values: { who: "Matis", date: addDays(today(), 3), title: montageTitle(r.client, r.content) },
   fields:[{k:"who",label:"Qui",type:"select",options:OWNERS},{k:"date",label:"À rendre le",type:"date",half:true},{k:"postDate",label:"À poster le",type:"date",half:true},{k:"title",label:"À faire",req:"Écris ce qu’il faut faire."}],
   onSave: async out => { await save("tasks", null, { who: out.who, pole: "20", client: r.client, date: out.date, postDate: out.postDate || "", title: out.title, note: [r.shoot ? "Tournage : " + r.shoot : "", r.note || ""].filter(Boolean).join(". ") + (r.link ? (r.note ? " " : "") + "Rushs : " + r.link : ""), done: false, rushId: r.id });
