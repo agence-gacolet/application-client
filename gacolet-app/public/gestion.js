@@ -412,6 +412,7 @@ function coCat(c){
   const f = (S.d.clients || []).find(x => norm(x.name) === norm(c.company)); const sv = f ? svOf(f) : {};
   if (["perf","perfplus","gestion","sur"].some(k => k in sv)) return "Abonnement";
   if ("meta" in sv) return "Meta";
+  if (["print","site","ponctuel"].some(k => k in sv)) return "Prestation unique";
   return "";
 }
 function editCommercial(c){
@@ -491,9 +492,9 @@ function editKeydate(k){
     onSave: out => { const cl = out.clientsTxt.split(",").map(s => s.trim()).filter(Boolean); delete out.clientsTxt; return save("keydates", k.id || null, Object.assign(k.id ? strip(k) : {}, out, {clients:cl, forWhom:cl.join(", ")})); } });
 }
 /* Services vendus : les quatre packs, plus « Sur mesure » pour les clients d'avant les packs. Les anciennes fiches sont relues ainsi : publicité Meta (code 50) = Pack Meta, tout autre ancien service = Sur mesure. */
-const SERVICES = [["perf","Pack Performance","Performance"],["perfplus","Pack Performance +","Performance +"],["gestion","Pack Gestion","Gestion"],["meta","Pack Meta","Meta"],["sur","Sur mesure","Sur mesure"]];
+const SERVICES = [["perf","Pack Performance","Performance"],["perfplus","Pack Performance +","Performance +"],["gestion","Pack Gestion","Gestion"],["meta","Pack Meta","Meta"],["sur","Sur mesure","Sur mesure"],["print","Graphisme et print","Print"],["site","Site et référencement","Site"],["ponctuel","Prestation ponctuelle","Ponctuel"]];
 const SV_KEYS = SERVICES.map(x => x[0]);
-const svOf = c => { const o = {}; Object.entries(c.services || {}).forEach(([k, v]) => { const n = SV_KEYS.includes(k) ? k : k === "50" ? "meta" : "sur"; if (!(n in o) || (v && (!o[n] || v < o[n]))) o[n] = v || o[n] || ""; }); return o; };
+const svOf = c => { const o = {}; Object.entries(c.services || {}).forEach(([k, v]) => { const n = SV_KEYS.includes(k) ? k : k === "50" ? "meta" : k === "30" ? "print" : k === "60" ? "site" : "sur"; if (!(n in o) || (v && (!o[n] || v < o[n]))) o[n] = v || o[n] || ""; }); return o; };
 /* Ce que chaque pack remplit tout seul dans la fiche (Formule, Publications / mois, Tournage, Réseaux), d'après les Offres */
 const PACK_FILL = {
   perf:     { formula:"Pack Performance (999 € HT / mois)", perMonth:"8 (2 par semaine)", shoot:"1 visite, 4 vidéos / mois", networks:"Facebook, Instagram" },
@@ -502,7 +503,7 @@ const PACK_FILL = {
   meta:     { formula:"Pack Meta (450 € HT / mois au plus)", perMonth:"", shoot:"Tournage des publicités", networks:"Publicité Facebook et Instagram" },
   sur:      { formula:"Sur mesure", perMonth:"", shoot:"", networks:"" } };
 function packFill(keys){
-  const on = SV_KEYS.filter(k => keys.includes(k)); if (!on.length) return null;
+  const on = SV_KEYS.filter(k => keys.includes(k) && PACK_FILL[k]); if (!on.length) return null;
   const main = PACK_FILL[on.find(k => k !== "meta" && k !== "sur") || on.find(k => k !== "sur") || "sur"];
   return { formula: on.map(k => PACK_FILL[k].formula).join(" + "), perMonth: main.perMonth, shoot: main.shoot, networks: main.networks };
 }
@@ -1450,6 +1451,37 @@ function vStrategie(root){
   + ".sx-sec{border:1px solid var(--line-2);border-radius:14px;margin:10px 0;padding:0 16px;background:var(--card)}.sx-sec summary{cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:14px 0;font-weight:700;list-style:none}.sx-sec summary::-webkit-details-marker{display:none}.sx-sec[open] summary{border-bottom:1px solid var(--line-2);margin-bottom:10px}"
   + ".sx-md{padding-bottom:12px;font-size:14px;line-height:1.55}.sx-md p{margin:6px 0}.sx-md ul,.sx-md ol{margin:6px 0;padding-left:20px}.sx-md li{margin:3px 0}.sx-md .tw{margin:10px 0}.sx-md th{text-align:left}.sx-md td,.sx-md th{vertical-align:top;font-size:13px}.sx-pts{margin:6px 0 10px;padding-left:18px;font-size:14px}.sx-pts li{margin:4px 0}"; document.head.appendChild(st); })();
 
+/* Récap d'un client dans Publications : ce qui est posté, programmé, en erreur sur Metricool, et ce que le client a validé ou refusé dans son espace */
+function pubRecap(r, mk, ok){
+  openModal(m => {
+    m.classList.add("pr-modal");
+    const t = el("h3", null, r.client + ", " + monthLabel(mk)); t.id = "mtitle"; m.appendChild(t);
+    const items = (r.items || []).slice().sort((a, b) => (a.d || "").localeCompare(b.d || "")), decs = r.decisions || [];
+    const n = (f) => items.filter(f).length, refused = decs.filter(d => d.status === "no"), mods = decs.filter(d => d.status === "mod");
+    const k = el("div","pr-kpis"); [[n(x => x.st === "done"), "postées"], [n(x => x.st === "sched"), "programmées"], [refused.length, "refusées"], [mods.length, "à modifier"]].concat(n(x => x.st === "err") ? [[n(x => x.st === "err"), "en erreur"]] : [])
+      .forEach(([v, l]) => { const c = el("div","pr-kpi"); c.append(el("b", null, String(v)), el("span", null, l)); k.appendChild(c); }); m.appendChild(k);
+    m.appendChild(el("p","muted", "Prévu au mois : " + r.stat + " statique" + (r.stat > 1 ? "s" : "") + " et " + r.video + " vidéo" + (r.video > 1 ? "s" : "") + " Paul Audio. Posté : " + (r.statDone || 0) + " et " + (r.vidDone || 0) + "."));
+    if (decs.length){ m.appendChild(el("h4","pr-h","Retours du client dans son espace"));
+      const ul = el("ul","pr-list"); decs.slice().sort((a, b) => (a.date || "").localeCompare(b.date || "")).forEach(d => { const li = el("li");
+        li.append(el("span","pill " + (d.status === "ok" ? "ok" : d.status === "mod" ? "l2" : d.status === "no" ? "l3" : "l1"), { ok: "Validée", mod: "À modifier", no: "Refusée", wait: "À valider" }[d.status] || d.status));
+        const tx = el("div"); tx.append(el("b", null, d.title || "Publication"), el("div","note", (d.date ? fmtFR(d.date.slice(0, 10)) : "") + (d.by ? ", " + d.by : "") + (d.note ? " : " + d.note : ""))); li.appendChild(tx); ul.appendChild(li); });
+      m.appendChild(ul); }
+    m.appendChild(el("h4","pr-h","Sur Metricool"));
+    if (!ok) m.appendChild(el("p","empty","Metricool n’a pas répondu."));
+    else if (r.err) m.appendChild(el("p","empty", r.err));
+    else if (!items.length) m.appendChild(el("p","empty","Rien de posté ni de programmé ce mois-ci."));
+    else { const ul = el("ul","pr-list"); items.forEach(x => { const li = el("li");
+        li.append(el("span","pill " + (x.st === "done" ? "ok" : x.st === "err" ? "l3" : "l1"), x.st === "done" ? "Postée" : x.st === "err" ? "Erreur" : "Programmée"));
+        const tx = el("div"); tx.append(el("b", null, (x.vid ? "Vidéo" : "Statique") + (x.d ? ", " + fmtFR(x.d.slice(0, 10)) + " à " + x.d.slice(11, 16).replace(":", " h ") : "")), el("div","note", x.text || "(sans texte)")); li.appendChild(tx);
+        if (x.url){ const a = el("a","pr-lnk","Voir"); a.href = x.url; a.target = "_blank"; a.rel = "noopener"; li.appendChild(a); }
+        ul.appendChild(li); }); m.appendChild(ul); }
+    const act = el("div","actions");
+    if (r.blogId){ const a = el("a","btn solid","Ouvrir son Metricool"); a.href = "https://app.metricool.com/planner?blogId=" + encodeURIComponent(r.blogId) + "&userId=4634230"; a.target = "_blank"; a.rel = "noopener"; act.appendChild(a); }
+    act.appendChild(btn("Fermer","", closeModal)); m.appendChild(act);
+  });
+}
+(function(){ const st = document.createElement("style"); st.textContent = ".pr-modal{max-width:640px}.pr-kpis{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}.pr-kpi{flex:1;min-width:90px;background:var(--card-2,rgba(255,255,255,.04));border:1px solid var(--line-2);border-radius:12px;padding:10px 12px}.pr-kpi b{display:block;font-size:22px}.pr-kpi span{font-size:12px;color:var(--muted,#9a9a94)}"
+  + ".pr-h{margin:16px 0 6px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#9a9a94)}.pr-list{list-style:none;margin:0;padding:0;display:grid;gap:8px;max-height:44vh;overflow:auto}.pr-list li{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line-2)}.pr-list li > div{flex:1;min-width:0}.pr-list .note{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pr-lnk{font-size:13px;color:#C6FF33;white-space:nowrap}"; document.head.appendChild(st); })();
 /* Publications : chaque client face à ce qui est prévu au mois (statiques et vidéos Paul Audio), lu en direct dans Metricool */
 let pubAt = {}; function loadPubs(mk, force){ if (!force && Date.now() - (pubAt[mk] || 0) < 3 * 60000) return; pubAt[mk] = Date.now();
   GC.api("GET", "/api/g-pubs?month=" + mk + (force ? "&fresh=1" : "")).then(r => { S.pubs = Object.assign({}, S.pubs, { [mk]: r }); renderSoon(); }).catch(() => {}); }
@@ -1466,7 +1498,7 @@ function vPublications(root){
     const b = el("b", null, (R.ok ? done : "—") + " / " + plan); b.style.color = !R.ok ? "" : done >= plan ? "var(--ok, #9BD85C)" : ""; c.appendChild(b);
     if (R.ok && sched) c.appendChild(el("div","note", "+ " + sched + " programmée" + (sched > 1 ? "s" : ""))); return c; };
   const {w, tb} = table(["Client","Statiques postés","Vidéos Paul Audio postées","Reste à poster","Prochaine"]);
-  rows.forEach(r => { const tr = el("tr","row"); td(tr, clientTag(r.client),"nw");
+  rows.forEach(r => { const tr = el("tr","row"); tr.style.cursor = "pointer"; tr.title = "Voir le récap du mois"; tr.onclick = () => pubRecap(r, mk, R.ok); td(tr, clientTag(r.client),"nw");
     td(tr, cell(r.statDone || 0, r.statSched || 0, r.stat),"nw"); td(tr, cell(r.vidDone || 0, r.vidSched || 0, r.video),"nw");
     const left = Math.max(0, r.stat - (r.statDone || 0)) + Math.max(0, r.video - (r.vidDone || 0)), unplanned = Math.max(0, r.stat - (r.statDone || 0) - (r.statSched || 0)) + Math.max(0, r.video - (r.vidDone || 0) - (r.vidSched || 0));
     const lc = el("div"); if (!R.ok) lc.textContent = "—"; else if (!left) lc.appendChild(el("span","pill ok","Complet")); else { lc.appendChild(el("span","pill " + (unplanned ? "l3" : "l1"), left + " à poster")); if (unplanned) lc.appendChild(el("div","note", unplanned + " pas encore programmée" + (unplanned > 1 ? "s" : ""))); }

@@ -1012,7 +1012,7 @@ module.exports = function (app, { db, wrap, root }) {
   // La com de Gabriel : réels et stories Instagram publiés chaque jour, lus dans Metricool (marque GABRIEL)
   let comCache = null;
   // Publications des clients réseaux, lues en direct dans Metricool (planificateur) : statiques et vidéos Paul Audio du mois, publiées et programmées
-  const PUB_PLAN = [["AR Climatisation", "6347688", 0, 4], ["Bonobo", "6377343", 6, 2], ["Delta Sud Formation", "6072162", 4, 4], ["Flora Design", "6845665", 0, 2],
+  const PUB_PLAN = [["AR Climatisation", "6347688", 0, 4], ["Bonobo", "6377343", 6, 2], ["Delta Sud Formation", "6072162", 4, 4], ["Flora Design", "6845665", 0, 4],
     ["France Étanchéité", "6077200", 4, 4], ["Gaufrement Bon", "6000998", 4, 4], ["La Vie La Construction", "6000767", 8, 4], ["Le Petit Mas", "7628911", 0, 4],
     ["Locamex", "6000991", 8, 4], ["Meyer-Pic", "6636223", 4, 4], ["Only Clean", "7446043", 4, 4], ["Paillotte Bassamoise", "6245450", 8, 4], ["Sport Défense", "6225588", 4, 4], ["Insolent", "", 0, 4]];
   const pubCache = new Map();
@@ -1022,7 +1022,7 @@ module.exports = function (app, { db, wrap, root }) {
     const token = process.env.METRICOOL_USER_TOKEN; if (!token) return res.json({ ok: false, reason: "no-token", month: mk, plan });
     const hit = pubCache.get(mk); if (hit && Date.now() - hit.at < 3 * 60000 && !req.query.fresh) return res.json(hit.data);
     const [y, m] = mk.split("-").map(Number), last = new Date(y, m, 0).getDate(), userId = process.env.METRICOOL_USER_ID || "4634230", today = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Paris" });
-    const one = async c => { const out = Object.assign({}, c, { statDone: 0, statSched: 0, vidDone: 0, vidSched: 0, next: "", err: "" }); if (!c.blogId) { out.err = "pas de marque Metricool"; return out; }
+    const one = async c => { const out = Object.assign({}, c, { statDone: 0, statSched: 0, vidDone: 0, vidSched: 0, next: "", err: "", items: [] }); if (!c.blogId) { out.err = "pas de marque Metricool"; return out; }
       try { const q = new URLSearchParams({ blogId: c.blogId, userId, start: mk + "-01T00:00:00", end: mk + "-" + String(last).padStart(2, "0") + "T23:59:59", timezone: "Europe/Paris" });
         const r = await fetch("https://app.metricool.com/api/v2/scheduler/posts?" + q, { headers: { "X-Mc-Auth": token, Accept: "application/json" } }); if (!r.ok) { out.err = "Metricool " + r.status; return out; }
         const j = await r.json(), arr = Array.isArray(j) ? j : Array.isArray(j.data) ? j.data : [];
@@ -1037,10 +1037,19 @@ module.exports = function (app, { db, wrap, root }) {
           // Étiquette Metricool « Paul Audio » (ou « PA ») : si le client en utilise, seules les vidéos étiquetées comptent comme vidéos Paul Audio
           if (vid && tagged && !isPA(p)) return;
           if (vid) done ? out.vidDone++ : out.vidSched++; else done ? out.statDone++ : out.statSched++;
+          // Détail pour la fiche récap du client (Publications) : date, type, état Metricool, début du texte, lien publié
+          out.items.push({ d: (p.publicationDate && p.publicationDate.dateTime) || "", vid, st: done ? "done" : /ERROR|FAIL/i.test(prov.status || "") ? "err" : "sched", net: prov.network || main,
+            text: String(p.text || "").replace(/\s+/g, " ").trim().slice(0, 140), url: prov.publicUrl || prov.link || "", img: (Array.isArray(p.media) ? p.media : []).find(u => /\.(jpe?g|png|webp)(\?|$)/i.test(u)) || "" });
           if (!done && d >= today && (!out.next || d < out.next)) out.next = d; });
       } catch (e) { out.err = "Metricool injoignable"; }
       return out; };
-    const rows = await Promise.all(plan.map(one)); const data = { ok: true, at: Date.now(), month: mk, rows }; pubCache.set(mk, { at: Date.now(), data }); res.json(data);
+    const rows = await Promise.all(plan.map(one));
+    // Décisions du client dans son espace (validée, modification demandée, refusée), dernière par publication
+    for (const r of rows) { try { const c = r.blogId ? await db.one("SELECT id FROM clients WHERE metricool_blog_id = ?", [r.blogId]) : null; if (!c) continue;
+      const ds = await db.all("SELECT d.post_id, d.post_title, d.post_date, d.status, d.note, d.created_at, u.prenom FROM decisions d LEFT JOIN users u ON u.id = d.user_id WHERE d.client_id = ? AND d.post_date LIKE ? ORDER BY d.id", [c.id, mk + "%"]);
+      const last = {}; ds.forEach(d => { last[d.post_id] = { title: d.post_title || "", date: String(d.post_date || "").trim(), status: d.status, note: d.note || "", by: d.prenom || "", at: d.created_at || "" }; }); r.decisions = Object.values(last);
+    } catch (e) {} }
+    const data = { ok: true, at: Date.now(), month: mk, rows }; pubCache.set(mk, { at: Date.now(), data }); res.json(data);
   }));
   app.get("/api/g-com", auth, wrap(async (req, res) => {
     if (req.user.role !== "owner") return res.status(403).json({ error: "Réservé aux personnes qui ont l’accès complet." });
