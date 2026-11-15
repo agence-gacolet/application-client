@@ -150,6 +150,7 @@ module.exports = function (app, { db, wrap, root }) {
     if (col === "messages" && String(d.ch || "").startsWith("cdm:")) return String(d.ch).split("|")[1] === u.name;
     if (u.role === "owner") return true;
     if (col === "tasks") return d.who === u.name;
+    if (col === "commercial") return (d.owner || "Gabriel") === u.name; // chaque commercial ne voit que ses lignes
     return true;
   }
   // before : document actuel (ou null), after : document voulu (ou null pour une suppression), keys : champs modifiés
@@ -167,6 +168,9 @@ module.exports = function (app, { db, wrap, root }) {
     if (!canWriteCol(u, col)) return "Tes accès ne permettent pas de modifier cette partie.";
     if (col === "tasks") {
       if ((before && before.who !== u.name) || (after && after.who !== u.name)) return "Tu ne peux gérer que tes propres tâches.";
+    }
+    if (col === "commercial") {
+      if ((before && (before.owner || "Gabriel") !== u.name) || (after && (after.owner || "Gabriel") !== u.name)) return "Tu ne peux gérer que tes propres prospects.";
     }
     if (col === "formations") {
       if (!before || !after || !keys || keys.some(k => k !== "seenBy")) return "Les formations se modifient avec l’accès complet.";
@@ -767,7 +771,32 @@ module.exports = function (app, { db, wrap, root }) {
     const team = (await db.all("SELECT name, role, info FROM gusers WHERE disabled = 0 ORDER BY created_at")).map(r => { const i = infoOf(r); return { name: r.name, role: r.role, avatar: i.avatar || "", poste: i.poste || "" }; });
     const vr = visioRoom(c.id), here = RTC.has(vr) ? [...new Set([...RTC.get(vr).values()].map(p => p.name))] : [];
     const bill = await current("billing", "c" + c.id), billing = bill ? { plan: bill.plan || null, docs: bill.docs || [] } : { plan: null, docs: [] };
-    res.json({ visio: { room: vr, here }, me: { name: req.cname, prenom: req.cname.split(" ")[0], entreprise: req.cu.entreprise }, client: { name: c.name, id: c.id }, preview: req.cu.email === PREVIEW_MAIL, messages, idees, team, billing });
+    const shoots = (await docsLike("shoots", '"sentAt":"')).filter(s => s.sentAt && sameName(s.client, c.name)).map(shootForClient).sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+    res.json({ visio: { room: vr, here }, me: { name: req.cname, prenom: req.cname.split(" ")[0], entreprise: req.cu.entreprise }, client: { name: c.name, id: c.id }, preview: req.cu.email === PREVIEW_MAIL, messages, idees, team, billing, shoots });
+  }));
+  // ---------- Feuilles de tournage envoyées au client : il valide, demande des changements ou refuse, comme une publication ----------
+  const normName = s => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const sameName = (a, b) => !!normName(a) && normName(a) === normName(b);
+  const shootForClient = s => {
+    const it = v => ({ kind: v.kind, title: v.title || "", line: v.line || "", links: v.kind === "photo" ? "" : (v.links || ""), files: v.kind === "photo" ? [] : cleanFiles(v.files) });
+    return { id: s.id, date: s.date || "", time: s.time || "", duration: s.duration || "", place: s.place || "", onCamera: s.onCamera || "", num: s.num || "",
+      videos: (s.videos || []).map(it), photos: (s.photos || []).map(it), broll: s.broll || "", rules: s.rules || "",
+      sentAt: s.sentAt, status: ["ok", "mod", "no"].includes(s.clientStatus) ? s.clientStatus : "wait", note: s.clientNote || "", decidedBy: s.clientBy || "", decidedAt: s.clientAt || "" };
+  };
+  app.post("/api/c/shoot", cauth, wrap(async (req, res) => {
+    if (req.cu.email === PREVIEW_MAIL) return res.status(403).json({ error: "Aperçu en lecture seule." });
+    const b = req.body || {}, id = String(b.id || ""), status = String(b.status || ""), note = String(b.note || "").trim().slice(0, 4000);
+    if (!okId(id) || !["ok", "mod", "no"].includes(status)) return res.status(400).json({ error: "Demande invalide." });
+    if (status !== "ok" && !note) return res.status(400).json({ error: "Expliquez ce qu’il faut changer." });
+    const cur = await current("shoots", id);
+    if (!cur || !cur.sentAt || !sameName(cur.client, req.cl.name)) return res.status(404).json({ error: "Feuille introuvable." });
+    const at = new Date().toISOString();
+    await put("shoots", id, Object.assign({}, cur, { clientStatus: status, clientNote: status === "ok" ? "" : note, clientBy: req.cname, clientAt: at, updatedAt: at, updatedBy: req.cname }));
+    const when = cur.date ? " du " + cur.date.split("-").reverse().join("/") : "";
+    const text = (status === "ok" ? "Feuille de tournage" + when + " validée." : status === "mod" ? "Changements demandés sur la feuille de tournage" + when + " :\n" + note : "Feuille de tournage" + when + " refusée :\n" + note);
+    const msg = { ch: cgOf(req.cl), text, who: req.cname, ext: 1, at };
+    await put("messages", newId(), msg); pushMsg(msg, req.cl).catch(() => {});
+    res.json({ ok: true });
   }));
   // ---------- Notifications push de l’équipe : le message s’affiche en entier, comme sur WhatsApp ----------
   const PUSH = require("./push")(db);
