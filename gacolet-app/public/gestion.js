@@ -1042,8 +1042,8 @@ function vTaches(root){
   const counts = Object.fromEntries(OWNERS.map(p => [p, openTasks().filter(t => t.who === p).length])); counts["Tous"] = openTasks().length; counts["Terminées"] = S.d.tasks.filter(t => t.done).length;
   root.appendChild(head("Tâches", "Une tâche, une seule personne. Une tâche cochée part dans les archives.", [addBtn("Ajouter une tâche", () => editTask({}))]));
   const f = el("div","filters"); f.appendChild(chipBar(OWNERS.concat(["Tous","Terminées"]).map(p => [p, p === "Terminées" ? "Archives" : p]), who, v => { S.ui.tWho = v; remember(); render(); }, counts));
-  const tri = S.ui.tSort === "date" ? "date" : "pole";
-  if (who !== "Terminées") f.appendChild(segm([["pole","Par catégorie"],["date","Par date"]], tri, v => { S.ui.tSort = v; remember(); render(); }));
+  const tri = ["date","client"].includes(S.ui.tSort) ? S.ui.tSort : "pole";
+  if (who !== "Terminées") f.appendChild(segm([["pole","Par catégorie"],["client","Par client"],["date","Par date"]], tri, v => { S.ui.tSort = v; remember(); render(); }));
   root.appendChild(f);
   if (who === "Terminées"){
     const done = S.d.tasks.filter(t => t.done).sort((a,b) => (b.doneAt||"").localeCompare(a.doneAt||""));
@@ -1055,8 +1055,11 @@ function vTaches(root){
   const {w, tb} = table(["Fait","~Client","À faire","Date","~Retard","~Note"].concat(who === "Tous" ? ["Qui"] : []));
   const cols = who === "Tous" ? 7 : 6;
   const byDate = (a,b) => { const da = isISO(a.date) ? a.date : "9999", db = isISO(b.date) ? b.date : "9999"; return da.localeCompare(db) || (a.createdAt||a.updatedAt||"").localeCompare(b.createdAt||b.updatedAt||""); };
+  // Par catégorie : dans chaque catégorie, les tâches sont rangées par client puis par date ; par client : un bandeau par client
+  const byClient = (a,b) => (a.client || "~").localeCompare(b.client || "~", "fr") || byDate(a, b);
   const groups = tri === "date" ? [["", null, list.slice().sort(byDate)]]
-    : POLES.map(([code, label]) => [code, label, list.filter(t => poleOf(t) === code).sort((a,b) => (a.done - b.done) || (b.createdAt||b.updatedAt||"").localeCompare(a.createdAt||a.updatedAt||""))]);
+    : tri === "client" ? [...new Set(list.map(t => t.client || ""))].sort((a,b) => (a || "~").localeCompare(b || "~", "fr")).map(c => [c, (c || "Sans client").toUpperCase(), list.filter(t => (t.client || "") === c).sort(byDate)])
+    : POLES.map(([code, label]) => [code, label, list.filter(t => poleOf(t) === code).sort(byClient)]);
   groups.forEach(([code, label, rows]) => {
     if (!rows.length) return;
     if (label) band(tb, label, rows.length, cols);
