@@ -1,0 +1,89 @@
+/* Gacolet : version téléphone retravaillée (15/11/2026).
+   Chargée après gestion.css, ne s'applique qu'aux écrans de 640 px et moins.
+   Principes : listes groupées façon iOS (une carte par section, lignes séparées par un filet),
+   pas d'étiquettes en majuscules dans les cartes, en-têtes compacts, filtres sur une ligne. */
+@media (max-width:640px){
+
+  /* ---------- En-têtes de page ---------- */
+  .head{gap:14px;padding:14px 0 12px;border-bottom:0}
+  .head h1{font-size:clamp(34px,10vw,44px);line-height:.95}
+  .head .sub{font-size:var(--fs-s);color:var(--muted);margin-top:6px;max-width:30ch}
+
+  /* ---------- Listes (tableaux) : sections groupées ---------- */
+  .tw:not(.ms-tw) tbody{gap:0}
+  .tw:not(.ms-tw) tr.band{margin:22px 0 8px}
+  .tw:not(.ms-tw) tr.band:first-child{margin-top:4px}
+  .tw:not(.ms-tw) tr.band td{box-shadow:none;padding:0 4px;font-size:var(--fs-l);letter-spacing:.6px;color:var(--muted)}
+  .tw:not(.ms-tw) tr.band td span{font-size:var(--fs-2xs);margin-left:8px}
+
+  .tw:not(.ms-tw) tr.row{
+    display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:4px 12px;
+    padding:13px 16px;border:0;border-radius:0;background:var(--card);
+    border-bottom:.5px solid var(--line)}
+  .tw:not(.ms-tw) tr.row:first-child,
+  .tw:not(.ms-tw) tr.band + tr.row{border-top-left-radius:14px;border-top-right-radius:14px}
+  .tw:not(.ms-tw) tr.row:last-child,
+  .tw:not(.ms-tw) tr.row:has(+ tr.band){border-bottom-left-radius:14px;border-bottom-right-radius:14px;border-bottom:0}
+  .tw:not(.ms-tw) tr.row:active{background:var(--hover)}
+  .tw:not(.ms-tw) tr.row td{grid-column:1 / -1}
+  .tw:not(.ms-tw) tr.row td.ttl,.tw:not(.ms-tw) tr.row td.w{font-size:var(--fs-l);font-weight:600;line-height:1.3}
+  /* Les autres cases : en ligne « étiquette … valeur », sans majuscules */
+  .tw:not(.ms-tw) tr.row td:not(:first-child):not(.ttl):not(.w)[data-label]{display:flex;justify-content:space-between;gap:12px;font-size:var(--fs-m);color:var(--ink)}
+  .tw:not(.ms-tw) tr.row td:not(:first-child):not(.ttl):not(.w)[data-label]::before{display:inline;margin:0;font-size:var(--fs-m);font-weight:400;letter-spacing:0;text-transform:none;color:var(--muted);flex:none}
+  .tw:not(.ms-tw) tr.row td:empty,.tw:not(.ms-tw) tr.row td:has(> .note:empty){display:none!important}
+  .tw:not(.ms-tw) tr.r1 td:first-child,.tw:not(.ms-tw) tr.r2 td:first-child,.tw:not(.ms-tw) tr.r3 td:first-child,.tw:not(.ms-tw) tr.pub td:first-child{box-shadow:none}
+  .tw:not(.ms-tw) tr.r2,.tw:not(.ms-tw) tr.r3{background:var(--card)}
+
+  /* Lignes avec case à cocher (tâches…) : case ronde | titre + sous-titre | date */
+  .tw:not(.ms-tw) tr.row:has(> td:first-child input[type=checkbox]){grid-template-columns:30px minmax(0,1fr) auto;padding:12px 14px 12px 12px;column-gap:10px}
+  .tw:not(.ms-tw) tr.row:has(> td:first-child input[type=checkbox]) > td{grid-column:auto}
+  .tw:not(.ms-tw) tr.row:has(> td:first-child input[type=checkbox]) > td:first-child{grid-column:1;grid-row:1 / span 2;align-self:center;padding:0}
+  .tw:not(.ms-tw) tr.row:has(> td:first-child input[type=checkbox]) > td.ttl{grid-column:2;grid-row:1 / span 2;align-self:center}
+  .tw:not(.ms-tw) tr.row:has(> td:first-child input[type=checkbox]) > td[data-label="Date"]{grid-column:3;grid-row:1 / span 2;align-self:center;display:block;font-size:var(--fs-s);color:var(--muted);white-space:nowrap}
+  .tw:not(.ms-tw) tr.row:has(> td:first-child input[type=checkbox]) > td[data-label="Date"]::before{display:none}
+  .tw:not(.ms-tw) tr.row:has(> td:first-child input[type=checkbox]) > td:not(:first-child):not(.ttl):not([data-label="Date"]){grid-column:2 / -1}
+  .tw:not(.ms-tw) tr.row:has(> td:first-child input[type=checkbox]).r1 > td[data-label="Date"],
+  .tw:not(.ms-tw) tr.row:has(> td:first-child input[type=checkbox]).r2 > td[data-label="Date"],
+  .tw:not(.ms-tw) tr.row:has(> td:first-child input[type=checkbox]).r3 > td[data-label="Date"]{color:#FF6B5E;font-weight:600}
+  .tw:not(.ms-tw) tr.row td .mo{margin-top:3px;font-size:var(--fs-s);font-weight:400;color:var(--muted)}
+
+  /* Case à cocher ronde, façon Rappels */
+  .tw:not(.ms-tw) input.ck,.tw:not(.ms-tw) tr.row td:first-child input[type=checkbox]{
+    -webkit-appearance:none;appearance:none;width:24px;height:24px;margin:0;border-radius:50%;
+    border:1.5px solid #5A5A57;background:transparent;display:grid;place-content:center;cursor:pointer}
+  .tw:not(.ms-tw) input.ck:checked,.tw:not(.ms-tw) tr.row td:first-child input[type=checkbox]:checked{background:var(--lemon);border-color:var(--lemon)}
+  .tw:not(.ms-tw) input.ck:checked::after,.tw:not(.ms-tw) tr.row td:first-child input[type=checkbox]:checked::after{
+    content:"";width:10px;height:6px;border:2px solid #1D1D1B;border-top:0;border-right:0;transform:translateY(-1px) rotate(-45deg)}
+
+  /* ---------- Pastilles de personnes / onglets de tri ---------- */
+  .chip{min-height:34px;padding:0 14px;border-radius:999px}
+  .seg{border-radius:10px;padding:2px}
+  .seg button{min-height:32px;border-radius:8px;font-size:var(--fs-s)}
+
+  /* ---------- Agenda ---------- */
+  .ag-head .tools{display:grid;grid-template-columns:40px auto 40px minmax(0,1fr);gap:8px;align-items:center}
+  .ag-head .tools > .btn.icon{width:40px;padding:0;justify-content:center}
+  .ag-head .tools > .seg{grid-column:1 / -1;grid-row:1;display:grid;grid-template-columns:repeat(3,1fr);overflow:visible;flex-wrap:nowrap}
+  .ag-head .tools > .seg button{width:100%}
+  .ag-head .tools > .btn:not(.icon):not(.add):not(:nth-child(2)){display:none} /* « En tâches » et « PDF » : réservés à l'ordinateur */
+  .ag-f{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin:0 -16px;padding:0 16px 12px}
+  .ag-f::-webkit-scrollbar{display:none}
+  .ag-f .fgroup{flex:none}
+  .ag-f .flabel{display:none}
+  .ag-f select.pick{width:auto;min-height:34px;padding:0 30px 0 14px;border-radius:999px;font-size:var(--fs-s)}
+
+  /* Semaine : un jour par ligne au lieu de 7 colonnes coupées */
+  .week{display:flex!important;flex-direction:column;gap:0;overflow:visible;min-width:0;border-radius:14px;background:var(--card);border:0}
+  .week .wcol{display:grid;grid-template-columns:52px minmax(0,1fr);gap:6px 10px;min-height:0;padding:12px 14px;border:0;border-bottom:.5px solid var(--line);background:none}
+  .week .wcol:last-child{border-bottom:0}
+  .week .wcol .whead{grid-row:1 / span 20;display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:0;border:0;background:none;position:static}
+  .week .wcol .whead b{font-size:var(--fs-2xl);line-height:1}
+  .week .wcol .whead span{font-size:var(--fs-xs);color:var(--muted);text-transform:capitalize}
+  .week .wcol.today .whead b{color:var(--lemon)}
+  .week .wcol:not(:has(.ev))::after{content:"Rien de prévu";align-self:center;font-size:var(--fs-s);color:var(--faint)}
+  .week .wcol .ev{grid-column:2;margin:0;width:100%;min-height:0;text-align:left}
+
+  /* ---------- Fiches / formulaires ---------- */
+  .modal{padding-top:10px}
+  .modal::before{content:"";display:block;width:36px;height:5px;margin:0 auto 14px;border-radius:3px;background:#48484A}
+}
