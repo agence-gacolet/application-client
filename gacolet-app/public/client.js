@@ -668,8 +668,8 @@ function render(){
 }
 window.addEventListener("hashchange", () => { fromHash(); S.modOpen = null; render(); window.scrollTo(0,0); });
 
-async function loadFeed(){ const f = await api("/api/c/feed"); const before = S.f ? JSON.stringify([S.f.messages.map(m => m.id + m.at), S.f.idees.map(i => i.id + (i.seen || []).length), (S.f.visio || {}).here, (S.f.shoots || []).map(s => s.id + s.status + s.sentAt)]) : ""; S.f = f;
-  const after = JSON.stringify([f.messages.map(m => m.id + m.at), f.idees.map(i => i.id + (i.seen || []).length), (f.visio || {}).here, (f.shoots || []).map(s => s.id + s.status + s.sentAt)]);
+async function loadFeed(){ const f = await api("/api/c/feed"); const before = S.f ? JSON.stringify([S.f.messages.map(m => m.id + m.at), S.f.idees.map(i => i.id + (i.seen || []).length), (S.f.visio || {}).here, (S.f.shoots || []).map(s => s.id + s.status + s.sentAt), (S.f.bilans || []).map(b => b.m + b.at)]) : ""; S.f = f; if (f.bilans) (f.bilans || []).forEach(b => { if (S.biHtml && S.biAt && S.biAt[b.m] !== b.at) delete S.biHtml[b.m]; (S.biAt = S.biAt || {})[b.m] = b.at; });
+  const after = JSON.stringify([f.messages.map(m => m.id + m.at), f.idees.map(i => i.id + (i.seen || []).length), (f.visio || {}).here, (f.shoots || []).map(s => s.id + s.status + s.sentAt), (f.bilans || []).map(b => b.m + b.at)]);
   const typing = document.activeElement && /^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName) && S.view !== "messagerie";
   if (before !== after && !typing) render(); }
 async function load(){
