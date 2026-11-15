@@ -15,7 +15,7 @@
 <meta name="apple-mobile-web-app-title" content="Gacolet">
 <link rel="preload" href="/fonts/inter.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/bebas-neue.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/gestion.css?v=25">
+<link rel="stylesheet" href="/gestion.css?v=27">
 </head>
 <body>
 <style>
@@ -39,6 +39,7 @@
 <div class="shell" id="shell" hidden>
   <aside class="side">
     <a class="brand" href="#accueil" aria-label="Agence Gacolet, accueil"><svg viewBox="140 158 561 281" aria-hidden="true"><path transform="matrix(1,0,0,-1,700.5803,436.46803)" d="M0 0-147.532-1.615-193.477 45.57-273.888 22.275-261.335 93.466-366.182 35.258-183.556 179.076Z"/><path transform="matrix(1,0,0,-1,232.1747,348.0155)" d="M0 0V0L-91.997-90.068 179.263 118.781 271.552 107.27 190.836 189.479 31.32 30.024"/></svg></a>
+    <button class="srch" type="button" id="srch" aria-label="Rechercher partout (Cmd+K)"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg><span>Rechercher</span><kbd>⌘K</kbd></button>
     <nav class="nav" id="tabs" aria-label="Modules"></nav>
     <div class="side-foot">
       <div class="acct" id="acct" hidden><b id="acct-name"></b><span id="acct-role"></span></div>
@@ -51,6 +52,7 @@
   <header class="mbar">
     <svg class="brand-sm" viewBox="140 158 561 281" aria-hidden="true"><path transform="matrix(1,0,0,-1,700.5803,436.46803)" d="M0 0-147.532-1.615-193.477 45.57-273.888 22.275-261.335 93.466-366.182 35.258-183.556 179.076Z"/><path transform="matrix(1,0,0,-1,232.1747,348.0155)" d="M0 0V0L-91.997-90.068 179.263 118.781 271.552 107.27 190.836 189.479 31.32 30.024"/></svg>
     <span class="mbar-title" id="mbar-title"></span>
+    <button class="mbar-srch" type="button" id="msrch" aria-label="Rechercher"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg></button>
     
     <button class="mbar-me" type="button" id="me-name" aria-label="Changer de personne"></button>
   </header>
@@ -81,7 +83,7 @@
   const shell = document.getElementById("shell"), login = document.getElementById("login");
   function boot() {
     login.hidden = true; shell.hidden = false;
-    const s = document.createElement("script"); s.src = "/gestion.js?v=21"; document.body.appendChild(s);
+    const s = document.createElement("script"); s.src = "/gestion.js?v=23"; document.body.appendChild(s);
   }
   window.addEventListener("gc-logout", () => location.reload());
   document.getElementById("logout").onclick = () => GC.logout();

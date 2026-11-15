@@ -40,7 +40,7 @@ const ROLE_VIEWS = {
 };
 const HIDDEN = ["finance","chalet","focus"]; // pages supprimées le 14/11/2026 (Matis)
 const canSee = k => HIDDEN.includes(k) ? false : !S.role || S.role === "owner" || (Array.isArray(S.views) ? S.views : ["accueil","parametres"].concat(ROLE_VIEWS[S.role] || [])).includes(k);
-const COLLS = ["events","tasks","commercial","campaigns","rushes","publications","clients","cevents","keydates","posts","edtodo","meta","messages","formations","msheets","idees","pilotage","ca","finance","strategies","shoots"];
+const COLLS = ["events","tasks","commercial","campaigns","rushes","publications","clients","cevents","keydates","posts","edtodo","meta","messages","formations","msheets","idees","pilotage","ca","finance","strategies","shoots","vrooms"];
 const DUO = ["Matis","Gabriel"];
 
 /* ---------- Outils ---------- */
@@ -537,6 +537,71 @@ function netLinks(c, big){
     a.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + NET_ICO[k] + '</svg>'; box.appendChild(a); });
   return box;
 }
+/* ---------- Bilan mensuel : l'appli calcule, l'agence relit et complète, puis publie dans l'espace du client ---------- */
+const BI = { list: null, m: "", data: {}, loading: {}, todo: null };
+const biPrev = () => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); };
+const biLabel = m => { const [y, mo] = m.split("-"); return MONTHS[Number(mo) - 1] + " " + y; };
+function biLoadTodo(){ BI.todo = 0; GC.api("GET","/api/g-bilans?m=" + biPrev()).then(r => { const done = new Set((r.bilans || []).filter(b => b.savedAt).map(b => b.cid)); BI.todo = (S.cgroups || []).filter(g => !done.has(g.id)).length; renderSoon(); }).catch(() => {}); }
+function biLoadList(m){ BI.m = m; BI.list = null; GC.api("GET","/api/g-bilans?m=" + m).then(r => { BI.list = r.bilans || []; renderSoon(); }).catch(e => { BI.list = []; toast(e.message); }); }
+function biLoad(cid, m){ const k = cid + "|" + m; if (BI.loading[k]) return; BI.loading[k] = 1; GC.api("GET","/api/g-bilan/" + cid + "?m=" + m).then(r => { BI.data[k] = r; }).catch(e => { BI.data[k] = { error: e.message }; }).finally(() => { delete BI.loading[k]; renderSoon(); }); }
+/* La page du bilan : la même mise en page que celle que voit le client */
+function bilanPage(d, x){
+  x = x || {}; const p = el("article","bi-page");
+  const hd = el("header","bi-hd"); hd.append(el("span","bi-kick","Bilan du mois"), el("h2", null, biLabel(d.month)), el("p","bi-cl", d.client.name)); p.appendChild(hd);
+  const kpis = el("div","bi-kpis"); const kpi = (n, l, sub) => { const k = el("div","bi-kpi"); k.append(el("b", null, n == null || n === "" ? "—" : String(n)), el("span", null, l)); if (sub) k.appendChild(el("small", null, sub)); kpis.appendChild(k); };
+  if (d.client.modules.includes("com")) kpi(d.posts.count, d.posts.count > 1 ? "publications" : "publication", Object.entries(d.posts.nets).map(([k, v]) => k + " " + v).join(" · "));
+  if (d.meta) kpi(d.meta.total, d.meta.total > 1 ? "demandes reçues" : "demande reçue", d.meta.qualified + " qualifiée" + (d.meta.qualified > 1 ? "s" : "") + (d.meta.goal ? " sur " + d.meta.goal + " visées" : ""));
+  if (x.appels != null) kpi(x.appels, "appels reçus", "via la fiche Google");
+  if (x.avis != null) kpi(x.avis, x.avis > 1 ? "nouveaux avis" : "nouvel avis", x.note ? "note Google " + x.note : "");
+  if (d.shoots.count) kpi(d.shoots.videos, d.shoots.videos > 1 ? "vidéos tournées" : "vidéo tournée", d.shoots.count > 1 ? d.shoots.count + " visites" : "1 visite");
+  p.appendChild(kpis);
+  if (d.meta && d.meta.goal){ const pc = Math.min(100, Math.round(100 * d.meta.qualified / d.meta.goal)); const g = el("section","bi-sec"); g.appendChild(el("h3", null, "Objectif de contacts"));
+    const bar = el("div","bi-bar"); const f = el("span"); f.style.width = pc + "%"; bar.appendChild(f); g.append(bar, el("p","bi-note", d.meta.qualified + " contacts qualifiés sur " + d.meta.goal + " visés, soit " + pc + " % de l’objectif." + (d.meta.def ? " Contact qualifié : " + d.meta.def : "")));
+    const wk = el("div","bi-weeks"); const mx = Math.max(1, ...d.meta.byWeek); d.meta.byWeek.forEach((v, i) => { const c = el("div","bi-wk"); const b = el("i"); b.style.height = Math.round(100 * v / mx) + "%"; c.append(el("span","bi-wv", String(v)), b, el("small", null, "S" + (i + 1))); wk.appendChild(c); }); g.appendChild(wk); p.appendChild(g); }
+  if (d.client.modules.includes("com")){ const g = el("section","bi-sec"); g.appendChild(el("h3", null, "Ce qui a été publié"));
+    if (d.posts.error) g.appendChild(el("p","bi-note", d.posts.error));
+    else if (!d.posts.list.length) g.appendChild(el("p","bi-note","Aucune publication ce mois-ci."));
+    else { const ul = el("ul","bi-posts"); d.posts.list.forEach(it => { const li = el("li"); li.append(el("span","bi-pd", fmtD(it.date)), el("span","bi-pt", it.title), el("span","bi-pn", it.type + (it.net ? " · " + it.net : ""))); ul.appendChild(li); }); g.appendChild(ul); }
+    if (d.validations.ok || d.validations.mod) g.appendChild(el("p","bi-note", "Validées par le client : " + d.validations.ok + (d.validations.mod ? ", modifications demandées : " + d.validations.mod : "") + "."));
+    p.appendChild(g); }
+  if (x.mot){ const g = el("section","bi-sec"); g.append(el("h3", null, "Le mot de l’agence"), el("p","bi-txt", x.mot)); p.appendChild(g); }
+  if (x.next){ const g = el("section","bi-sec"); g.append(el("h3", null, "Le mois prochain"), el("p","bi-txt", x.next)); p.appendChild(g); }
+  p.appendChild(el("p","bi-src", "Période : du 1er au dernier jour de " + biLabel(d.month) + ". Sources : planning Metricool (publications), validations dans l’espace client, contacts saisis par l’agence (demandes Meta), feuilles de tournage ; avis et appels relevés par l’agence sur la fiche Google."));
+  return p;
+}
+function vBilans(root){
+  const months = []; { const d = new Date(); d.setDate(1); for (let i = 0; i < 7; i++){ months.push(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0")); d.setMonth(d.getMonth() - 1); } }
+  const m = months.includes(S.ui.biM) ? S.ui.biM : biPrev();
+  if (BI.m !== m || !BI.list) { if (BI.m !== m) biLoadList(m); }
+  const f = el("div","filters ag-f"); const g = el("div","fgroup"); const lb = el("label","flabel","Mois"); lb.htmlFor = "bi-m"; const sel = el("select","pick"); sel.id = "bi-m";
+  months.forEach(x => { const o = el("option", null, biLabel(x)); o.value = x; sel.appendChild(o); }); sel.value = m; sel.onchange = () => { S.ui.biM = sel.value; remember(); render(); }; g.append(lb, sel); f.appendChild(g); root.appendChild(f);
+  const cls = (S.cgroups || []).slice().sort((a, b) => a.name.localeCompare(b.name, "fr"));
+  if (!cls.length){ root.appendChild(el("p","empty","Aucun client relié à un espace client pour l’instant : le bilan se calcule à partir de son planning Metricool et de ses contacts Meta.")); return; }
+  const st = cid => { const b = (BI.list || []).find(x => x.cid === cid); return !b ? "todo" : "saved"; };
+  const cur = cls.some(c => c.id === S.ui.biC) ? S.ui.biC : cls[0].id;
+  const wrap = el("div","bi-wrap"); const side = el("div","bi-side");
+  cls.forEach(c => { const s = BI.list ? st(c.id) : ""; const b = el("button","bi-ci" + (c.id === cur ? " on" : "")); b.type = "button";
+    b.append(el("b", null, c.name), el("span","pill" + (s === "saved" ? " ok" : ""), s === "saved" ? "Prêt" : s ? "À préparer" : "…"));
+    b.onclick = () => { S.ui.biC = c.id; remember(); render(); }; side.appendChild(b); });
+  const main = el("div","bi-main"); wrap.append(side, main); root.appendChild(wrap);
+  const k = cur + "|" + m, r = BI.data[k];
+  if (!r){ biLoad(cur, m); main.appendChild(el("div","sk sk-page")); return; }
+  if (r.error){ main.appendChild(el("p","empty", r.error)); return; }
+  const sv = r.saved || {}, x = Object.assign({}, sv.extra || {});
+  const form = el("div","bi-form");
+  const fld = (key, label, ph, type) => { const l = el("label", null, label); const i = type === "area" ? el("textarea") : el("input"); if (type === "area") i.rows = 3; else i.type = "text"; i.placeholder = ph; i.value = x[key] == null ? "" : x[key]; i.oninput = () => { x[key] = i.value; prev.replaceWith(prev = bilanPage(r.data, norm2(x))); }; l.appendChild(i); return l; };
+  const norm2 = o => ({ avis: o.avis === "" || o.avis == null ? null : Number(o.avis), note: o.note || "", appels: o.appels === "" || o.appels == null ? null : Number(o.appels), mot: o.mot || "", next: o.next || "" });
+  const r1 = el("div","row2"); r1.append(fld("avis","Nouveaux avis Google","Ex. 4"), fld("note","Note Google","Ex. 4,8")); form.appendChild(r1);
+  const r2 = el("div","row2"); r2.append(fld("appels","Appels via la fiche Google","Ex. 12")); form.appendChild(r2);
+  form.append(fld("mot","Le mot de l’agence","Ce qui a marché, ce qu’on retient du mois","area"), fld("next","Le mois prochain","Ce qu’on prévoit : tournage, campagne, temps fort","area"));
+  const acts = el("div","bi-acts");
+  const send = async () => { try { const out = await GC.api("PUT","/api/g-bilan/" + cur, { m, extra: x }); r.saved = out.saved; BI.list = null; biLoadList(m); BI.todo = null; toast("Bilan enregistré."); render(); } catch(e){ toast(e.message); } };
+  acts.append(btn("Enregistrer","lemon", send), btn("Imprimer ou PDF","", () => window.print()));
+  if (sv.savedAt) acts.appendChild(el("span","muted bi-pubd","Enregistré le " + fmtFR(sv.savedAt.slice(0, 10)) + " par " + (sv.savedBy || "")));
+  let prev = bilanPage(r.data, norm2(x));
+  const col = el("div","bi-col"); col.append(form, acts); main.append(col, prev);
+}
+
 /* Offres de l'agence, d'après la plaquette v12 du 03/11/2026 ; le Pack Meta (campagnes seules, hors pack) n'y figure pas : conditions tirées de agence.md (campagnes Meta). */
 const OFFRES = [
   { k:"perf", name:"Pack Performance", price:"999 €", per:"HT par mois", tag:"L’offre principale", sub:"dont 450 € payés au résultat",
@@ -575,9 +640,10 @@ function vOffres(root){
   root.appendChild(el("p","status","Source : plaquette des offres v12 du 03/11/2026 ; Pack Meta d’après les règles de l’agence (agence.md). Acompte de 30 % sur les prestations à l’unité ; déplacement compris jusqu’à 10 km, puis +15 € à +40 € jusqu’à 50 km."));
 }
 function vFiches(root){
-  const fiTab = S.ui.fiTab === "offres" ? "offres" : "clients";
-  root.appendChild(head("Tableau clients", fiTab === "offres" ? "Les offres de l’agence et ce que chaque pack comprend. Prix hors taxes." : "Réservé à " + fullNames() + " : depuis quand, quels services, la formule et ce qu’il faut penser.", [segm([["clients","Clients"],["offres","Offres"]], fiTab, v => { S.ui.fiTab = v; remember(); render(); }), fiTab === "clients" ? addBtn("Nouveau client", () => editClient({})) : null]));
+  const fiTab = ["offres","bilans"].includes(S.ui.fiTab) ? S.ui.fiTab : "clients";
+  root.appendChild(head("Tableau clients", fiTab === "bilans" ? "Le bilan du mois de chaque client, calculé par l’appli, pour faire le point avec lui. Interne : le client ne le voit pas dans son espace." : fiTab === "offres" ? "Les offres de l’agence et ce que chaque pack comprend. Prix hors taxes." : "Réservé à " + fullNames() + " : depuis quand, quels services, la formule et ce qu’il faut penser.", [segm([["clients","Clients"],["offres","Offres"],["bilans","Bilans"]], fiTab, v => { S.ui.fiTab = v; remember(); render(); }), fiTab === "clients" ? addBtn("Nouveau client", () => editClient({})) : null]));
   if (fiTab === "offres") return vOffres(root);
+  if (fiTab === "bilans") return vBilans(root);
   const f = el("div","filters ag-f"); const g = el("div","fgroup"); const lb = el("label","flabel","Service"); lb.htmlFor = "fi-sv"; const sel = el("select","pick"); sel.id = "fi-sv";
   [["","Tous les services"]].concat(SERVICES.map(x => [x[0], x[1]])).forEach(([v,l]) => { const o = el("option",null,l); o.value = v; sel.appendChild(o); }); sel.value = S.ui.fiSv || ""; sel.onchange = () => { S.ui.fiSv = sel.value; remember(); render(); };
   g.append(lb, sel); f.appendChild(g); root.appendChild(f);
@@ -586,11 +652,9 @@ function vFiches(root){
   const line = (tr, txt, cls) => { const c = td(tr, txt ? el("span","fi-1", txt) : el("span","muted","—"), cls); if (txt) c.title = txt; return c; };
   list.forEach(c => { const tr = el("tr","row fi-row"); tr.onclick = () => editClient(c);
     td(tr, clientTag(c.name),"nw"); td(tr, c.since ? fmtFR(c.since) : "—","nw");
-    const so = svOf(c), sv = el("div","fi-sv fi-svc"); sv.onclick = e => e.stopPropagation();
-    SERVICES.forEach(([k, l, sh]) => { const lab = el("label","fi-ck" + (k in so ? " on" : "")); lab.title = l + (so[k] ? ", depuis " + fmtFR(so[k]) : "");
-      const cb = el("input"); cb.type = "checkbox"; cb.checked = k in so; cb.disabled = !writable();
-      cb.onchange = () => { const n = {}; Object.entries(svOf(c)).forEach(([a, b]) => { if (a !== k) n[a] = b; }); if (cb.checked) n[k] = so[k] || today(); patch("clients", c.id, { services: n }).then(() => toast(l + (cb.checked ? " coché pour " : " retiré pour ") + c.name + ".")); };
-      lab.append(cb, el("span", null, sh)); sv.appendChild(lab); });
+    const so = svOf(c), ks = SV_KEYS.filter(k => k in so), sv = el("div","fi-sv");
+    ks.forEach(k => { const s = SERVICES.find(x => x[0] === k); const p = el("b","fi-code",s[2]); p.title = s[1] + (so[k] ? ", depuis " + fmtFR(so[k]) : ""); sv.appendChild(p); });
+    if (!ks.length) sv.appendChild(el("span","muted","À renseigner"));
     td(tr, sv,"nw"); const nl = netLinks(c); if (!nl.childNodes.length) nl.appendChild(el("span","muted","À renseigner")); td(tr, nl,"nw"); line(tr, c.formula, "hm"); line(tr, c.perMonth, "hm"); line(tr, [c.remember, c.ask ? "À demander : " + c.ask : ""].filter(Boolean).join(" "), "hm");
     tb.appendChild(tr); });
   w.classList.add("fi-tw");
@@ -692,6 +756,7 @@ function vAccueil(root){
     if (nt) tiles.push([nt, (nt > 1 ? "messages équipe" : "message équipe") + sfx, open(team[0])]);
     if (nc) tiles.push([nc, (nc > 1 ? "messages clients" : "message client") + sfx, open(fc)]); });
   tiles.push([myTasks, "tâches cette semaine", () => { S.ui.tWho = me; go("taches"); }]);
+  if (S.role === "owner" && new Date().getDate() <= 5){ if (BI.todo == null) biLoadTodo(); else if (BI.todo) tiles.push([BI.todo, "bilans de " + MONTHS[Number(biPrev().slice(5, 7)) - 1] + " à préparer", () => { S.ui.fiTab = "bilans"; S.ui.biM = biPrev(); remember(); go("fiches"); }]); }
   W.appendChild(el("h2","w2-lab", hr >= 18 || weekend ? "Pour la suite" : "Ta journée en bref"));
   const s = el("div","w2-tiles");
   tiles.forEach(([n, l, f], i) => { const t = el("button","w2-tile" + (n ? "" : " zero")); t.style.animationDelay = (0.45 + i*0.08) + "s"; t.append(el("b",null,String(n)), el("span",null,l)); if (!n) t.appendChild(el("i",null,"C’est calé")); t.onclick = f; s.appendChild(t); });
@@ -1755,7 +1820,7 @@ function gifPicker(ch, me){
     const grid = el("div","gif-grid"); m.appendChild(grid);
     m.appendChild(el("p","gif-by","Propulsé par GIPHY"));
     let tm = 0, seq = 0;
-    const load = async () => { const my = ++seq; grid.textContent = ""; grid.appendChild(el("p","muted","Chargement…"));
+    const load = async () => { const my = ++seq; grid.textContent = ""; grid.appendChild(skeleton(3));
       try { const r = await GC.api("GET","/api/g-gifs?q=" + encodeURIComponent(q.value.trim())); if (my !== seq) return; grid.textContent = "";
         if (!r.gifs.length) grid.appendChild(el("p","muted","Aucun GIF trouvé."));
         r.gifs.forEach(g => { const b = el("button","gif-it"); b.type = "button"; b.title = g.title || "GIF"; const i = document.createElement("img"); i.src = g.small || g.url; i.alt = g.title || "GIF"; i.loading = "lazy"; b.appendChild(i);
@@ -1968,46 +2033,63 @@ function vVocal(root){
       el("p","muted", here.length ? (here.length === 1 ? here[0] + " est dans la salle" : here.slice(0, -1).join(", ") + " et " + here[here.length - 1] + " sont dans la salle") : "Points d’équipe et réunions avec un client. Personne pour l’instant."));
     const a = el("div","vx-hact");
     a.appendChild(mine ? btn("Quitter la réunion","vx-leave", () => vcLeave()) : btn(VC.room ? "Passer en réunion" : "Rejoindre la réunion","lemon vx-join", () => vcJoin("reunion", "Réunion")));
-    const more = el("button","vx-more" + (S.ui.vxMore ? " on" : "")); more.type = "button"; more.setAttribute("aria-expanded", String(!!S.ui.vxMore)); more.setAttribute("aria-label","Autres salons et visios"); more.title = "Autres salons et visios"; more.textContent = "+";
-    more.onclick = () => { S.ui.vxMore = !S.ui.vxMore; remember(); render(); }; a.appendChild(more);
+    const more = el("button","vx-more" + (VX_MENU ? " on" : "")); more.type = "button"; more.setAttribute("aria-haspopup","menu"); more.setAttribute("aria-expanded", String(VX_MENU)); more.setAttribute("aria-label","Choisir un autre salon ou une visio"); more.title = "Choisir un autre salon ou une visio"; more.textContent = "+";
+    more.onclick = e => { e.stopPropagation(); VX_MENU = !VX_MENU; if (VX_MENU && (S.role === "owner" || canSee("commercial")) && !S.invites && !S.invLoading){ S.invLoading = true; GC.api("GET","/api/rtc/invites").then(r => { S.invites = r.invites; }).catch(() => { S.invites = []; }).finally(() => { S.invLoading = false; render(); }); } render(); };
+    const wrapM = el("div","vx-mw"); wrapM.appendChild(more); if (VX_MENU) wrapM.appendChild(vxMenu()); a.appendChild(wrapM);
     tx.appendChild(a); h.append(orb, tx); root.appendChild(h);
-    const others = VOICE.filter(([k]) => k !== "reunion").concat((S.cgroups || []).map(x => [x.room, "Visio, " + x.name])).concat((S.invites || []).map(x => [x.room, x.label])).filter(([k]) => voiceHere(k).length && VC.room !== k);
-    if (others.length && !S.ui.vxMore){ const lv = el("div","vx-live"); others.forEach(([k, l]) => { const c = el("button","vx-chip"); c.type = "button"; c.append(el("i"), el("span", null, l + " : " + voiceHere(k).join(", "))); c.onclick = () => vcJoin(k, l); lv.appendChild(c); }); root.appendChild(lv); }
+    const others = VOICE.filter(([k]) => k !== "reunion").concat((S.d.vrooms || []).filter(r => (r.members || []).includes(S.me || "Gabriel")).map(r => [r.room, r.name])).concat((S.cgroups || []).map(x => [x.room, "Visio, " + x.name])).concat((S.invites || []).map(x => [x.room, x.label])).filter(([k]) => voiceHere(k).length && VC.room !== k);
+    if (others.length){ const lv = el("div","vx-live"); others.forEach(([k, l]) => { const c = el("button","vx-chip"); c.type = "button"; c.append(el("i"), el("span", null, l + " : " + voiceHere(k).join(", "))); c.onclick = () => vcJoin(k, l); lv.appendChild(c); }); root.appendChild(lv); }
   }
-  if (!S.ui.vxMore){ root.appendChild(el("p","status","Le son et l’image passent directement d’un ordinateur à l’autre. On peut changer d’onglet pendant un appel : une barre reste en bas de l’écran.")); return; }
-  const g = el("div","vx-grid");
-  VOICE.filter(([k]) => k !== "reunion").forEach(([k, l, sub]) => { const here = voiceHere(k), mine = VC.room === k;
-    const c = el("section","vx-card" + (here.length ? " live" : "") + (mine ? " mine" : "")); const ic = el("span","wa-vic"); ic.innerHTML = HEADSET;
-    const hd = el("div","vx-hd"); const tt = el("div"); tt.append(el("h2",null,l), el("p","muted",sub)); hd.append(ic, tt); c.appendChild(hd);
-    const ppl = el("div","vx-ppl"); if (here.length) here.forEach(n => { const p = el("span","vx-p"); p.append(avatarEl(n, 28), el("span",null,n)); ppl.appendChild(p); }); else ppl.appendChild(el("span","muted","Personne pour l’instant")); c.appendChild(ppl);
-    const a = el("div","vx-act"); a.appendChild(mine ? btn("Quitter","", () => vcLeave()) : btn(VC.room ? "Changer de salon" : "Rejoindre","lemon", () => vcJoin(k, l))); c.appendChild(a);
-    g.appendChild(c); });
-  root.appendChild(g);
+  root.appendChild(el("p","status","Le son et l’image passent directement d’un ordinateur à l’autre. On peut changer d’onglet pendant un appel : une barre reste en bas de l’écran."));
+}
+/* Menu du + : on choisit le salon ou la visio à rejoindre */
+let VX_MENU = false;
+document.addEventListener("click", e => { if (VX_MENU && !e.target.closest(".vx-menu")){ VX_MENU = false; if (S.view === "vocal") render(); } });
+document.addEventListener("keydown", e => { if (VX_MENU && e.key === "Escape"){ VX_MENU = false; render(); } });
+function vxMenu(){
+  const m = el("div","vx-menu"); m.setAttribute("role","menu"); m.onclick = e => e.stopPropagation();
+  const item = (label, sub, room, title, extra) => { const here = voiceHere(room), mine = VC.room === room;
+    const b = el("button","vx-mi" + (here.length ? " live" : "") + (mine ? " mine" : "")); b.type = "button"; b.setAttribute("role","menuitem");
+    const t = el("span","vx-mt"); t.append(el("b", null, label), el("small", null, mine ? "Tu es dans ce salon" : here.length ? here.join(", ") : sub)); b.appendChild(t);
+    if (extra) b.appendChild(extra);
+    b.onclick = () => { VX_MENU = false; if (mine) render(); else vcJoin(room, title || label); }; m.appendChild(b); };
+  const sec = t => m.appendChild(el("div","vx-ms", t));
+  const me = S.me || "Gabriel", priv = (S.d.vrooms || []).filter(r => (r.members || []).includes(me)).sort((a, b) => (a.name || "").localeCompare(b.name || "", "fr"));
+  sec("Mes salons privés");
+  priv.forEach(r => { const others = (r.members || []).filter(n => n !== me); let x = null;
+    if (r.by === me){ x = el("span","vx-cp","Supprimer"); x.onclick = e => { e.stopPropagation(); if (x.dataset.armed){ remove("vrooms", r.id).then(() => toast("Salon « " + r.name + " » supprimé.")); VX_MENU = false; render(); return; } x.dataset.armed = "1"; x.textContent = "Confirmer"; x.classList.add("armed"); }; }
+    item(r.name, "Avec " + (others.length ? others.join(", ") : "toi seul"), r.room, r.name, x); });
+  const nr = el("button","vx-mi vx-new"); nr.type = "button"; nr.setAttribute("role","menuitem"); nr.append(el("span","vx-plus","+"), el("b", null, "Créer un salon")); nr.onclick = () => { VX_MENU = false; render(); newVroom(); }; m.appendChild(nr);
+  sec("Salons de l’équipe");
+  VOICE.filter(([k]) => k !== "reunion").forEach(([k, l, sub]) => item(l, sub, k));
   const cv = (S.cgroups || []).filter(x => (x.people || []).length);
-  if (cv.length){
-    const sec = el("section","vx-inv"); const top = el("div","vx-invh"); const tt = el("div"); tt.append(el("h2",null,"Visios mensuelles avec les clients"), el("p","muted","Chaque client a sa salle. Il la rejoint depuis son espace, onglet Visio, sans lien à envoyer."));
-    top.appendChild(tt); sec.appendChild(top);
-    cv.forEach(x => { const here = voiceHere(x.room), mine = VC.room === x.room; const r = el("div","vx-ir" + (here.length ? " live" : ""));
-      const tx = el("div"); tx.append(el("b",null,x.name), el("small",null, here.length ? here.join(", ") + " dans la salle." : "Personne dans la salle pour l’instant."));
-      const a = el("div","vx-ia"); a.appendChild(mine ? btn("Quitter","sm", () => vcLeave()) : btn("Rejoindre","sm lemon", () => vcJoin(x.room, "Visio, " + x.name)));
-      r.append(tx, a); sec.appendChild(r); });
-    root.appendChild(sec);
-  }
+  if (cv.length){ sec("Visios clients"); cv.forEach(x => item(x.name, "Le client la rejoint depuis son espace", x.room, "Visio, " + x.name)); }
   if (S.role === "owner" || canSee("commercial")){
-    if (!S.invites && !S.invLoading){ S.invLoading = true; GC.api("GET","/api/rtc/invites").then(r => { S.invites = r.invites; }).catch(() => { S.invites = []; }).finally(() => { S.invLoading = false; render(); }); }
-    const sec = el("section","vx-inv"); const top = el("div","vx-invh"); const tt = el("div"); tt.append(el("h2",null,"Rendez-vous avec des prospects"), el("p","muted","Un lien à envoyer : la personne entre son nom et rejoint la visio, sans compte. Elle n’a accès qu’à ce salon."));
-    top.append(tt, btn("Inviter un prospect","lemon", () => newInvite())); sec.appendChild(top);
-    const list = (S.invites || []);
-    if (!list.length) sec.appendChild(el("p","muted", S.invites ? "Aucun rendez-vous en cours." : "Chargement…"));
-    list.forEach(x => { const here = voiceHere(x.room), mine = VC.room === x.room; const r = el("div","vx-ir" + (here.length ? " live" : ""));
-      const tx = el("div"); tx.append(el("b",null,x.label), el("small",null, (here.length ? here.join(", ") + " dans le salon. " : "") + "Créé par " + x.by + ", valable jusqu’au " + fmtFR(new Date(x.exp).toISOString().slice(0, 10)) + "."));
-      const a = el("div","vx-ia");
-      a.append(mine ? btn("Quitter","sm", () => vcLeave()) : btn("Rejoindre","sm lemon", () => vcJoin(x.room, x.label)), btn("Copier le lien","sm", () => copyInvite(x.link)));
-      const del = btn("Supprimer","sm rm", async () => { if (!del.classList.contains("armed")){ del.classList.add("armed"); del.textContent = "Confirmer"; setTimeout(() => { del.classList.remove("armed"); del.textContent = "Supprimer"; }, 3000); return; } try { await GC.api("DELETE","/api/rtc/invites/" + x.room); if (VC.room === x.room) vcLeave(true); S.invites = null; render(); } catch(e){ toast(e.message); } });
-      a.appendChild(del); r.append(tx, a); sec.appendChild(r); });
-    root.appendChild(sec);
+    sec("Rendez-vous prospects");
+    (S.invites || []).forEach(x => { const cp = el("span","vx-cp","Copier le lien"); cp.onclick = e => { e.stopPropagation(); copyInvite(x.link); }; item(x.label, "Valable jusqu’au " + fmtFR(new Date(x.exp).toISOString().slice(0, 10)), x.room, x.label, cp); });
+    if (!S.invites) m.appendChild(skeleton(2));
+    const nb = el("button","vx-mi vx-new"); nb.type = "button"; nb.setAttribute("role","menuitem"); nb.append(el("span","vx-plus","+"), el("b", null, "Inviter un prospect")); nb.onclick = () => { VX_MENU = false; newInvite(); }; m.appendChild(nb);
   }
-  root.appendChild(el("p","status","Le son et l’image passent directement d’un ordinateur à l’autre. On peut changer d’onglet pendant un appel : une barre reste en bas de l’écran. Le navigateur demande l’accès au micro la première fois."));
+  return m;
+}
+/* Salon vocal privé : un nom, des participants. Les autres ne le voient pas (filtré par le serveur). */
+function newVroom(){
+  if (!writable()) return;
+  const me = S.me || "Gabriel", pick = new Set([me]);
+  openModal(m => { const t = el("h3", null, "Créer un salon"); t.id = "mtitle"; m.appendChild(t);
+    m.appendChild(el("p","muted","Seules les personnes cochées voient ce salon et peuvent y entrer."));
+    const f = el("form","form"); f.onsubmit = e => e.preventDefault();
+    const l = el("label", null, "Nom du salon"); const inp = el("input"); inp.type = "text"; inp.placeholder = "Ex. Point Meta, Montage Locamex"; inp.maxLength = 60; l.appendChild(inp); f.appendChild(l);
+    const w = el("div","form-who"); w.appendChild(el("div","flabel","Participants")); const ch = el("div","chips");
+    PEOPLE.forEach(p => { const b = el("button","chip", p); b.type = "button"; const up = () => b.setAttribute("aria-pressed", String(pick.has(p))); up(); if (p === me){ b.disabled = true; b.title = "Tu participes toujours au salon que tu crées"; } else b.onclick = () => { pick.has(p) ? pick.delete(p) : pick.add(p); up(); }; ch.appendChild(b); });
+    w.appendChild(ch); f.appendChild(w); m.appendChild(f);
+    const err = el("p","err"); m.appendChild(err);
+    const a = el("div","actions"); const c = el("button","btn","Annuler"); c.type = "button"; c.onclick = closeModal;
+    const ok = el("button","btn solid","Créer"); ok.type = "button";
+    ok.onclick = async () => { const name = inp.value.trim(); if (!name){ err.textContent = "Donne un nom au salon."; inp.focus(); return; } if (pick.size < 2){ err.textContent = "Choisis au moins une autre personne."; return; }
+      const room = "sx" + Array.from(crypto.getRandomValues(new Uint8Array(12)), x => "abcdefghijklmnopqrstuvwxyz"[x % 26]).join("");
+      ok.disabled = true; try { await save("vrooms", null, { name, room, members: [...pick], by: me, at: new Date().toISOString() }); closeModal(); toast("Salon « " + name + " » créé pour " + [...pick].filter(n => n !== me).join(", ") + "."); } catch(e){ ok.disabled = false; } };
+    a.append(c, ok); m.appendChild(a); });
 }
 function copyInvite(link){ const u = location.origin + link; (navigator.clipboard ? navigator.clipboard.writeText(u) : Promise.reject()).then(() => toast("Lien copié, à envoyer au prospect."), () => prompt("Lien à envoyer au prospect", u)); }
 function newInvite(){
@@ -2738,6 +2820,49 @@ function vTachesHub(root){
   vTaches(root);
 }
 const RENDER = {strategie:vStrategie, fiches:vFiches, parametres:vParametres, accueil:vAccueil, agenda:vAgendaHub, taches:vTachesHub, commercial:vCommercial, campagnes:vMeta, montage:vMontage, tournage:vTournage, publications:vPublications, clients:vClients, messagerie:vMessagerie, vocal:vVocal, formation:vFormation, idees:vIdees};
+/* Chargement progressif : des blocs gris qui respirent à la place de « Chargement… » */
+function skeleton(n){ const w = el("div","sk-wrap"); w.setAttribute("aria-busy","true"); w.setAttribute("aria-label","Chargement");
+  if (!n){ const t = el("div","sk sk-bar"); w.appendChild(t); n = 7; }
+  for (let i = 0; i < n; i++){ const r = el("div","sk-row"); r.append(el("span","sk sk-dot"), el("span","sk sk-line"), el("span","sk sk-short")); r.style.animationDelay = (i * 60) + "ms"; w.appendChild(r); }
+  return w; }
+/* ---------- Recherche partout (Cmd+K ou Ctrl+K) : clients, tâches, messages, prospects, idées, tournages, onglets ---------- */
+let SRCH = null;
+function srchItems(){
+  const me = S.me || "Gabriel", out = [], add = (kind, label, sub, words, act) => out.push({ kind, label: label || "", sub: sub || "", key: norm([label, sub, words].join(" ")), act });
+  Object.keys(RENDER).filter(canSee).forEach(v => add("Onglet", SHORT[v] || v, "Aller à l’onglet", "", () => go(v)));
+  (S.d.clients || []).filter(c => c.name !== AGENCE).forEach(c => add("Client", c.name, [c.formula, c.contact].filter(Boolean).join(" · "), [c.remember, c.ask].join(" "), () => { go("fiches"); if (S.role === "owner") setTimeout(() => editClient(c), 60); }));
+  (S.d.tasks || []).forEach(t => add("Tâche", t.title, [t.who, t.client, t.done ? "terminée" : t.date ? fmtD(t.date) : ""].filter(Boolean).join(" · "), t.note, () => { go("taches"); setTimeout(() => openTask(t), 60); }));
+  (S.d.commercial || []).forEach(c => add("Commercial", c.company, [c.kind, c.stage, coOwner(c)].filter(Boolean).join(" · "), [c.notes, c.contact, c.nextAction].join(" "), () => { go("commercial"); setTimeout(() => openCommercial(c), 60); }));
+  (S.d.idees || []).forEach(i => add("Idée", (i.text || i.kind || "Idée").slice(0, 90), [i.client, ideaFrom(i)].join(" · "), "", () => { S.ui.idClient = i.client || ""; remember(); go("idees"); }));
+  (S.d.shoots || []).forEach(s => add("Tournage", "Tournage " + (s.client || ""), [s.date ? fmtD(s.date) : "date à fixer", s.place].filter(Boolean).join(" · "), tgItems(s).map(v => v.title).join(" "), () => { go("tournage"); setTimeout(() => tgEdit(s), 60); }));
+  (S.d.messages || []).filter(m => m.text && !String(m.ch || "").startsWith("tg:") || (m.text && String(m.ch || "").startsWith("tg:"))).slice(-3000).reverse().forEach(m => add("Message", m.text.slice(0, 110), (m.who || "") + " · " + chName(m.ch) + " · " + waTime(m.at), "", () => { const shoot = String(m.ch).startsWith("tg:"); S.ui.msgMode = shoot ? "shoot" : "main"; if (shoot) S.ui.msgShoot = m.ch; else S.ui.msgCh = m.ch; S.ui.waConv = true; remember(); go("messagerie"); }));
+  return out;
+}
+function openSearch(){
+  if (SRCH) return; const items = srchItems(); let sel = 0, shown = [];
+  const ov = el("div","srch-ov"); ov.setAttribute("role","dialog"); ov.setAttribute("aria-modal","true"); ov.setAttribute("aria-label","Rechercher");
+  const box = el("div","srch-box"); const top = el("div","srch-top"); const ic = el("span","srch-ic"); ic.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>';
+  const inp = el("input"); inp.type = "search"; inp.placeholder = "Un client, une tâche, un message…"; inp.setAttribute("aria-label","Rechercher"); top.append(ic, inp, el("kbd", null, "Échap")); box.appendChild(top);
+  const list = el("div","srch-list"); list.setAttribute("role","listbox"); box.appendChild(list); ov.appendChild(box);
+  const close = () => { ov.remove(); SRCH = null; document.removeEventListener("keydown", key, true); };
+  const pick = it => { close(); it.act(); };
+  const draw = () => { list.textContent = ""; const q = norm(inp.value.trim());
+    if (!q){ shown = items.filter(i => i.kind === "Onglet").slice(0, 8); }
+    else { const ws = q.split(/\s+/); shown = items.filter(i => ws.every(w => i.key.includes(w))).map(i => [i, (norm(i.label).startsWith(ws[0]) ? 0 : 1) + (i.kind === "Message" ? 2 : 0)]).sort((a, b) => a[1] - b[1]).map(x => x[0]).slice(0, 40); }
+    if (sel >= shown.length) sel = 0;
+    if (!shown.length){ list.appendChild(el("p","srch-empty","Rien ne correspond à « " + inp.value.trim() + " ».")); return; }
+    let last = ""; shown.forEach((it, i) => { if (it.kind !== last){ list.appendChild(el("div","srch-grp", it.kind === "Onglet" ? "Onglets" : it.kind === "Commercial" ? "Commercial" : it.kind + "s")); last = it.kind; }
+      const b = el("button","srch-it" + (i === sel ? " on" : "")); b.type = "button"; b.setAttribute("role","option"); b.setAttribute("aria-selected", String(i === sel));
+      const t = el("span","srch-t"); t.append(el("b", null, it.label), el("small", null, it.sub)); b.append(t, el("span","srch-k", it.kind));
+      b.onmouseenter = () => { sel = i; list.querySelectorAll(".srch-it").forEach((x, j) => x.classList.toggle("on", j === sel)); };
+      b.onclick = () => pick(it); list.appendChild(b); });
+    const on = list.querySelector(".srch-it.on"); if (on) on.scrollIntoView({ block: "nearest" }); };
+  const key = e => { if (e.key === "Escape"){ e.preventDefault(); close(); } else if (e.key === "ArrowDown"){ e.preventDefault(); sel = Math.min(shown.length - 1, sel + 1); draw(); } else if (e.key === "ArrowUp"){ e.preventDefault(); sel = Math.max(0, sel - 1); draw(); } else if (e.key === "Enter" && shown[sel]){ e.preventDefault(); pick(shown[sel]); } };
+  inp.oninput = () => { sel = 0; draw(); }; ov.onclick = e => { if (e.target === ov) close(); };
+  document.addEventListener("keydown", key, true); document.body.appendChild(ov); SRCH = ov; draw(); inp.focus();
+}
+document.addEventListener("keydown", e => { if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K") && S.ready !== undefined && S.d){ e.preventDefault(); SRCH ? null : openSearch(); } });
+{ const a = document.getElementById("srch"), b = document.getElementById("msrch"); if (a) a.onclick = openSearch; if (b) b.onclick = openSearch; }
 function go(v){ if (MERGED[v]){ S.ui[MERGED[v][1]] = v; remember(); v = MERGED[v][0]; } if (location.hash !== "#"+v) location.hash = v; else { S.view = v; render(); } }
 function fromHash(){ let h = (location.hash||"").replace("#",""); if (h === "editorial"){ S.ui.agClient = AGENCE; if (!S.ui.agLayers.includes("posts")) S.ui.agLayers = S.ui.agLayers.concat("posts"); h = "agenda"; } if (MERGED[h] && canSee(h)){ S.ui[MERGED[h][1]] = h; h = MERGED[h][0]; } S.view = RENDER[h] && canSee(h) ? h : "accueil"; }
 window.addEventListener("hashchange", () => { const go = () => { fromHash(); render(); window.scrollTo(0,0); }; if (document.startViewTransition && !matchMedia("(prefers-reduced-motion: reduce)").matches) document.startViewTransition(go); else go(); });
@@ -2813,7 +2938,7 @@ function render(){
   document.body.classList.toggle("chat-full", S.view === "messagerie" && !S.failed && !!S.ready);
   document.body.classList.toggle("focus-full", S.view === "focus");
   if (S.failed){ root.appendChild(head("Gestionnaire", "")); root.appendChild(el("p","empty",S.failed)); return; }
-  if (!S.ready){ root.appendChild(head(VIEWS.find(v => v[0] === S.view)[1], "Chargement des données de l’agence…")); root.appendChild(el("p","empty","Les tâches, le commercial, les campagnes, les calendriers et l’agenda s’affichent dans un instant.")); return; }
+  if (!S.ready){ root.appendChild(head(VIEWS.find(v => v[0] === S.view)[1], "")); root.appendChild(skeleton()); return; }
   try { RENDER[S.view](root); cardLabels(root); } catch(x){ root.appendChild(el("p","err","Affichage impossible : "+(x && x.message))); console.error(x); }
   if (S.preview){ const b = el("div","pv-bar"); b.append(el("span",null,"Aperçu : tu vois l’application comme "+S.me+". Lecture seule.")); b.appendChild(btn("Quitter l’aperçu","sm", () => { GC.setAs(""); location.hash = "#parametres"; location.reload(); })); root.insertBefore(b, root.firstChild); }
   else if (S.canWrite === false) root.insertBefore(el("p","status","Consultation seule."), root.firstChild);
@@ -3005,7 +3130,7 @@ async function reloadCodes(){ try { const r = await GC.api("GET","/api/g-codes")
 function copyCode(code){ (navigator.clipboard ? navigator.clipboard.writeText(code) : Promise.reject()).then(() => toast("Code " + code + " copié."), () => toast(code)); }
 function pmCodes(w){
   if (S.role !== "owner"){ w.appendChild(pmCard("Codes clients", "Réservé à " + fullNames() + ".")); return; }
-  if (!S.codes){ w.appendChild(el("p","empty","Chargement des clients…")); reloadCodes(); return; }
+  if (!S.codes){ w.appendChild(skeleton(4)); reloadCodes(); return; }
   const c = pmCard("Codes clients", "Un code par client. Toute personne qui s’inscrit avec ce code est rattachée à ce client et ne voit que ses informations : pour un associé, donne-lui le même code. Renouveler un code bloque les nouvelles inscriptions avec l’ancien, sans déconnecter les personnes déjà inscrites.");
   const top = el("div","pm-actions"); const q = el("input","search"); q.type = "search"; q.id = "cd-q"; q.placeholder = "Chercher un client"; q.value = S.ui.cdQ || ""; q.oninput = () => { S.ui.cdQ = q.value; renderSoon(); };
   top.append(q); c.appendChild(top);
@@ -3131,7 +3256,7 @@ function editCode(x){
 }
 function pmEquipe(w){
   if (S.role !== "owner"){ w.appendChild(pmCard("Équipe et accès", "Réservé à " + fullNames() + ".")); return; }
-  if (!S.users){ w.appendChild(el("p","empty","Chargement des comptes…")); reloadUsers(); return; }
+  if (!S.users){ w.appendChild(skeleton(4)); reloadUsers(); return; }
   if (S.secours) w.appendChild(el("p","pv-note","Accès de secours : définis le mot de passe de chaque personne, puis reconnectez-vous chacun avec votre identifiant."));
   const us = S.users, act = us.filter(u => !u.disabled);
   const c = pmCard("Équipe", act.length + " compte" + (act.length > 1 ? "s" : "") + " actif" + (act.length > 1 ? "s" : "") + " : " + act.map(u => u.name).join(", ") + ". Les pages de chacun se règlent dans le tableau « Accès par prénom » plus bas.");
@@ -3194,7 +3319,7 @@ function setPage(u, k, on, until){
 }
 function peopleCard(){
   const r = pmCard("Accès par prénom", "Coche ce que chaque personne voit. Le changement s’applique à sa prochaine ouverture de l’application.");
-  if (!S.access){ r.appendChild(el("p","muted","Chargement…")); loadAccess(); return r; }
+  if (!S.access){ r.appendChild(skeleton(3)); loadAccess(); return r; }
   const ppl = (S.users || []).filter(u => !u.disabled);
   const { w: tw, tb } = table(["Page"].concat(ppl.map(u => u.name))); tw.classList.add("ax-tw");
   PAGE_LIST.filter(([k]) => !HIDDEN.includes(k)).forEach(([k, l]) => { const tr = el("tr","row"); td(tr, l, "nw");

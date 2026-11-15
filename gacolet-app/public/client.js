@@ -181,7 +181,7 @@ function vTournages(root){
     if (s.broll){ const p = el("p","cl-cap"); p.append(el("b",null,"À ramener : "), document.createTextNode(s.broll)); b.appendChild(p); }
     if (s.rules){ const p = el("p","cl-cap"); p.append(el("b",null,"À respecter : "), document.createTextNode(s.rules)); b.appendChild(p); }
     if (s.note) b.appendChild(el("p","cl-note" + (s.status === "no" ? " no" : ""), (s.status === "no" ? "Votre raison : " : "Vos retours : ") + s.note));
-    if (s.status !== "wait" && s.decidedBy) b.appendChild(el("p","muted cl-by", SH_LABEL[s.status] + " par " + s.decidedBy + " le " + fmtD(s.decidedAt)));
+    if (s.status !== "wait" && s.decidedBy) b.appendChild(el("p","muted cl-by", SH_LABEL[s.status] + " par " + s.decidedBy + (s.decidedAt ? " le " + fmtD(s.decidedAt) : "")));
     if (s.status !== "ok"){
       const open = S.shOpen === s.id, a = el("div","cl-acts");
       a.append(btn("Valider","lemon", () => decideShoot(s, "ok")),
