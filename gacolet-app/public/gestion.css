@@ -2015,3 +2015,16 @@ html.tg-lock,html.tg-lock body{overflow:hidden}
 @media (max-width:760px){ .wa-msgs{padding:10px 12px 12px} .wa-line{max-width:82%} .wa-txt{font-size:16px} }
 /* Rushs : la note sur sa propre ligne, en encart (Matis, 15/11/2026) */
 .ru-note{margin-top:6px;padding:5px 10px;border-left:2px solid var(--lemon);border-radius:0 8px 8px 0;background:rgba(198,255,51,.06);font-size:var(--fs-s);line-height:1.45;color:var(--ink-2);white-space:pre-wrap;max-width:60ch}
+/* Queue des bulles sans cache noir (liseré visible à côté de la photo, 15/11/2026) */
+.wa-line.tail .wa-bub::after{content:none!important}
+.wa-line.tail .wa-bub:not(:has(>.wa-img)):not(:has(>.wa-vid))::before{width:14px;height:16px;z-index:0;border-radius:0!important;-webkit-mask:radial-gradient(circle at 0 0,transparent 13.5px,#000 14px);mask:radial-gradient(circle at 0 0,transparent 13.5px,#000 14px)}
+.wa-line.tail:not(.mine) .wa-bub::before{left:-6px}
+.wa-line.tail.mine .wa-bub::before{right:-6px;left:auto;-webkit-mask:radial-gradient(circle at 100% 0,transparent 13.5px,#000 14px);mask:radial-gradient(circle at 100% 0,transparent 13.5px,#000 14px)}
+.wa-line.tail:not(.mine) .wa-bub:not(:has(>.wa-img)):not(:has(>.wa-vid)){border-bottom-left-radius:6px!important}
+.wa-line.tail.mine .wa-bub:not(:has(>.wa-img)):not(:has(>.wa-vid)){border-bottom-right-radius:6px!important}
+.wa-txt{position:relative;z-index:1}
+/* Survol : les trois points puis l'heure, côte à côte, sans chevauchement */
+.wa-line:hover .wa-time{top:50%;bottom:auto!important;transform:translateY(-50%);font-size:11px;color:#8E8E93!important;font-variant-numeric:tabular-nums}
+.wa-line:not(.mine):hover .wa-time{right:auto!important;left:calc(100% + 40px)}
+.wa-line.mine:hover .wa-time{left:auto!important;right:calc(100% + 40px)}
+.wa-dots{color:#8E8E93}
