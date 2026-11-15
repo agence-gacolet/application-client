@@ -3076,12 +3076,12 @@ function pmCorbeille(w){
 /* Mise à jour de l'appli depuis GitHub (Matis) : même chose que le bouton Build d'Infomaniak */
 function pmMaj(w){
   if ((S.me || "") !== "Matis" || S.role !== "owner") return;
-  const c = pmCard("Version de l’appli", "Récupère la dernière version enregistrée sur GitHub et la met en ligne. L’appli redémarre seule si le serveur a changé (quelques secondes de coupure).");
+  const c = pmCard("Version de l’appli", "Récupère la dernière version enregistrée sur GitHub et la met en ligne. Les écrans sont à jour tout de suite ; si le serveur a changé, il reste à cliquer sur « Redémarrer » dans le Manager Infomaniak.");
   const st = el("p","note","Vérification…"); c.appendChild(st);
   GC.api("GET","/api/g-deploy").then(r => { st.textContent = "Version en ligne : " + r.version + ", démarrée le " + fmtFR(r.started.slice(0, 10)) + " à " + r.started.slice(11, 16).replace(":", " h ") + " (heure UTC)."; }).catch(e => { st.textContent = e.message; });
   const out = el("pre","pm-log"); out.hidden = true;
   const a = el("div","pm-actions"); const b = btn("Mettre à jour depuis GitHub","lemon", async () => { b.disabled = true; out.hidden = false; out.textContent = "Mise à jour…";
-    try { const r = await GC.api("POST","/api/g-deploy"); out.textContent = (r.changed.length ? "Version " + r.from + " → " + r.to + "\n" + r.changed.join("\n") : "Déjà à jour.") + (r.restart ? "\n\nL’appli redémarre : recharge la page dans 10 secondes." : ""); toast(r.changed.length ? "Appli mise à jour." : "Déjà à jour."); }
+    try { const r = await GC.api("POST","/api/g-deploy"); out.textContent = (r.changed.length ? "Version " + r.from + " → " + r.to + "\n" + r.changed.join("\n") : "Déjà à jour.") + (r.restart ? "\n\nLe serveur a changé : clique sur « Redémarrer » dans le Manager Infomaniak pour finir." : ""); toast(r.changed.length ? "Appli mise à jour." : "Déjà à jour."); }
     catch(e){ out.textContent = e.message; } b.disabled = false; });
   a.appendChild(b); c.append(a, out); w.appendChild(c);
 }

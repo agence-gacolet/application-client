@@ -1148,7 +1148,8 @@ module.exports = function (app, { db, wrap, root }) {
 
   // ---------- Mise à jour de l’appli depuis GitHub, sans passer par le Manager Infomaniak (Matis ou la clé du Mac) ----------
   // Même chose que le bouton Build : git pull, copie de gacolet-app à la racine, npm install si besoin.
-  // Si le code du serveur a changé, l'appli s'arrête juste après la réponse pour repartir sur la nouvelle version.
+  // Les écrans (public/) sont à jour tout de suite. Si le code du serveur a changé, il faut « Redémarrer » dans le Manager :
+  // l'appli ne s'arrête JAMAIS d'elle-même (essai du 15/11/2026 : Infomaniak ne la relance pas, page de maintenance).
   const { execFile } = require("child_process");
   const run = (cmd, args) => new Promise(ok => execFile(cmd, args, { cwd: root, timeout: 180000, maxBuffer: 4e6 }, (err, out, er) => ok({ code: err ? (err.code || 1) : 0, out: String(out || "") + String(er || "") })));
   // Accès : Matis connecté, ou la clé de mise en ligne gardée dans le trousseau du Mac de Matis (en-tête X-Deploy-Key)
@@ -1173,6 +1174,5 @@ module.exports = function (app, { db, wrap, root }) {
     if (changed.some(f => /package(-lock)?\.json$/.test(f))) { const ni = await run("npm", ["install", "--omit=dev"]); log.push("$ npm install\n" + ni.out.slice(-2000)); }
     const restart = changed.some(f => /^gacolet-app\/(src\/|server\.js|package)/.test(f));
     res.json({ ok: true, from: before.slice(0, 7), to: after.slice(0, 7), changed, restart, log: log.join("\n") });
-    if (restart) setTimeout(() => process.exit(0), 800);
   }));
 };
