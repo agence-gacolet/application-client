@@ -83,8 +83,8 @@ S.ui.agCursor = null;
 const remember = () => { const u = Object.assign({}, S.ui); delete u.agCursor; store.set("gacolet-ui", u); };
 
 function clientsAll(){
-  const list = S.d.clients.slice().sort((a,b) => a.name.localeCompare(b.name,"fr"));
-  if (!list.length) return Object.keys(DEFAULT_COLORS).map(n => ({name:n, color:DEFAULT_COLORS[n]}));
+  const list = S.d.clients.filter(c => !c.archived).sort((a,b) => a.name.localeCompare(b.name,"fr"));
+  if (!S.d.clients.length) return Object.keys(DEFAULT_COLORS).map(n => ({name:n, color:DEFAULT_COLORS[n]}));
   return list;
 }
 function colorOf(name){
@@ -164,6 +164,7 @@ function openForm(o){
       del.onclick = async () => { if (!armed){ armed = true; del.textContent = "Confirmer la suppression"; del.classList.add("armed"); err.textContent = "La ligne sera supprimée pour toute l’équipe."; return; } del.disabled = true; try { await o.onDelete(); closeModal(); } catch(x){ del.disabled = false; } };
       act.appendChild(del);
     }
+    if (o.extra && writable()){ const xb = el("button","btn left", o.extra[0]); xb.type = "button"; xb.onclick = o.extra[1]; act.appendChild(xb); }
     const cancel = el("button","btn","Annuler"); cancel.type = "button"; cancel.onclick = () => o.onCancel ? o.onCancel() : closeModal();
     const ok = el("button","btn solid", o.okLabel || "Enregistrer"); ok.type = "submit";
     if (!writable()) ok.disabled = true;
@@ -520,6 +521,7 @@ function editClient(c){
   const svFields = []; SERVICES.forEach(([k, l]) => { svFields.push({k:"sv"+k, label:l, type:"check", half:true}); svFields.push({k:"sd"+k, label:"Depuis le", type:"date", half:true}); });
   let auto = packFill(Object.keys(sv)) || {};
   openForm({ key:"cf", title: c.id ? "Fiche, "+c.name : "Nouveau client", values:vals,
+    extra: c.id && !c.archived ? ["Fin de collaboration", () => archiveClient(c)] : null,
     // Cocher ou décocher un pack réécrit la formule (et le rythme) d'après les packs cochés ; les champs vides du pack ne remplacent rien
     onChange: (inp, e) => { if (!e || !e.target || !/^f-cf-sv/.test(e.target.id || "")) return; const nx = packFill(SV_KEYS.filter(k => inp["sv"+k].checked)); if (!nx) return;
       ["formula","perMonth","shoot","networks"].forEach(k => { if (nx[k] || k === "formula") inp[k].value = nx[k]; }); auto = nx; },
@@ -529,6 +531,39 @@ function editClient(c){
     onSave: out => { const services = {}; SERVICES.forEach(([k]) => { if (out["sv"+k]) services[k] = out["sd"+k] || ""; delete out["sv"+k]; delete out["sd"+k]; }); out.services = services;
       if (!c.id){ const n = String(out.name || "").trim(); if (S.d.clients.some(x => x.name.toLowerCase() === n.toLowerCase())){ toast("Ce client existe déjà."); return Promise.reject(new Error("doublon")); } out.name = n; out.calendar = true; }
       return save("clients", c.id || null, Object.assign(c.id ? strip(c) : {}, out)); } });
+}
+/* Fin de collaboration : le client passe dans l’onglet Archives avec ses services, le motif, une note et des pièces jointes (PDF, captures) */
+const AR_MOTIFS = ["Fin de contrat","Budget","Résultats jugés insuffisants","Arrêt ou vente de l’activité","Passage en interne ou à une autre agence","Décision de l’agence","Autre"];
+function archiveClient(c){
+  const a = c.archive || {}, had = a.services || Object.keys(svOf(c)); const vals = { endedAt: a.endedAt || today(), reason: a.reason || AR_MOTIFS[0], note: a.note || "", files: a.files || [] };
+  SERVICES.forEach(([k]) => { vals["av"+k] = had.includes(k); });
+  openForm({ key:"ar", title: (c.archived ? "Archive, " : "Fin de collaboration, ") + c.name, okLabel: c.archived ? "Enregistrer" : "Archiver le client", done: c.archived ? "Enregistré." : c.name + " est dans les Archives.",
+    intro: c.archived ? "" : "Le client quitte les listes de l’appli (agenda, tâches, calendrier) et passe dans l’onglet Archives du Tableau clients. Rien n’est supprimé : il peut être réactivé.",
+    values: vals,
+    fields:[{k:"endedAt",label:"Fin de la collaboration le",type:"date",req:"Indique la date de fin."}].concat(SERVICES.map(([k, l]) => ({k:"av"+k, label:l, type:"check", half:true})))
+      .concat([{k:"reason",label:"Motif",type:"select",options:AR_MOTIFS},{k:"note",label:"Note",type:"textarea",rows:4,ph:"Ce qui s’est passé, ce qu’il faut retenir s’il revient"},{k:"files",label:"Documents (PDF, images, captures d’écran)",type:"files"}]),
+    onCancel: () => c.archived ? openArchive(c) : editClient(c),
+    onSave: out => { const sv = SERVICES.map(x => x[0]).filter(k => out["av"+k]); if (!sv.length){ toast("Coche au moins un service."); return Promise.reject(new Error("sv")); }
+      const arch = { endedAt: out.endedAt, services: sv, reason: out.reason, note: out.note, files: out.files, by: a.by || S.me || "", at: a.at || new Date().toISOString(), calendar: "calendar" in a ? a.calendar : c.calendar !== false };
+      return patch("clients", c.id, { archived: true, archive: arch, calendar: false }); } });
+}
+function openArchive(c){
+  const a = c.archive || {}; const svl = (a.services || []).map(k => (SERVICES.find(x => x[0] === k) || [k, k])[1]).join(", ");
+  openFacts({ title: c.name, facts:[["Client depuis le", c.since ? fmtFR(c.since) : ""],["Fin le", a.endedAt ? fmtFR(a.endedAt) : ""],["Services", svl],["Motif", a.reason],["Note", a.note],["Documents", a.files && a.files.length ? filesList(a.files) : ""],["Archivé par", a.by]],
+    quick:[["Réactiver le client", () => { const b = Object.assign({}, c.archive); patch("clients", c.id, { archived: false, calendar: b.calendar !== false }).then(() => { toast(c.name + " est de nouveau dans les clients."); closeModal(); }); }],["Voir la fiche", () => editClient(c)]],
+    onEdit: () => archiveClient(c) });
+}
+function vArchives(root){
+  const list = S.d.clients.filter(c => c.archived).sort((a,b) => ((b.archive||{}).endedAt || "").localeCompare((a.archive||{}).endedAt || "") || a.name.localeCompare(b.name,"fr"));
+  if (!list.length){ root.appendChild(el("p","empty","Aucun client archivé. Pour archiver un client : ouvre sa fiche dans l’onglet Clients, puis « Fin de collaboration ».")); return; }
+  const {w, tb} = table(["Client","Depuis","Fin le","Services","Motif","~Note","Documents"]);
+  list.forEach(c => { const a = c.archive || {}; const tr = el("tr","row fi-row"); tr.onclick = () => openArchive(c);
+    td(tr, clientTag(c.name),"nw"); td(tr, c.since ? fmtFR(c.since) : "—","nw"); td(tr, a.endedAt ? fmtFR(a.endedAt) : "—","nw");
+    const sv = el("div","fi-sv"); (a.services || []).forEach(k => { const s = SERVICES.find(x => x[0] === k); if (s){ const p = el("b","fi-code",s[2]); p.title = s[1]; sv.appendChild(p); } }); td(tr, sv,"nw");
+    td(tr, a.reason || "—"); const nt = td(tr, a.note ? el("span","fi-1", a.note) : el("span","muted","—"), "hm"); if (a.note) nt.title = a.note;
+    td(tr, a.files && a.files.length ? plural(a.files.length, "document") : "—","nw"); tb.appendChild(tr); });
+  w.classList.add("fi-tw"); root.appendChild(w);
+  root.appendChild(el("p","status", plural(list.length, "client archivé", "clients archivés") + ". Clique sur une ligne pour voir les documents, modifier ou réactiver le client."));
 }
 /* Coordonnées et réseaux d’un client : pastilles cliquables */
 const NET_ICO = {
@@ -597,7 +632,7 @@ function bilanSlides(d, x){
     rows.forEach(([l, sub, a, b]) => { const r = el("div","bs-tr"); const c1 = el("span"); c1.append(el("b", null, l), el("small", null, sub)); const e = biEvo(l, a, b); const ev = el("span"); if (e) ev.appendChild(el("i","bs-evo" + (e.up ? " up" : ""), e.t)); r.append(c1, el("span","bs-a", biFmt(a)), el("span","bs-b", biFmt(b)), ev); t.appendChild(r); });
     const box = el("div","bs-box dark"); box.append(el("p","bs-kick", x.topLabel || "Ce mois-ci"), el("b","bs-big", x.topNum || String(d.posts.count || (d.meta ? d.meta.total : 0))), el("p", null, x.topTxt || (x.topNum ? "" : d.posts.count ? "publications sur la période" : "demandes reçues")));
     g.append(t, box); s.insertBefore(g, s.querySelector(".bs-foot"));
-    s.insertBefore(el("p","bs-src","Source : Metricool (publications) et relevés de l’agence, du " + biRange(d.month) + (pv ? ", comparé à " + pvLabel : "") + "."), s.querySelector(".bs-foot")); }
+    s.insertBefore(el("p","bs-src", x.source || ("Source : Metricool (publications) et relevés de l’agence, du " + biRange(d.month) + (pv ? ", comparé à " + pvLabel : "") + ".")), s.querySelector(".bs-foot")); }
   // 3. Demandes Meta
   if (d.meta){ const m = d.meta, pc = m.goal ? Math.round(100 * m.qualified / m.goal) : null, bud = biNum(x.budget), cpl = bud != null && m.total ? bud / m.total : null;
     const s = slide(false, "Publicité Meta", m.total + " demande" + (m.total > 1 ? "s" : "") + " reçue" + (m.total > 1 ? "s" : "") + " en " + moName); const k = el("div","bs-cards");
@@ -655,7 +690,7 @@ function vBilans(root){
   const k = cur + "|" + m, r = BI.data[k];
   if (!r){ biLoad(cur, m); main.appendChild(el("div","sk sk-page")); return; }
   if (r.error){ main.appendChild(el("p","empty", r.error)); return; }
-  const sv = r.saved || {}, x = Object.assign({}, sv.extra || {});
+  const sv = r.saved || {}, x = r.draft || (r.draft = Object.assign({}, sv.extra || {}));
   const form = el("div","bi-form"); let deck;
   const redraw = () => { const n = bilanSlides(r.data, x); deck.replaceWith(n); deck = n; };
   const sec = t => form.appendChild(el("h4","bi-fs", t));
@@ -686,7 +721,14 @@ function vBilans(root){
     if (!armed){ armed = true; sendB.textContent = "Confirmer l’envoi"; sendB.classList.add("armed"); toast("Le bilan apparaîtra dans l’onglet Bilans de l’espace de " + r.data.client.name + "."); return; }
     sendB.disabled = true; try { const out = await GC.api("PUT","/api/g-bilan/" + cur, { m, extra: x, send: true, html: deck.outerHTML }); r.saved = out.saved; BI.list = null; biLoadList(m); toast("Bilan envoyé dans l’espace du client."); render(); } catch(e){ toast(e.message); sendB.disabled = false; } });
   if (!curC.space){ sendB.disabled = true; sendB.title = "Ce client n’a pas d’espace client : imprime le bilan ou fais-en un PDF."; }
-  acts.append(btn("Enregistrer","lemon", send), sendB, btn("Imprimer ou PDF","", () => window.print()));
+  // « Générer le bilan » : l'appli remplit tout le bilan (chiffres Metricool, avis Google des fiches gérées), à relire puis enregistrer
+  let genArmed = false; const genB = btn("Générer le bilan","", async () => {
+    const filled = ["okPhrase","okList","decisions","topNum","chiffres","prevu"].some(k => String(x[k] || "").trim());
+    if (filled && !genArmed){ genArmed = true; genB.textContent = "Remplacer ce qui est écrit ?"; genB.classList.add("armed"); return; }
+    genB.disabled = true; genB.textContent = "Calcul en cours…";
+    try { const out = await GC.api("POST","/api/g-bilan/" + cur + "/genere", { m }); r.draft = Object.assign(x, out.extra || {}); toast("Bilan rempli : relis, corrige si besoin, puis Enregistrer."); render(); }
+    catch(e){ toast(e.message); genB.disabled = false; genB.textContent = "Générer le bilan"; } });
+  acts.append(genB, btn("Enregistrer","lemon", send), sendB, btn("Imprimer ou PDF","", () => window.print()));
   if (sv.savedAt) acts.appendChild(el("span","muted bi-pubd","Enregistré le " + fmtFR(sv.savedAt.slice(0, 10)) + " par " + (sv.savedBy || "") + (sv.sent ? ", envoyé au client le " + fmtFR(sv.sent.at.slice(0, 10)) : "")));
   const col = el("div","bi-col"); col.append(acts, form); deck = bilanSlides(r.data, x); main.append(col, deck);
 }
@@ -711,7 +753,7 @@ const UNITES = [["Identité et imprimés",[["Logo","450 €"],["Charte complète
   ["Tournage et vidéo",[["Captation caméra, 1 h","175 €"],["Interview, 1 h","250 €"],["Captation drone, 1 h","350 €"],["Format complet, 1 h","435 €"],["Demi-journée caméra","600 €"],["Journée caméra","1 035 €"],["Demi-journée format complet","1 200 €"],["Journée format complet","1 915 €"]]],
   ["Photo, studio, montage",[["Shooting photo","350 €"],["Studio","75 € / h"],["Montage d’une vidéo courte","60 €"],["Vidéo longue","250 €"]]]];
 function vOffres(root){
-  const n = k => S.d.clients.filter(c => c.name !== AGENCE && k in svOf(c)).length;
+  const n = k => S.d.clients.filter(c => c.name !== AGENCE && !c.archived && k in svOf(c)).length;
   const g = el("div","of-grid");
   OFFRES.forEach(o => { const c = el("article","of-card" + (o.k === "meta" ? " hors" : ""));
     c.append(el("span","of-tag", o.tag), el("h2", null, o.name));
@@ -730,14 +772,15 @@ function vOffres(root){
   root.appendChild(u);
 }
 function vFiches(root){
-  const fiTab = ["offres","bilans"].includes(S.ui.fiTab) ? S.ui.fiTab : "clients";
-  root.appendChild(head("Tableau clients", fiTab === "bilans" ? "Le bilan du mois de chaque client, calculé par l’appli, pour faire le point avec lui. Interne : le client ne le voit pas dans son espace." : fiTab === "offres" ? "Les offres de l’agence et ce que chaque pack comprend. Prix hors taxes." : "Réservé à " + fullNames() + " : depuis quand, quels services, la formule et ce qu’il faut penser.", [segm([["clients","Clients"],["offres","Offres"],["bilans","Bilans"]], fiTab, v => { S.ui.fiTab = v; remember(); render(); }), fiTab === "clients" ? addBtn("Nouveau client", () => editClient({})) : null]));
+  const fiTab = ["offres","bilans","archives"].includes(S.ui.fiTab) ? S.ui.fiTab : "clients";
+  root.appendChild(head("Tableau clients", fiTab === "archives" ? "Les clients avec qui la collaboration s’est arrêtée : services, motif, notes et pièces jointes. Ils n’apparaissent plus dans les listes de l’appli." : fiTab === "bilans" ? "Le bilan du mois de chaque client, calculé par l’appli, pour faire le point avec lui. Interne : le client ne le voit pas dans son espace." : fiTab === "offres" ? "Les offres de l’agence et ce que chaque pack comprend. Prix hors taxes." : "Réservé à " + fullNames() + " : depuis quand, quels services, la formule et ce qu’il faut penser.", [segm([["clients","Clients"],["offres","Offres"],["bilans","Bilans"],["archives","Archives"]], fiTab, v => { S.ui.fiTab = v; remember(); render(); }), fiTab === "clients" ? addBtn("Nouveau client", () => editClient({})) : null]));
   if (fiTab === "offres") return vOffres(root);
   if (fiTab === "bilans") return vBilans(root);
+  if (fiTab === "archives") return vArchives(root);
   const f = el("div","filters ag-f"); const g = el("div","fgroup"); const lb = el("label","flabel","Service"); lb.htmlFor = "fi-sv"; const sel = el("select","pick"); sel.id = "fi-sv";
   [["","Tous les services"]].concat(SERVICES.map(x => [x[0], x[1]])).forEach(([v,l]) => { const o = el("option",null,l); o.value = v; sel.appendChild(o); }); sel.value = S.ui.fiSv || ""; sel.onchange = () => { S.ui.fiSv = sel.value; remember(); render(); };
   g.append(lb, sel); f.appendChild(g); root.appendChild(f);
-  const list = S.d.clients.filter(c => c.name !== AGENCE && (!SV_KEYS.includes(S.ui.fiSv) || S.ui.fiSv in svOf(c))).sort((a,b) => (a.since || "9999").localeCompare(b.since || "9999") || a.name.localeCompare(b.name,"fr"));
+  const list = S.d.clients.filter(c => c.name !== AGENCE && !c.archived && (!SV_KEYS.includes(S.ui.fiSv) || S.ui.fiSv in svOf(c))).sort((a,b) => (a.since || "9999").localeCompare(b.since || "9999") || a.name.localeCompare(b.name,"fr"));
   const {w, tb} = table(["Client","Depuis","Services","Contact et réseaux","~Formule","~Publications / mois","~À penser"]);
   const line = (tr, txt, cls) => { const c = td(tr, txt ? el("span","fi-1", txt) : el("span","muted","—"), cls); if (txt) c.title = txt; return c; };
   list.forEach(c => { const tr = el("tr","row fi-row"); tr.onclick = () => editClient(c);

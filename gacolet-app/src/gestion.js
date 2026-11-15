@@ -620,7 +620,7 @@ module.exports = function (app, { db, wrap, root }) {
       if (!canRead(u, r.col) || r.col === "game" || r.col === "gmail") continue;
       if (Number(r.deleted)) { docs.push({ col: r.col, id: r.id, deleted: true, data: null }); continue; }
       const d = JSON.parse(r.data || "{}");
-      if (r.col === "clients" && u.role !== "owner") { const keep = {}; ["name", "color", "title", "calendar", "leadWeeks", "recap", "logo"].forEach(k => { if (d[k] != null) keep[k] = d[k]; }); docs.push({ col: r.col, id: r.id, deleted: false, data: keep }); continue; }
+      if (r.col === "clients" && u.role !== "owner") { const keep = {}; ["name", "color", "title", "calendar", "leadWeeks", "recap", "logo", "archived"].forEach(k => { if (d[k] != null) keep[k] = d[k]; }); docs.push({ col: r.col, id: r.id, deleted: false, data: keep }); continue; }
       if (visible(u, r.col, d)) docs.push({ col: r.col, id: r.id, deleted: false, data: d });
       else if (since) docs.push({ col: r.col, id: r.id, deleted: true, data: null }); // n'est plus visible (réattribué...)
     }
@@ -1005,6 +1005,8 @@ module.exports = function (app, { db, wrap, root }) {
     let posts = [], postsError = "";
     if (mods.includes("com") && c.metricool_blog_id) { try { posts = await fetchMonth(c.metricool_blog_id, month); } catch (e) { postsError = "Planning Metricool indisponible."; } }
     else if (mods.includes("com")) postsError = "Pas de compte Metricool relié à ce client.";
+    // Les stories ne comptent pas comme publications du fil (elles restent comptées à part)
+    const storyCount = posts.filter(p => p.type === "Story").length; posts = posts.filter(p => p.type !== "Story");
     const nets = {}; posts.forEach(p => String(p.net || "").split(", ").filter(Boolean).forEach(n => { nets[n] = (nets[n] || 0) + 1; }));
     const types = {}; posts.forEach(p => { types[p.type] = (types[p.type] || 0) + 1; });
     const decs = await db.all("SELECT post_id, status FROM decisions WHERE client_id = ? AND post_date LIKE ? ORDER BY id", [cid, month + "%"]);
@@ -1024,7 +1026,7 @@ module.exports = function (app, { db, wrap, root }) {
       const f = (await db.all("SELECT data FROM docs WHERE col = 'clients' AND deleted = 0")).map(r => { try { return JSON.parse(r.data || "{}"); } catch (e) { return {}; } }).find(x => sameName(x.name, c.name)) || {};
       fiche = { formula: f.formula || c.formula || "", perMonth: f.perMonth || "" }; }
     return { client: { id: c.id, name: c.name, modules: mods }, month, prev, fiche,
-      posts: { count: posts.length, published: posts.filter(p => p.published || p.date < new Date().toISOString().slice(0, 10)).length, nets, types, list: posts.slice(0, 40).map(p => ({ date: p.date, type: p.type, net: p.net, title: p.title, url: p.url })), error: postsError },
+      posts: { count: posts.length, stories: storyCount, published: posts.filter(p => p.published || p.date < new Date().toISOString().slice(0, 10)).length, nets, types, list: posts.slice(0, 40).map(p => ({ date: p.date, type: p.type, net: p.net, title: p.title, url: p.url })), error: postsError },
       validations: { ok: vals.filter(v => v === "ok").length, mod: vals.filter(v => v === "mod").length },
       meta, shoots: { count: shoots.length, videos: vids.length, dates: shoots.map(s => s.date).sort() }, stats };
   }
@@ -1058,7 +1060,7 @@ module.exports = function (app, { db, wrap, root }) {
     const data = await bilanData(cid, m); if (!data) return res.status(404).json({ error: "Client introuvable." });
     const s = (v, n) => String(v == null ? "" : v).trim().slice(0, n), num = v => { const x = Number(String(v == null ? "" : v).replace(",", ".")); return isFinite(x) && x >= 0 ? Math.round(x) : null; };
     // Ce que l'agence ajoute au bilan : uniquement des champs texte connus, longueur bornée
-    const KEYS = ["chiffres", "topLabel", "topNum", "topTxt", "prevu", "remarques", "budget", "okPhrase", "okList", "koPhrase", "koList", "decisions", "besoins", "resumeTitre", "resumeTxt", "strategie"];
+    const KEYS = ["chiffres", "topLabel", "topNum", "topTxt", "prevu", "remarques", "budget", "okPhrase", "okList", "koPhrase", "koList", "decisions", "besoins", "resumeTitre", "resumeTxt", "strategie", "source"];
     const extra = {}; KEYS.forEach(k => { extra[k] = s(b.extra && b.extra[k], 4000); });
     const doc = { cid, month: m, data, extra, savedAt: new Date().toISOString(), savedBy: req.user.name, };
     // « Envoyer » : le bilan (les diapositives telles qu'affichées) part dans l'espace du client, onglet Bilans ; un nouvel envoi remplace le précédent
@@ -1070,6 +1072,8 @@ module.exports = function (app, { db, wrap, root }) {
     await put("_bilans", bilanId(cid, m), doc);
     res.json({ ok: true, saved: doc });
   }));
+
+  require("./bilangen")({ app, auth, ownerOnly, wrap, db, put, bilanData, normName });
 
   // ---------- Notifications push de l’équipe : le message s’affiche en entier, comme sur WhatsApp ----------
   const PUSH = require("./push")(db);
