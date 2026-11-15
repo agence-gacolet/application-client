@@ -93,9 +93,24 @@
   }
 
   const assets = {
-    async upload(file) {
-      const fd = new FormData(); fd.append("file", file, file.name);
-      return call("POST", "/api/g-upload", fd, true);
+    // Gros fichiers : envoi par morceaux de 8 Mo ; si la connexion ou le serveur coupe, on redemande où il en est et on reprend
+    async upload(file, onProgress) {
+      const SZ = 8 * 1024 * 1024;
+      if (file.size <= SZ) { const fd = new FormData(); fd.append("file", file, file.name); const r = await call("POST", "/api/g-upload", fd, true); if (onProgress) onProgress(1); return r; }
+      const id = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, "0")).join("");
+      const ext = ((file.name.match(/\.[a-z0-9]{1,7}$/i) || [""])[0]).toLowerCase(), q = "&total=" + file.size + "&ext=" + encodeURIComponent(ext) + "&type=" + encodeURIComponent(file.type || "");
+      let off = 0, fails = 0;
+      while (true) {
+        try {
+          const r = await call("POST", "/api/g-upload-chunk/" + id + "?off=" + off + q, file.slice(off, off + SZ), true);
+          fails = 0; off = r.size; if (onProgress) onProgress(off / file.size);
+          if (r.url) return r;
+        } catch (e) {
+          if (/Connexion requise/.test(e.message) || ++fails > 40) throw e;
+          await new Promise(ok => setTimeout(ok, Math.min(30000, 1500 * fails)));
+          try { off = (await call("GET", "/api/g-upload-chunk/" + id)).size; } catch (x) {}
+        }
+      }
     },
   };
   const user = { isOwner: async () => false, can: async () => true };

@@ -897,6 +897,28 @@ module.exports = function (app, { db, wrap, root }) {
     if (!f) return res.status(400).json({ error: "Aucun fichier reçu." });
     res.json({ id: f.filename, url: "/f/" + f.filename, contentType: f.mimetype, sizeBytes: f.size });
   });
+  // Envoi en morceaux (8 Mo) : chaque morceau est ajouté au fichier en cours ; un envoi coupé reprend là où il s'était arrêté
+  const rawBody = require("express").raw({ type: () => true, limit: "12mb" });
+  const partOf = id => path.join(DIR, id + ".part");
+  app.get("/api/g-upload-chunk/:id", auth, (req, res) => {
+    const id = String(req.params.id); if (!/^[a-f0-9]{32}$/.test(id)) return res.status(400).json({ error: "Envoi inconnu." });
+    let size = 0; try { size = fs.statSync(partOf(id)).size; } catch (e) {} res.json({ size });
+  });
+  app.post("/api/g-upload-chunk/:id", auth, (req, res, next) => { UPLOADS++; let d = false; const end = () => { if (!d) { d = true; UPLOADS--; } }; res.on("finish", end); res.on("close", end); next(); }, rawBody, (req, res) => {
+    const id = String(req.params.id), off = Number(req.query.off), total = Number(req.query.total);
+    const ext = String(req.query.ext || "").toLowerCase().replace(/[^.a-z0-9]/g, "").slice(0, 8), type = String(req.query.type || "").slice(0, 100);
+    if (!/^[a-f0-9]{32}$/.test(id) || !Number.isInteger(off) || off < 0 || !Number.isInteger(total) || total <= 0 || total > 2 * 1024 * 1024 * 1024 || !Buffer.isBuffer(req.body)) return res.status(400).json({ error: "Morceau invalide." });
+    const f = partOf(id); let size = 0; try { size = fs.statSync(f).size; } catch (e) {}
+    if (off > size) return res.status(409).json({ error: "Morceau manquant.", size });
+    if (off < size) fs.truncateSync(f, off);
+    fs.appendFileSync(f, req.body); size = off + req.body.length;
+    if (size < total) return res.json({ size });
+    if (size > total) { fs.unlinkSync(f); return res.status(400).json({ error: "Taille incorrecte, recommence l’envoi." }); }
+    const name = id + (ext && ext !== "." ? ext : ""); fs.renameSync(f, path.join(DIR, name));
+    res.json({ size, id: name, url: "/f/" + name, contentType: type, sizeBytes: size });
+  });
+  // Morceaux abandonnés depuis plus de 2 jours : supprimés
+  setInterval(() => { try { const lim = Date.now() - 2 * 86400000; fs.readdirSync(DIR).filter(n => n.endsWith(".part")).forEach(n => { const p = path.join(DIR, n); if (fs.statSync(p).mtimeMs < lim) fs.unlinkSync(p); }); } catch (e) {} }, 6 * 3600000).unref();
   app.get("/f/:name", (req, res) => {
     const n = path.basename(req.params.name);
     if (!/^[a-f0-9]{32}(\.[a-z0-9]{1,7})?$/.test(n)) return res.status(404).end();
