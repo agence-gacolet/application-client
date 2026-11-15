@@ -2071,8 +2071,8 @@ html.tg-lock,html.tg-lock body{overflow:hidden}
   .btn:not(:disabled):hover{transform:translateY(-1px);background:rgba(255,255,255,.06);box-shadow:0 4px 14px rgba(0,0,0,.35)}
   .btn.lemon:not(:disabled):hover{background:#D4FF5C;box-shadow:0 4px 18px rgba(198,255,51,.28)}
   .btn.rmb:not(:disabled):hover{background:#FF5A4E;border-color:#FF5A4E;color:#fff;box-shadow:0 4px 16px rgba(255,90,78,.3)}
-  .dp-tile:hover,.pb-card:hover{transform:translateY(-3px);box-shadow:0 10px 26px rgba(0,0,0,.45)}
-  .pd-prop:hover{transform:translateY(-1px)}
+  .dp-tile:hover,.pb-card:hover{box-shadow:0 10px 26px rgba(0,0,0,.45),0 0 0 1px rgba(198,255,51,.35)}
+  .dp-tile .btn:not(:disabled):hover,.pb-card .btn:not(:disabled):hover{transform:none}
 }
 @media (prefers-reduced-motion:reduce){ .btn,.dp-tile,.pb-card,.pd-prop{transition:none} .btn:hover,.dp-tile:hover,.pb-card:hover,.pd-prop:hover{transform:none} }
 @media (hover:hover){ .btn:not(:disabled):hover:active{transform:scale(.95)} }
