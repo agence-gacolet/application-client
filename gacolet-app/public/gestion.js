@@ -2879,7 +2879,8 @@ function vTournage(root){
       const h = el("h3", null, s.date ? fmtDL(s.date) + " " + s.date.slice(0, 4) : "Date à fixer");
       const meta = el("p","tg-meta", [s.time ? fmtTime(s.time) : "", s.duration, s.place, (s.team || []).join(", ")].filter(Boolean).join(" · "));
       const nv = tgVideos(s), np = nv.filter(v => v.kind !== "muet").length, nm = nv.length - np;
-      const cnt = el("p","tg-meta", [np ? plural(np, "réel parlé", "réels parlés") : "", nm ? plural(nm, "réel sans paroles", "réels sans paroles") : "", (s.photos || []).length ? plural(s.photos.length, "photo") : ""].filter(Boolean).join(", ") || "Aucune vidéo");
+      const nref = tgItems(s).filter(v => (v.files || []).length || tgLinks(v.links).length).length;
+      const cnt = el("p","tg-meta", [np ? plural(np, "réel parlé", "réels parlés") : "", nm ? plural(nm, "réel sans paroles", "réels sans paroles") : "", (s.photos || []).length ? plural(s.photos.length, "photo") : ""].filter(Boolean).join(", ") + (tgItems(s).length ? " · exemples : " + nref + " sur " + tgItems(s).length : "") || "Aucune vidéo");
       const bar = el("div","tg-bar"); const fill = el("span"); fill.style.width = (c.all ? Math.round(100 * (c.done + c.ko) / c.all) : 0) + "%"; bar.appendChild(fill);
       const prog = el("p","tg-meta", c.done || c.ko ? c.done + " fait" + (c.done > 1 ? "s" : "") + (c.ko ? ", " + c.ko + " pas possible" + (c.ko > 1 ? "s" : "") : "") + " sur " + c.all : "Pas encore tourné");
       const act = el("div","tg-act");
@@ -3080,6 +3081,7 @@ function tgLive(s0){
             vd.onerror = () => { const a3 = el("a","tg-emb tg-nov"); a3.href = u; a3.target = "_blank"; a3.rel = "noopener"; a3.append(el("b", null, "▶︎"), el("span", null, (fl.name || "Vidéo") + " : ouvrir la vidéo")); vd.replaceWith(a3); }; rw.appendChild(vd); }
           else { const a2 = el("a","tg-file", fl.name || "Fichier"); a2.href = u; a2.target = "_blank"; a2.rel = "noopener"; rw.appendChild(a2); } });
         card.appendChild(rw); }
+      else { const nr = el("div","tg-noref"); nr.appendChild(el("span", null, "Aucun exemple ajouté pour cette " + (v.kind === "photo" ? "photo" : "vidéo") + ".")); nr.appendChild(btn("Ajouter un exemple","sm", () => { close(); tgEdit(s0); })); card.appendChild(nr); }
       const plain = links.filter(u => !tgEmbed(tgHref(u) || u)); if (plain.length){ const ul = el("div","tg-links"); plain.forEach(u => { const h = tgHref(u); const a = el(h ? "a" : "span", null, u.replace(/^https?:\/\/(www\.)?/, "")); if (h){ a.href = h; a.target = "_blank"; a.rel = "noopener"; } ul.appendChild(a); }); card.appendChild(ul); }
       /* fichiers de référence : affichés plus haut avec les liens */
       if (v.status) card.appendChild(el("div","tg-state " + v.status, v.status === "fait" ? "Fait" : "Pas possible"));

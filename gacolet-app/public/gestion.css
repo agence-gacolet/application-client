@@ -1974,3 +1974,4 @@ html.tg-lock,html.tg-lock body{overflow:hidden}
 .tg-refs img.tg-emb{object-fit:contain}
 .tg-refs .tg-nov{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-decoration:none;color:var(--ink);border:1px solid var(--line-2);padding:16px;text-align:center}.tg-nov b{font-size:34px;color:#C6FF33}
 .pd-reco{flex-basis:100%;color:#C6FF33}
+.tg-noref{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px;border:1px dashed var(--line-2);border-radius:12px;color:var(--muted);font-size:14px}
