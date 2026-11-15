@@ -151,7 +151,7 @@ module.exports = function (app, { db, wrap, root }) {
     if (col === "messages" && String(d.ch || "").startsWith("cdm:")) return String(d.ch).split("|")[1] === u.name;
     if (col === "vrooms") return (d.members || []).includes(u.name); // salon vocal privé : seulement ses participants, accès complet compris
     if (u.role === "owner") return true;
-    if (col === "tasks") return d.who === u.name;
+    if (col === "tasks") return d.who === u.name || d.createdBy === u.name; // ses tâches et celles qu’on a données
     if (col === "commercial") return (d.owner || "Gabriel") === u.name; // chaque commercial ne voit que ses lignes
     return true;
   }
@@ -175,7 +175,9 @@ module.exports = function (app, { db, wrap, root }) {
     if (u.role === "owner") return "";
     if (!canWriteCol(u, col)) return "Tes accès ne permettent pas de modifier cette partie.";
     if (col === "tasks") {
-      if ((before && before.who !== u.name) || (after && after.who !== u.name)) return "Tu ne peux gérer que tes propres tâches.";
+      // Tout le monde peut donner une tâche à n’importe qui (Matis, 15/11/2026) ; on modifie celles qu’on a reçues ou données.
+      if (before && before.who !== u.name && before.createdBy !== u.name) return "Tu ne peux modifier que tes tâches et celles que tu as données.";
+      if (after && after.createdBy !== (before ? before.createdBy : u.name) && !(before && before.who === u.name)) return "Tâche refusée.";
     }
     if (col === "commercial") {
       if ((before && (before.owner || "Gabriel") !== u.name) || (after && (after.owner || "Gabriel") !== u.name)) return "Tu ne peux gérer que tes propres prospects.";

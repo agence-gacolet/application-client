@@ -118,7 +118,7 @@ button{margin-top:20px;width:100%;padding:13px;border:0;border-radius:10px;backg
         out.sort((x, y) => String(x.date || x.updatedAt || "").localeCompare(String(y.date || y.updatedAt || "")));
         return { total: out.length, elements: out.slice(0, n) };
       } },
-    { name: "ajouter_tache", description: "Crée une tâche dans l'appli. Pas de note de suivi (« Demandé par… ») : une note seulement si la personne la dicte. Un compte sans accès complet ne peut créer que ses propres tâches.",
+    { name: "ajouter_tache", description: "Crée une tâche dans l'appli. Pas de note de suivi (« Demandé par… ») : une note seulement si la personne la dicte. On peut donner une tâche à n'importe qui de l'équipe.",
       inputSchema: { type: "object", properties: { qui: { type: "string", description: "prénom du responsable (voir qui_suis_je)" }, titre: { type: "string" }, client: { type: "string", description: "nom du client tel qu'il est dans l'appli, ou « Agence Gacolet »" }, date: { type: "string", description: "date de rendu AAAA-MM-JJ" }, pole: { type: "string", enum: ["00", "10", "20", "30", "40", "50", "60"], description: "deviné d'après le titre si absent" }, date_publication: { type: "string", description: "AAAA-MM-JJ, reportée dans le calendrier éditorial du client" }, note: { type: "string" } }, required: ["qui", "titre"] },
       run: async (req, a) => {
         const titre = S(a.titre, 300); if (!titre) throw new Error("Titre vide.");
