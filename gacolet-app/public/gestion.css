@@ -1977,3 +1977,41 @@ html.tg-lock,html.tg-lock body{overflow:hidden}
 .tg-noref{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px;border:1px dashed var(--line-2);border-radius:12px;color:var(--muted);font-size:14px}
 /* Grands écrans : le contenu s'élargit, sans agrandir le texte (l'agrandissement rendait flou) */
 @media (min-width:1700px){.in{max-width:min(1760px,90vw)}}
+
+/* ===== Messagerie façon iMessage (15/11/2026, Matis : « inspire-toi de WhatsApp ou Apple, beaucoup plus beau ») ===== */
+.wa{--im-in:#262629}
+.wa-conv,.wa-msgs{background:#000!important;background-image:none!important}
+.wa-msgs{padding:12px 22px 14px}
+.wa-day{margin:20px 0 8px;text-align:center;font-size:11px;font-weight:600;letter-spacing:.01em;color:#8E8E93!important}
+.wa-line{margin-top:10px;max-width:66%;gap:8px}
+.wa-line.cont{margin-top:2px}
+.wa-line .av{width:28px!important;height:28px!important}
+.wa-line .av-sp{width:28px}
+.wa-name{display:block;margin:0 0 3px 13px;font-size:11.5px;font-weight:500;letter-spacing:.01em;color:#8E8E93!important;cursor:pointer}
+.wa-bub{background:var(--im-in);border:0!important;color:#fff;padding:7px 13px 8px;border-radius:19px!important;gap:3px;box-shadow:none}
+.wa-line.mine .wa-bub{background:#0A84FF;color:#fff}
+.wa-txt{font-size:15px;line-height:1.36;letter-spacing:-.005em;color:inherit}
+/* Queue arrondie sous la dernière bulle d'un groupe */
+.wa-line.tail .wa-bub:not(:has(>.wa-img)):not(:has(>.wa-vid))::before{content:"";position:absolute;bottom:0;width:20px;height:20px;z-index:-1}
+.wa-line.tail .wa-bub:not(:has(>.wa-img)):not(:has(>.wa-vid))::after{content:"";position:absolute;bottom:0;width:10px;height:20px;background:#000;z-index:-1}
+.wa-line.tail:not(.mine) .wa-bub::before{left:-7px;background:var(--im-in);border-bottom-right-radius:16px}
+.wa-line.tail:not(.mine) .wa-bub::after{left:-10px;border-bottom-right-radius:10px}
+.wa-line.tail.mine .wa-bub::before{right:-7px;background:#0A84FF;border-bottom-left-radius:16px}
+.wa-line.tail.mine .wa-bub::after{right:-10px;border-bottom-left-radius:10px}
+.wa-bub{isolation:isolate}
+.wa-quote{background:rgba(255,255,255,.08)!important;border-radius:12px;padding:6px 10px}
+.wa-line.mine .wa-quote{background:rgba(255,255,255,.18)!important}
+.wa-re{margin-top:-6px;padding:0 6px}
+.wa-re button{background:#2C2C2E!important;border:2px solid #000!important;border-radius:999px;padding:1px 7px;color:#fff}
+.wa-re button.on{background:#0A84FF!important}
+.wa-seen{font-size:11px;font-weight:500;color:#8E8E93;margin-top:4px}
+.wa-typing{background:var(--im-in)!important;border:0!important;border-radius:19px;margin-left:36px}
+/* Barre d'écriture */
+.wa-form{background:rgba(0,0,0,.85)!important;border-top:1px solid rgba(255,255,255,.06)!important;padding:8px 14px 10px}
+.wa-bar textarea{background:#1C1C1E;border:1px solid #2C2C2E!important;border-radius:20px!important;min-height:38px;padding:9px 15px;font-size:15px;color:#fff}
+.wa-bar textarea:focus{border-color:#3A3A3C!important}
+.wa-send{width:32px;height:32px;border-radius:50%;background:#0A84FF!important;color:#fff!important}
+.wa-ic{color:#8E8E93}
+@media (max-width:760px){ .wa-msgs{padding:10px 12px 12px} .wa-line{max-width:82%} .wa-txt{font-size:16px} }
+/* Rushs : la note sur sa propre ligne, en encart (Matis, 15/11/2026) */
+.ru-note{margin-top:6px;padding:5px 10px;border-left:2px solid var(--lemon);border-radius:0 8px 8px 0;background:rgba(198,255,51,.06);font-size:var(--fs-s);line-height:1.45;color:var(--ink-2);white-space:pre-wrap;max-width:60ch}

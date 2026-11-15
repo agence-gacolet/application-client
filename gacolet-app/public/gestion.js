@@ -1432,7 +1432,7 @@ function vMontage(root){
   { const {w, tb} = table(["Client","Rush","Tâche"]);
     rows.forEach(r => { const tr = el("tr","row"); tr.onclick = () => editRush(r); const t = rushTask(r);
       const cc = el("div"); cc.appendChild(clientTag(r.client)); if (r.shotAt) cc.appendChild(el("div","note","tourné le " + fmtD(r.shotAt))); td(tr, cc,"nw");
-      const c = el("div"); c.appendChild(el("div","ttl", r.content || "")); const sub = [r.shoot ? "tournage : " + r.shoot.replace(/\s+[-–]\s+(Matis|Clara)\s*$/i, "") : "", r.note || ""].filter(Boolean).join(", "); if (sub) c.appendChild(el("div","note", sub)); const l = linkNode(r.link, "Rushs"); if (l instanceof Node){ l.onclick = e => e.stopPropagation(); c.appendChild(l); } td(tr, c,"w");
+      const c = el("div"); c.appendChild(el("div","ttl", r.content || "")); if (r.shoot) c.appendChild(el("div","note", "tournage : " + r.shoot.replace(/\s+[-–]\s+(Matis|Clara)\s*$/i, ""))); if (r.note) c.appendChild(el("div","ru-note", r.note)); const l = linkNode(r.link, "Rushs"); if (l instanceof Node){ l.onclick = e => e.stopPropagation(); c.appendChild(l); } td(tr, c,"w");
       if (t) td(tr, el("span","pill l1", (t.who || "Tâche") + (t.date ? ", " + fmtD(t.date) : "")),"nw");
       else { const b = btn("+ Tâche","sm", e => { e.stopPropagation(); rushToTask(r); }); b.title = "Créer la tâche de montage"; b.disabled = !writable(); td(tr, b,"nw"); }
       tb.appendChild(tr); });
@@ -2566,7 +2566,7 @@ function vMessagerie(root){
     const line = el("div","wa-line" + (mine ? " mine" : "") + (grouped ? " cont" : "") + (fresh ? " new" : "")); line.id = "m-" + m.id;
     if (!mine){ if (grouped) line.appendChild(el("span","av-sp")); else { const av = avatarEl(m.who, 30); av.classList.add("av-click"); av.title = "Voir le profil de " + m.who; av.onclick = () => profileCard(m.who); line.appendChild(av); } }
     const bub = el("div","wa-bub");
-    if (!mine && !grouped){ const nm = el("b","wa-name",m.who || ""); nm.style.color = avColor(m.who); nm.onclick = e => { e.stopPropagation(); profileCard(m.who); }; bub.appendChild(nm); }
+    let nm = null; if (!mine && !grouped){ nm = el("b","wa-name",m.who || ""); nm.onclick = e => { e.stopPropagation(); profileCard(m.who); }; }
     if (m.fwd) bub.appendChild(el("span","wa-fwd","Transféré"));
     if (m.ext && !grouped) bub.appendChild(el("span","wa-ext","Client"));
     if (m.rep){ const q = el("button","wa-quote"); q.type = "button"; q.append(el("b",null,m.rep.who === me ? "Vous" : m.rep.who), el("span",null,m.rep.text || ""));
@@ -2577,7 +2577,7 @@ function vMessagerie(root){
     const tm = el("span","wa-time", hhmm(md));
     if (mine){ const tk = el("span","wa-tk"); tk.dataset.at = m.at || ""; tk.innerHTML = '<svg viewBox="0 0 18 12" aria-hidden="true"><path d="M1 6.5 4.5 10 11 2.5M7 9.5l.5.5L14 2.5"/></svg>'; tk.title = "Envoyé"; tm.appendChild(tk); }
     bub.appendChild(tm);
-    const col = el("div","wa-col"); col.appendChild(bub);
+    const col = el("div","wa-col"); if (nm) col.appendChild(nm); col.appendChild(bub);
     const rk = Object.keys(m.re || {}).filter(k => (m.re[k] || []).length);
     if (rk.length){ const rr = el("div","wa-re"); rk.forEach(k => { const b = el("button", (m.re[k].includes(me) ? "on" : null)); b.type = "button"; b.title = m.re[k].join(", "); b.append(document.createTextNode(k), el("span",null,String(m.re[k].length))); b.onclick = e => { e.stopPropagation(); react(m, k); }; rr.appendChild(b); }); col.appendChild(rr); }
     if (lastMine && m.id === lastMine.id){ const sv = el("span","wa-seen","Distribué"); sv.id = "wa-seen"; sv.dataset.at = m.at || ""; col.appendChild(sv); }
