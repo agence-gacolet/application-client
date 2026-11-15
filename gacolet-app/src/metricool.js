@@ -89,4 +89,19 @@ async function fetchMonth(blogId, month) {
   return posts;
 }
 
-module.exports = { fetchScheduled, fetchMonth };
+module.exports = { publishDraft, fetchScheduled, fetchMonth };
+
+// Brouillon soumis au client puis validé dans son espace : il passe en publication programmée (même contenu, draft à false)
+async function publishDraft(blogId, mcId, day) {
+  const tok = process.env.METRICOOL_USER_TOKEN; if (!tok || !blogId) return false;
+  const id = String(mcId).replace(/^mc/, ""), d0 = new Date((day || new Date().toISOString().slice(0, 10)) + "T12:00:00"), d1 = new Date(d0);
+  d0.setDate(d0.getDate() - 2); d1.setDate(d1.getDate() + 2);
+  const q = new URLSearchParams({ blogId, userId: process.env.METRICOOL_USER_ID || "", start: isoDay(d0), end: isoDay(d1, true), timezone: "Europe/Paris" });
+  const r = await fetch(BASE + PATH_SCHEDULED + "?" + q, { headers: { "X-Mc-Auth": tok, Accept: "application/json" } }); if (!r.ok) return false;
+  const j = await r.json(), arr = Array.isArray(j) ? j : Array.isArray(j.data) ? j.data : [], p = arr.find(x => String(x.id) === id);
+  if (!p || !p.draft) return false;
+  const body = Object.assign({}, p, { draft: false });
+  const u = await fetch(BASE + PATH_SCHEDULED + "/" + id + "?" + new URLSearchParams({ blogId, userId: process.env.METRICOOL_USER_ID || "" }), { method: "PUT", headers: { "X-Mc-Auth": tok, Accept: "application/json", "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  cache.clear(); return u.ok;
+}
+

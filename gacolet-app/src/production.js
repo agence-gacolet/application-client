@@ -27,18 +27,34 @@ module.exports = function production({ app, auth, wrap, db, current, put, pubPla
 
   // Créneaux proposés : à la suite des publications déjà programmées, au rythme de la formule (posts par mois), jamais deux le même jour
   app.get("/api/g-prod/slots", auth, wrap(async (req, res) => {
+    // Date conseillée : selon ce qui est déjà publié ou programmé ce mois-ci, ce qui manque pour la formule (posts par mois),
+    // les jours de publication écrits dans la fiche ou la stratégie (« mardi 12 h », « le lundi »), jamais deux le même jour
     const name = String(req.query.client || ""), n = Math.max(1, Math.min(20, Number(req.query.n) || 1));
-    const { fiche } = await clientContext(name), blog = blogOf(name), hour = usualHour(fiche), gap = Math.max(1, Math.floor(30 / perMonth(fiche)));
-    const taken = new Set(); let last = "";
+    const { fiche, strat } = await clientContext(name), blog = blogOf(name), hour = usualHour(fiche), plan = perMonth(fiche);
+    const DAYS = ["dimanche","lundi","mardi","mercredi","jeudi","vendredi","samedi"], rythme = (String(strat).match(/##\s*Rythme[\s\S]*?(?=\n##\s|$)/i) || [""])[0] + " " + (fiche.perMonth || "");
+    const pref = DAYS.map((d, k) => new RegExp("\\b" + d + "s?\\b", "i").test(rythme) ? k : -1).filter(k => k >= 0);
+    const hm = String(rythme).match(/(\d{1,2})\s*h\s*(\d{2})?/); const H = hm ? String(hm[1]).padStart(2, "0") + ":" + (hm[2] || "00") : hour;
+    const taken = new Map(), iso = x => x.toISOString().slice(0, 10), now = new Date(), m0 = new Date(now.getFullYear(), now.getMonth(), 1, 12);
     if (blog && process.env.METRICOOL_USER_TOKEN) {
-      const from = new Date(), to = new Date(); to.setDate(to.getDate() + 60); const d = x => x.toISOString().slice(0, 10);
-      try { const j = await mc("GET", "/v2/scheduler/posts", { blogId: blog, start: d(from) + "T00:00:00", end: d(to) + "T23:59:59", timezone: "Europe/Paris" });
-        (Array.isArray(j) ? j : (j && j.data) || []).forEach(p => { const day = String((p.publicationDate && p.publicationDate.dateTime) || "").slice(0, 10); if (day){ taken.add(day); if (day > last) last = day; } }); } catch (e) {}
+      const to = new Date(); to.setDate(to.getDate() + 75);
+      try { const j = await mc("GET", "/v2/scheduler/posts", { blogId: blog, start: iso(m0) + "T00:00:00", end: iso(to) + "T23:59:59", timezone: "Europe/Paris" });
+        (Array.isArray(j) ? j : (j && j.data) || []).filter(p => !p.draft && !((p.instagramData || {}).type === "STORY")).forEach(p => { const day = String((p.publicationDate && p.publicationDate.dateTime) || "").slice(0, 10); if (day) taken.set(day, (taken.get(day) || 0) + 1); }); } catch (e) {}
     }
-    const out = []; const t0 = new Date(); t0.setDate(t0.getDate() + 1);
-    let cur = last ? new Date(last + "T12:00:00") : new Date(t0); if (last) cur.setDate(cur.getDate() + gap); if (cur < t0) cur = t0;
-    while (out.length < n) { const day = cur.toISOString().slice(0, 10); if (!taken.has(day)) { out.push({ date: day, time: hour }); taken.add(day); cur.setDate(cur.getDate() + gap); } else cur.setDate(cur.getDate() + 1); }
-    res.json({ slots: out, blog: !!blog, hour, perMonth: perMonth(fiche) });
+    const out = []; const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1); tomorrow.setHours(12);
+    const monthOf = d => iso(d).slice(0, 7), countIn = mk => [...taken.entries()].filter(([d]) => d.startsWith(mk)).reduce((a, [, c]) => a + c, 0);
+    let cur = new Date(tomorrow), guard = 0;
+    while (out.length < n && guard++ < 400) {
+      const mk = monthOf(cur), done = countIn(mk) + out.filter(o => o.date.startsWith(mk)).length;
+      if (done >= plan) { cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1, 12); continue; }   // mois déjà complet : on passe au suivant
+      const last = new Date(cur.getFullYear(), cur.getMonth() + 1, 0, 12), daysLeft = Math.max(1, Math.round((last - cur) / 864e5) + 1), gap = Math.max(1, Math.floor(daysLeft / (plan - done)));
+      // premier jour libre à partir de cur, de préférence un jour prévu par la stratégie
+      let pick = null; for (let k = 0; k < Math.min(gap + 6, daysLeft) && !pick; k++){ const d = new Date(cur); d.setDate(cur.getDate() + k); const day = iso(d); if (taken.has(day) || out.some(o => o.date === day)) continue; if (!pref.length || pref.includes(d.getDay())) pick = d; }
+      if (!pick) { for (let k = 0; k < daysLeft && !pick; k++){ const d = new Date(cur); d.setDate(cur.getDate() + k); const day = iso(d); if (!taken.has(day) && !out.some(o => o.date === day)) pick = d; } }
+      if (!pick) { cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1, 12); continue; }
+      out.push({ date: iso(pick), time: H, why: (plan - done) + " publication" + (plan - done > 1 ? "s" : "") + " encore à faire en " + mk });
+      cur = new Date(pick); cur.setDate(pick.getDate() + gap);
+    }
+    res.json({ slots: out, blog: !!blog, hour: H, perMonth: plan, days: pref.map(k => DAYS[k]), thisMonth: countIn(monthOf(now)) });
   }));
 
   // Sans clé Claude : la demande part dans une file (_descq) ; Claude Code, sur le Mac de l'agence, la traite toutes les 10 minutes
@@ -84,15 +100,19 @@ module.exports = function production({ app, auth, wrap, db, current, put, pubPla
     const b = req.body || {}, name = String(b.client || ""), blog = blogOf(name);
     if (!blog) return res.status(400).json({ error: "Pas de marque Metricool connue pour " + name + "." });
     const base = (req.get("x-forwarded-proto") || req.protocol) + "://" + req.get("host"), out = [];
+    // Mode : « draft » = brouillon Metricool ; « review » = brouillon soumis au client dans son espace (À valider), programmé tout seul quand il valide ; « publish » = programmé
+    const mode = ["draft", "review", "publish"].includes(b.mode) ? b.mode : "review";
     for (const it of (Array.isArray(b.items) ? b.items : []).slice(0, 20)) {
       const url = String(it.url || ""); if (!/^\/f\/[a-f0-9]{32}(\.[a-z0-9]{1,7})?$/.test(url)) { out.push({ ok: false, error: "Fichier invalide." }); continue; }
       if (!/^\d{4}-\d{2}-\d{2}$/.test(it.date || "") || !/^\d{2}:\d{2}$/.test(it.time || "")) { out.push({ ok: false, error: "Date ou heure invalide." }); continue; }
       const video = it.kind === "video", nets = (Array.isArray(it.networks) && it.networks.length ? it.networks : ["instagram", "facebook"]).filter(x => ["instagram", "facebook"].includes(x));
       const info = { publicationDate: { dateTime: it.date + "T" + it.time + ":00", timezone: "Europe/Paris" }, text: String(it.text || "").slice(0, 2200), providers: nets.map(network => ({ network })),
-        media: [base + url], autoPublish: true, draft: false, shortener: false, descendants: [], firstCommentText: "", hasNotReadNotes: false, mediaAltText: [], smartLinkData: { ids: [] } };
+        media: [base + url], autoPublish: true, draft: mode !== "publish", shortener: false, descendants: [], firstCommentText: "", hasNotReadNotes: false, mediaAltText: [], smartLinkData: { ids: [] } };
       if (nets.includes("instagram")) info.instagramData = { type: video ? "REEL" : "POST", showReelOnFeed: true };
       if (nets.includes("facebook")) info.facebookData = { type: video ? "REEL" : "POST" };
-      try { await mc("POST", "/v2/scheduler/posts", { blogId: blog }, info); out.push({ ok: true, date: it.date, time: it.time }); }
+      try { const r = await mc("POST", "/v2/scheduler/posts", { blogId: blog }, info); const id = r && (r.id || (r.data && r.data.id));
+        if (mode === "review" && id) await put("_prodrev", "mc" + id, { blog, client: name, at: new Date().toISOString() });
+        out.push({ ok: true, date: it.date, time: it.time, mode }); }
       catch (e) { out.push({ ok: false, error: e.message }); }
     }
     res.json({ results: out });

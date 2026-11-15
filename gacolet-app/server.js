@@ -6,7 +6,7 @@ const crypto = require("crypto");
 const express = require("express");
 const multer = require("multer");
 const db = require("./src/db");
-const { fetchScheduled } = require("./src/metricool");
+const { fetchScheduled, publishDraft } = require("./src/metricool");
 
 const app = express();
 app.disable("x-powered-by");
@@ -113,6 +113,9 @@ app.post("/api/decision", mw(auth), wrap(async (req, res) => {
   if (status === "mod" && !clean(note)) return res.status(400).json({ error: "Écrivez ce qu'il faut changer." });
   await db.run("INSERT INTO decisions (client_id, post_id, post_title, post_date, status, note, user_id, created_at) VALUES (?,?,?,?,?,?,?,?)",
     [req.client.id, postId, clean(title, 200), clean(date, 30), status, clean(note, 2000), req.user.id, now()]);
+  // Publication déposée « en validation client » : validée ici, elle passe de brouillon à programmée dans Metricool
+  if (status === "ok") { try { const rv = await db.one("SELECT data FROM docs WHERE col = '_prodrev' AND id = ? AND deleted = 0", [postId]);
+    if (rv) { const ok = await publishDraft(req.client.metricool_blog_id, postId, String(date || "").slice(0, 10)); if (ok) await db.run("UPDATE docs SET deleted = 1 WHERE col = '_prodrev' AND id = ?", [postId]); } } catch (e) { console.error("publishDraft", e.message); } }
   res.json({ ok: true });
 }));
 
