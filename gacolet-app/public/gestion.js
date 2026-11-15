@@ -1581,10 +1581,12 @@ function vStrategie(root){
    programmé) et trois descriptions écrites par Claude d'après sa fiche et sa stratégie ; on choisit, on corrige, puis tout part dans Metricool. */
 function prodDrop(clients){
   if (!clients.length){ toast("Liste des clients Metricool en cours de chargement, réessaie dans un instant."); return; }
+  let next = {}, showNext = () => {};
+  const loadNext = async () => { try { const r = await GC.api("GET","/api/g-prod/slots?client=" + encodeURIComponent(client) + "&n=1"); const s0 = r.slots[0] || {}; next = { date: s0.date || "", time: s0.time || "", why: s0.why || "" }; showNext(); } catch(e){} };
   const items = []; let client = clients.includes(S.ui.prodC) ? S.ui.prodC : clients[0], status = null, mode = ["draft","review","publish"].includes(S.ui.prodMode) ? S.ui.prodMode : "review";
   GC.api("GET","/api/g-prod/status").then(r => { status = r; draw(); }).catch(() => {});
   let m0; const draw = () => { if (!m0) return; const body = m0.querySelector(".pd-body"); body.textContent = "";
-    if (!items.length) body.appendChild(el("p","empty","Dépose une ou plusieurs vidéos ou visuels ci-dessus."));
+    if (!items.length) body.appendChild(el("p","empty","Dépose une ou plusieurs vidéos ou visuels ci-dessus. Pour chacun : la date conseillée (modifiable), de quoi parle la production, puis « Proposer des descriptions »."));
     items.forEach((it, i) => { const c = el("div","pd-it");
       const top = el("div","pd-top"); const th = it.kind === "video" ? el("video","pd-th") : el("img","pd-th"); if (it.url){ th.src = it.url; if (it.kind === "video"){ th.muted = true; th.preload = "metadata"; } } top.appendChild(th);
       const meta = el("div","pd-meta"); meta.appendChild(el("b", null, it.name)); meta.appendChild(el("span","note", it.busy ? "Envoi du fichier…" : it.kind === "video" ? "Réel" : "Publication"));
@@ -1601,13 +1603,15 @@ function prodDrop(clients){
       const ta = el("textarea"); ta.rows = 5; ta.placeholder = "Description qui sera publiée"; ta.value = it.text || ""; ta.oninput = () => it.text = ta.value; c.appendChild(ta);
       body.appendChild(c); });
     const go = m0.querySelector(".pd-go"); go.disabled = !items.length || items.some(x => x.busy || !x.url); const verb = { draft: "Mettre en brouillon", review: "Envoyer en validation", publish: "Programmer" }[mode]; go.textContent = items.length ? verb + " (" + items.length + ")" : verb; };
-  const slots = async () => { const need = items.filter(x => !x.date); if (!need.length) return; try { const r = await GC.api("GET","/api/g-prod/slots?client=" + encodeURIComponent(client) + "&n=" + items.length);
+  const slots = async () => { const need = items.filter(x => !x.date); if (!need.length) return;
+    if (next.date && !items.some(x => x.date === next.date)){ const x0 = need.shift(); x0.date = next.date; x0.time = next.time; x0.reco = next.edited ? "date choisie" : next.why || true; draw(); if (!need.length) return; }
+    try { const r = await GC.api("GET","/api/g-prod/slots?client=" + encodeURIComponent(client) + "&n=" + items.length);
     const used = new Set(items.filter(x => x.date).map(x => x.date)); const free = r.slots.filter(s => !used.has(s.date)); need.forEach(x => { const s = free.shift(); if (s){ x.date = s.date; x.time = s.time; x.reco = s.why || true; } }); draw(); } catch(e){ toast(e.message); } };
   openModal(m => { m0 = m; m.classList.add("pd-modal");
     const t = el("h3", null, "Déposer des productions"); t.id = "mtitle"; m.appendChild(t);
     m.appendChild(el("p","muted","Les dates suivent le rythme de la formule du client, après ce qui est déjà programmé. Tout est modifiable avant l’envoi."));
     const f = el("div","form"); const l = el("label", null, "Client"); const sel = el("select"); clients.forEach(n => { const o = el("option", null, n); o.value = n; sel.appendChild(o); }); sel.value = client;
-    sel.onchange = () => { client = sel.value; S.ui.prodC = client; remember(); items.forEach(x => { x.date = ""; x.props = null; }); slots(); draw(); }; l.appendChild(sel); f.appendChild(l);
+    sel.onchange = () => { client = sel.value; S.ui.prodC = client; remember(); items.forEach(x => { x.date = ""; x.props = null; }); loadNext(); slots(); draw(); }; l.appendChild(sel); f.appendChild(l);
     const dz = el("label","pd-drop"); dz.innerHTML = "<b>Choisir ou glisser les vidéos et visuels</b><span>MP4, MOV, JPG, PNG</span>"; const fi = el("input"); fi.type = "file"; fi.multiple = true; fi.accept = "video/*,image/*"; fi.hidden = true; dz.appendChild(fi);
     const add = files => { [...files].forEach(file => { const it = { name: file.name, kind: /^video\//.test(file.type) ? "video" : "image", busy: true, url: "", text: "", subject: "" }; items.push(it);
       S.assets.upload(file).then(r => { it.url = r.url; it.busy = false; draw(); }).catch(e => { it.busy = false; toast(file.name + " : " + e.message); items.splice(items.indexOf(it), 1); draw(); }); }); draw(); slots(); };
@@ -1615,8 +1619,16 @@ function prodDrop(clients){
     f.appendChild(dz);
     const ml = el("div","form-who"); ml.appendChild(el("div","flabel","Envoi dans Metricool"));
     const mnote = el("p","note"); const MODES = { draft: "Brouillon : rien n’est publié, à reprendre dans Metricool.", review: "Validation client : la publication apparaît dans l’onglet « À valider » de son espace ; quand il valide, elle est programmée toute seule.", publish: "Programmer : publiée à la date choisie, sans validation." };
-    ml.appendChild(segm([["draft","Brouillon"],["review","Validation client"],["publish","Programmer"]], mode, v => { mode = v; S.ui.prodMode = v; remember(); mnote.textContent = MODES[v]; draw(); }));
-    mnote.textContent = MODES[mode]; ml.appendChild(mnote); f.appendChild(ml); m.appendChild(f);
+    const mkSeg = () => segm([["draft","Brouillon"],["review","Validation client"],["publish","Programmer"]], mode, v => { mode = v; S.ui.prodMode = v; remember(); mnote.textContent = MODES[v]; const n2 = mkSeg(); sg.replaceWith(n2); sg = n2; draw(); });
+    let sg = mkSeg(); ml.appendChild(sg);
+    mnote.textContent = MODES[mode]; ml.appendChild(mnote); f.appendChild(ml);
+    // Date conseillée visible dès l'ouverture (modifiable) : elle sert de date au premier fichier déposé
+    const rl = el("div","form-who pd-next"); rl.appendChild(el("div","flabel","Prochaine date conseillée"));
+    const rrow = el("div","pd-dt"); const rd = el("input"); rd.type = "date"; const rt = el("input"); rt.type = "time"; const rwhy = el("span","note pd-reco");
+    rd.onchange = () => { next.date = rd.value; next.edited = true; }; rt.onchange = () => { next.time = rt.value; next.edited = true; };
+    rrow.append(rd, rt); rl.append(rrow, rwhy); f.appendChild(rl); m.appendChild(f);
+    showNext = () => { rd.value = next.date || ""; rt.value = next.time || ""; rwhy.textContent = next.why ? "Pourquoi : " + next.why : ""; };
+    loadNext();
     m.appendChild(el("div","pd-body"));
     const act = el("div","actions"); const go = btn("Programmer dans Metricool","lemon pd-go", async () => {
       const bad = items.find(x => !x.date || !x.time); if (bad){ toast("Il manque la date ou l’heure de « " + bad.name + " »."); return; }

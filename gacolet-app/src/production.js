@@ -51,7 +51,7 @@ module.exports = function production({ app, auth, wrap, db, current, put, pubPla
       let pick = null; for (let k = 0; k < Math.min(gap + 6, daysLeft) && !pick; k++){ const d = new Date(cur); d.setDate(cur.getDate() + k); const day = iso(d); if (taken.has(day) || out.some(o => o.date === day)) continue; if (!pref.length || pref.includes(d.getDay())) pick = d; }
       if (!pick) { for (let k = 0; k < daysLeft && !pick; k++){ const d = new Date(cur); d.setDate(cur.getDate() + k); const day = iso(d); if (!taken.has(day) && !out.some(o => o.date === day)) pick = d; } }
       if (!pick) { cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1, 12); continue; }
-      out.push({ date: iso(pick), time: H, why: (plan - done) + " publication" + (plan - done > 1 ? "s" : "") + " encore à faire en " + mk });
+      out.push({ date: iso(pick), time: H, why: (plan - done) + " publication" + (plan - done > 1 ? "s" : "") + " sur " + plan + " encore à faire en " + ["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"][Number(mk.slice(5, 7)) - 1] + (pref.length ? ", jour prévu par la stratégie" : "") });
       cur = new Date(pick); cur.setDate(pick.getDate() + gap);
     }
     res.json({ slots: out, blog: !!blog, hour: H, perMonth: plan, days: pref.map(k => DAYS[k]), thisMonth: countIn(monthOf(now)) });
