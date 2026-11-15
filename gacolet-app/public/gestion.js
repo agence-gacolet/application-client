@@ -450,7 +450,7 @@ function editRush(r){
       for (const c of its) await save("rushes", null, { client: out.client, shotAt: out.shotAt, shoot: out.shoot || "", content: c, editor: "", link: out.link || "", note: out.note || "", status: "À monter" }); toast(plural(its.length, "rush ajouté", "rushs ajoutés") + "."); } });
   openForm({ key:"ru", title: "Rush, " + r.client, values: Object.assign({status:"À monter"}, r, { posted: r.status === "Posté" }),
     fields:[{k:"client",label:"Client",list:clientNames(),half:true,req:"Indique le client."},{k:"shotAt",label:"Tourné le",type:"date",half:true},
-      {k:"shoot",label:"Nom du tournage"},{k:"content",label:"Rush (futur réel)",req:"Indique le rush."},
+      {k:"shoot",label:"Nom du tournage (dossier du disque)",ph:"AAAA-MM_Tournage, puis AAAA-MM_Tournage2"},{k:"content",label:"Rush (futur réel)",req:"Indique le rush."},
       {k:"status",label:"Statut",type:"select",options:RUSH_STATUS.concat(["Posté"]),half:true},{k:"link",label:"Lien des rushs",ph:"https://"},{k:"note",label:"À savoir",type:"textarea"}],
     onDelete: () => remove("rushes", r.id),
     onSave: out => { delete out.posted; if (out.status === "Posté" && !r.postedAt) out.postedAt = today(); return save("rushes", r.id, Object.assign(strip(r), out)); } });
@@ -1204,7 +1204,7 @@ function callImport(){
 function metaNote(c){ const m = c.meta; if (!m) return null; const d = el("div","mt-meta");
   d.textContent = "Meta : " + (m.live && m.live.length ? plural(m.live.length, "active", "actives") : "rien d’actif") + (m.spend ? ", " + Math.round(m.spend) + " € ce mois" : "") + (m.leads ? ", " + plural(m.leads, "contact") : "");
   d.title = (m.account || "") + (m.live && m.live.length ? " : " + m.live.join(", ") : "") + "\nLu le " + (m.at ? new Date(m.at).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""); return d; }
-(function(){ const st = document.createElement("style"); st.textContent = ".pb-drop{margin:22px 0 8px;padding:20px 22px;border:1.5px dashed rgba(198,255,51,.45);border-radius:18px;background:var(--card)}.pb-dh{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px}.pb-dh h2{margin:0;font:400 var(--fs-3xl)/1 var(--display);font-style:italic;text-transform:uppercase}.pb-dh .note{flex:1 1 320px;margin:0}.pb-open{margin-top:18px;display:grid;gap:8px}.pd-page{margin-top:18px}.pd-page .pd-body{max-height:none}.pd-st.run{color:#C6FF33}.pd-st.ok{color:var(--ok,#9BD85C)}.pd-tr{border:1px solid var(--line-2);border-radius:10px;padding:8px 12px;font-size:13px}.pd-tr summary{cursor:pointer;color:var(--muted)}.pd-tr p{margin:8px 0 2px;line-height:1.5;white-space:pre-wrap}.pb-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:8px 0;border-top:1px solid var(--line-2)}.pb-row .note{flex:1 1 200px}.pb-bh{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px;margin-top:34px}.pb-bh .fin-h{margin:0}.pb-nav{display:flex;gap:6px;flex-wrap:wrap}"; document.head.appendChild(st); })();
+(function(){ const st = document.createElement("style"); st.textContent = ".pb-drop{margin:22px 0 8px;padding:20px 22px;border:1.5px dashed rgba(198,255,51,.45);border-radius:18px;background:var(--card)}.pb-dh{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px}.pb-dh h2{margin:0;font:400 var(--fs-3xl)/1 var(--display);font-style:italic;text-transform:uppercase}.pb-dh .note{flex:1 1 320px;margin:0}.pb-open{margin-top:18px;display:grid;gap:8px}.dp-sum{margin:18px 0 10px}.dp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px}.dp-tile{display:flex;flex-direction:column;text-align:left;padding:0;border:1px solid var(--line-2);border-radius:14px;background:var(--card);color:var(--ink);overflow:hidden;cursor:pointer;font:inherit}.dp-tile:hover{border-color:#C6FF33}.dp-th{position:relative;aspect-ratio:9/16;max-height:240px;background:#000}.dp-th video,.dp-th img{width:100%;height:100%;object-fit:cover;display:block}.dp-st{position:absolute;left:8px;bottom:8px;right:8px;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:600;background:rgba(0,0,0,.72);color:#fff;text-align:center}.dp-st.run{color:#C6FF33;animation:dp-p 1.6s ease-in-out infinite}.dp-st.ok{background:#C6FF33;color:#111}.dp-st.l3{color:#ff8a7a}@keyframes dp-p{50%{opacity:.55}}.dp-b{display:grid;gap:4px;padding:10px 12px 12px}.dp-n{font-size:13px;font-weight:600;line-height:1.3;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.pd-page{margin-top:18px}.pd-page .pd-body{max-height:none}.pd-st.run{color:#C6FF33}.pd-st.ok{color:var(--ok,#9BD85C)}.pd-tr{border:1px solid var(--line-2);border-radius:10px;padding:8px 12px;font-size:13px}.pd-tr summary{cursor:pointer;color:var(--muted)}.pd-tr p{margin:8px 0 2px;line-height:1.5;white-space:pre-wrap}.pb-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:8px 0;border-top:1px solid var(--line-2)}.pb-row .note{flex:1 1 200px}.pb-bh{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px;margin-top:34px}.pb-bh .fin-h{margin:0}.pb-nav{display:flex;gap:6px;flex-wrap:wrap}"; document.head.appendChild(st); })();
 (function(){ const st = document.createElement("style"); st.textContent = ".mt-meta{margin-top:4px;min-width:150px;font-size:var(--fs-xs,12px);line-height:1.35;color:var(--muted);white-space:normal}"; document.head.appendChild(st); })();
 function metaSyncBtn(){ const b = btn("Actualiser depuis Meta","", async () => { b.disabled = true; b.textContent = "Lecture de Meta…";
     try { const r = await GC.api("POST","/api/g-metaads/sync"); toast("État des campagnes lu sur Meta (" + plural(r.accounts, "compte") + ")."); } catch(e){ toast(e.message); } b.disabled = false; b.textContent = "Actualiser depuis Meta"; }); return b; }
@@ -1596,7 +1596,8 @@ function vStrategie(root){
 // Un dépôt par client : on peut en lancer un autre pendant que Claude écrit pour le premier
 const PD = { all: (() => { const a = store.get("pdDrafts") || {}; const old = store.get("pdItems"); if (Array.isArray(old) && old.length && store.get("pdClient")) a[store.get("pdClient")] = old; Object.keys(a).forEach(k => { a[k] = (a[k] || []).filter(x => x && x.url).map(x => Object.assign(x, { busy: false })); }); return a; })(),
   redraw: null, t: 0, list(c){ return PD.all[c] || (PD.all[c] = []); }, count(c){ return (PD.all[c] || []).length; },
-  save(){ const o = {}; Object.keys(PD.all).forEach(k => { const l = PD.all[k].filter(x => x.url).map(x => { const y = Object.assign({}, x); delete y.busy; return y; }); if (l.length) o[k] = l; }); store.set("pdDrafts", o); store.set("pdItems", null); } };
+  changed(){ clearTimeout(PD.ct); PD.ct = setTimeout(() => { if (S.view === "depot") render(); }, 500); },
+  save(){ PD.changed(); const o = {}; Object.keys(PD.all).forEach(k => { const l = PD.all[k].filter(x => x.url).map(x => { const y = Object.assign({}, x); delete y.busy; return y; }); if (l.length) o[k] = l; }); store.set("pdDrafts", o); store.set("pdItems", null); } };
 function pdPoll(){ if (PD.t) return; const tick = async () => { PD.t = 0; const w = Object.values(PD.all).flat().filter(x => x.wait); if (!w.length) return;
     for (const it of w){ try { const q = await GC.api("GET","/api/g-prod/describe/" + it.wait); if (q.status !== "done") continue;
       it.wait = ""; it.props = q.propositions; it.transcript = q.transcript || ""; if (!it.text && it.props[0]) it.text = it.props[0]; PD.save();
@@ -1604,11 +1605,11 @@ function pdPoll(){ if (PD.t) return; const tick = async () => { PD.t = 0; const 
     PD.t = setTimeout(tick, 15000); };
   PD.t = setTimeout(tick, 2000); }
 setTimeout(pdPoll, 8000);
-function prodDrop(clients, host){
+function prodDrop(clients, host, opts){ opts = opts || {};
   if (!clients.length){ if (host){ host.appendChild(el("p","empty","Lecture de la liste des clients…")); return; } toast("Liste des clients Metricool en cours de chargement, réessaie dans un instant."); return; }
   let next = {}, showNext = () => {};
-  const loadNext = async () => { try { const r = await GC.api("GET","/api/g-prod/slots?client=" + encodeURIComponent(client) + "&n=1"); const s0 = r.slots[0] || {}; next = { date: s0.date || "", time: s0.time || "", why: s0.why || "" }; showNext(); } catch(e){} };
-  let client = clients.includes(S.ui.prodC) ? S.ui.prodC : clients.find(c => PD.count(c)) || clients[0], items = PD.list(client), status = null, mode = ["draft","review","publish"].includes(S.ui.prodMode) ? S.ui.prodMode : "review";
+  const loadNext = async () => { if (!client) return; try { const r = await GC.api("GET","/api/g-prod/slots?client=" + encodeURIComponent(client) + "&n=1"); const s0 = r.slots[0] || {}; next = { date: s0.date || "", time: s0.time || "", why: s0.why || "" }; showNext(); } catch(e){} };
+  let client = opts.client !== undefined ? opts.client : clients.includes(S.ui.prodC) ? S.ui.prodC : clients.find(c => PD.count(c)) || clients[0], items = client ? PD.list(client) : [], status = null, mode = ["draft","review","publish"].includes(S.ui.prodMode) ? S.ui.prodMode : "review";
   GC.api("GET","/api/g-prod/status").then(r => { status = r; draw(); }).catch(() => {});
   let m0; PD.redraw = () => { if (!m0 || !document.body.contains(m0)) { PD.redraw = null; return false; } draw(); return true; };
   const draw = () => { if (!m0) return; PD.save(); const body = m0.querySelector(".pd-body"); body.textContent = "";
@@ -1631,17 +1632,17 @@ function prodDrop(clients, host){
       const ta = el("textarea"); ta.rows = 5; ta.placeholder = "Description qui sera publiée"; ta.value = it.text || ""; ta.oninput = () => { it.text = ta.value; PD.save(); }; c.appendChild(ta);
       body.appendChild(c); });
     const go = m0.querySelector(".pd-go"); go.disabled = !items.length || items.some(x => x.busy || !x.url); const verb = { draft: "Mettre en brouillon", review: "Envoyer en validation", publish: "Programmer" }[mode]; go.textContent = items.length ? verb + " (" + items.length + ")" : verb; };
-  const slots = async () => { const need = items.filter(x => !x.date); if (!need.length) return;
+  const slots = async () => { if (!client) return; const need = items.filter(x => !x.date); if (!need.length) return;
     if (next.date && !items.some(x => x.date === next.date)){ const x0 = need.shift(); x0.date = next.date; x0.time = next.time; x0.reco = next.edited ? "date choisie" : next.why || true; draw(); if (!need.length) return; }
     try { const r = await GC.api("GET","/api/g-prod/slots?client=" + encodeURIComponent(client) + "&n=" + items.length);
     const used = new Set(items.filter(x => x.date).map(x => x.date)); const free = r.slots.filter(s => !used.has(s.date)); need.forEach(x => { const s = free.shift(); if (s){ x.date = s.date; x.time = s.time; x.reco = s.why || true; } }); draw(); } catch(e){ toast(e.message); } };
   const build = m => { m0 = m; m.classList.add(host ? "pd-page" : "pd-modal");
     if (!host){ const t = el("h3", null, "Déposer des productions"); t.id = "mtitle"; m.appendChild(t); }
     m.appendChild(el("p","muted","Les dates suivent le rythme de la formule du client, après ce qui est déjà programmé. Tout est modifiable avant l’envoi." + (host ? "" : " Tu peux fermer cette fenêtre et faire autre chose : Claude continue, et tu retrouves tout ici en la rouvrant.")));
-    const f = el("div","form"); const l = el("label", null, "Client"); const sel = el("select"); clients.forEach(n => { const o = el("option", null, n + (PD.count(n) ? " (" + plural(PD.count(n), "fichier") + " en cours)" : "")); o.value = n; sel.appendChild(o); }); sel.value = client;
-    sel.onchange = () => { client = sel.value; S.ui.prodC = client; remember(); items = PD.list(client); next = {}; loadNext(); slots(); draw(); }; l.appendChild(sel); f.appendChild(l);
+    const f = el("div","form"); const l = el("label", null, "Client"); const sel = el("select"); if (!client){ const o0 = el("option", null, "Choisir le client…"); o0.value = ""; sel.appendChild(o0); } clients.forEach(n => { const o = el("option", null, n + (PD.count(n) ? " (" + plural(PD.count(n), "fichier") + " en cours)" : "")); o.value = n; sel.appendChild(o); }); sel.value = client;
+    sel.onchange = () => { client = sel.value; if (!client) return; const z = sel.querySelector("option[value='']"); if (z) z.remove(); S.ui.prodC = client; remember(); items = PD.list(client); next = {}; loadNext(); slots(); draw(); }; l.appendChild(sel); f.appendChild(l);
     const dz = el("label","pd-drop"); dz.innerHTML = "<b>Choisir ou glisser les vidéos et visuels</b><span>MP4, MOV, JPG, PNG</span>"; const fi = el("input"); fi.type = "file"; fi.multiple = true; fi.accept = "video/*,image/*"; fi.hidden = true; dz.appendChild(fi);
-    const add = files => { const cl = client; [...files].forEach(file => { const it = { name: file.name, kind: /^video\//.test(file.type) ? "video" : "image", busy: true, url: "", text: "", subject: "" }; items.push(it);
+    const add = files => { if (!client){ toast("Choisis d’abord le client."); sel.focus(); return; } const cl = client; [...files].forEach(file => { const it = { name: file.name, kind: /^video\//.test(file.type) ? "video" : "image", busy: true, url: "", text: "", subject: "" }; items.push(it); PD.changed();
       S.assets.upload(file).then(r => { it.url = r.url; it.busy = false; PD.save(); if (!(PD.redraw && PD.redraw())) { it.asked = true; GC.api("POST","/api/g-prod/describe", { client: cl, url: it.url, file: it.name, kind: it.kind }).then(q => { if (q.queued){ it.wait = q.queued; PD.save(); pdPoll(); } }).catch(() => { it.asked = false; }); } }).catch(e => { it.busy = false; toast(file.name + " : " + e.message); const L = PD.list(cl); L.splice(L.indexOf(it), 1); draw(); }); }); draw(); slots(); };
     fi.onchange = () => add(fi.files); dz.ondragover = e => { e.preventDefault(); dz.classList.add("on"); }; dz.ondragleave = () => dz.classList.remove("on"); dz.ondrop = e => { e.preventDefault(); dz.classList.remove("on"); add(e.dataTransfer.files); };
     f.appendChild(dz);
@@ -1711,14 +1712,23 @@ let pubAt = {}; function loadPubs(mk, force){ if (!force && Date.now() - (pubAt[
 /* Dépôt : on dépose les vidéos et visuels d'un client, Claude les transcrit (ou les regarde), propose dates et descriptions, puis tout part dans Metricool */
 function vDepot(root){
   const mk = monthKey(); loadPubs(mk); const R = (S.pubs || {})[mk];
-  root.appendChild(head("Dépôt", "Dépose les vidéos et visuels d’un client. Claude transcrit la vidéo (ou regarde le visuel), propose la date et trois descriptions, puis tout part dans Metricool. Tu peux quitter la page : le travail continue."));
-  const open = Object.keys(PD.all).filter(c => PD.all[c].length);
-  if (open.length){ const box = el("section","pb-open"); box.appendChild(el("div","flabel","En cours chez Claude"));
-    open.forEach(c => { const l = PD.all[c], w = l.filter(x => x.wait).length, ready = l.filter(x => x.props).length; const r = el("div","pb-row");
-      r.append(clientTag(c), el("span","note", plural(l.length, "fichier") + (w ? ", " + w + " en transcription" : "") + (ready ? ", " + plural(ready, "prêt", "prêts") : "")), btn("Voir","sm", () => { S.ui.prodC = c; remember(); render(); })); box.appendChild(r); });
-    root.appendChild(box); }
-  const host = el("section","pd-host"); root.appendChild(host);
-  prodDrop(R && (R.rows || R.plan) ? ["Agence Gacolet","Gabriel"].concat((R.rows || R.plan).filter(r => r.blogId).map(r => r.client)) : [], host);
+  const clients = R && (R.rows || R.plan) ? ["Agence Gacolet","Gabriel"].concat((R.rows || R.plan).filter(r => r.blogId).map(r => r.client)) : [];
+  const launch = c => prodDrop(clients, null, { client: c });
+  root.appendChild(head("Dépôt", "Lance une production par client : dépose les vidéos et visuels, puis ferme la fenêtre. Claude transcrit, propose la date et trois descriptions pendant que tu fais autre chose. Chaque fichier en cours apparaît ici.", [addBtn("Nouvelle production", () => launch(""))]));
+  const all = []; Object.keys(PD.all).forEach(c => PD.all[c].forEach(it => all.push([c, it])));
+  if (!all.length){ root.appendChild(el("p","empty","Rien en cours. Clique sur « Nouvelle production » pour déposer les vidéos d’un client.")); return; }
+  const st = it => it.busy ? ["Envoi du fichier…","run"] : it.wait ? [it.kind === "video" ? "Transcription et écriture…" : "Écriture…","run"] : it.props ? ["Prête, à relire","ok"] : !it.url ? ["Envoi interrompu","l3"] : ["En attente","" ];
+  const order = it => it.busy || it.wait ? 1 : it.props ? 0 : 2;
+  all.sort((a, b) => order(a[1]) - order(b[1]) || a[0].localeCompare(b[0], "fr"));
+  const n = k => all.filter(([, it]) => k(it)).length;
+  root.appendChild(el("p","note dp-sum", [plural(all.length, "fichier") + " en cours", n(it => it.props) ? plural(n(it => it.props), "prêt", "prêts") + " à relire" : "", n(it => it.busy || it.wait) ? n(it => it.busy || it.wait) + " chez Claude" : ""].filter(Boolean).join(" · ")));
+  const g = el("div","dp-grid");
+  all.forEach(([c, it]) => { const t = el("button","dp-tile"); t.type = "button"; t.title = "Ouvrir la production de " + c;
+    const th = el("div","dp-th"); if (it.url){ const v = it.kind === "video" ? el("video") : el("img"); v.src = it.url + (it.kind === "video" ? "#t=1" : ""); if (it.kind === "video"){ v.muted = true; v.preload = "metadata"; } th.appendChild(v); }
+    const [lab, cls] = st(it); th.appendChild(el("span","dp-st " + cls, lab)); t.appendChild(th);
+    const b = el("div","dp-b"); b.append(clientTag(c), el("div","dp-n", it.name.replace(/\.[a-z0-9]+$/i, "").replace(/_/g, " ")), el("div","note", it.date ? fmtD(it.date) + (it.time ? " à " + it.time : "") : "date à choisir")); t.appendChild(b);
+    t.onclick = () => launch(c); g.appendChild(t); });
+  root.appendChild(g);
 }
 function vPublications(root){
   const mk = S.ui.pubM || monthKey(), R = (S.pubs || {})[mk]; loadPubs(mk);
