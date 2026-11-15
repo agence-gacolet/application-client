@@ -1028,6 +1028,13 @@ module.exports = function (app, { db, wrap, root }) {
       validations: { ok: vals.filter(v => v === "ok").length, mod: vals.filter(v => v === "mod").length },
       meta, shoots: { count: shoots.length, videos: vids.length, dates: shoots.map(s => s.date).sort() }, stats };
   }
+  // Sonde Metricool (lecture seule, accès complet) : sert à vérifier les statistiques disponibles pour les bilans
+  app.get("/api/g-mc-probe", auth, ownerOnly, wrap(async (req, res) => {
+    const pth = String(req.query.path || ""); if (!/^\/v2\/analytics\/[a-z0-9/_-]+$/i.test(pth)) return res.status(400).json({ error: "Chemin refusé." });
+    const q = new URLSearchParams(); Object.entries(req.query).forEach(([k, v]) => { if (k !== "path") q.set(k, String(v)); }); if (!q.has("userId")) q.set("userId", process.env.METRICOOL_USER_ID || "4634230");
+    const r = await fetch("https://app.metricool.com/api" + pth + "?" + q, { headers: { "X-Mc-Auth": process.env.METRICOOL_USER_TOKEN || "", Accept: "application/json" } });
+    const t = await r.text(); res.status(200).json({ status: r.status, body: t.slice(0, 60000) });
+  }));
   const bilanId = (cid, m) => "c" + cid + "-" + m;
   const bilanCid = p => /^b\d+$/.test(String(p)) ? String(p) : Number(p);
   // Liste des bilans : les clients qui ont un espace client, puis toutes les marques Metricool qui n'en ont pas
