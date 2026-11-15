@@ -177,7 +177,7 @@ function openForm(o){
       try { await o.onSave(out); closeModal(); toast(o.done || "Enregistré."); }
       catch(x){ ok.disabled = false; }
     };
-    if (o.onChange) f.addEventListener("change", () => o.onChange(inputs));
+    if (o.onChange) f.addEventListener("change", e => o.onChange(inputs, e));
     m.appendChild(f);
   });
 }
@@ -501,12 +501,15 @@ const PACK_FILL = {
   perfplus: { formula:"Pack Performance +", perMonth:"13 (3 par semaine)", shoot:"Sur mesure, 8 vidéos / mois", networks:"3 réseaux" },
   gestion:  { formula:"Pack Gestion", perMonth:"9 (2 par semaine)", shoot:"1 visite, 4 vidéos / mois", networks:"Facebook, Instagram" },
   meta:     { formula:"Pack Meta", perMonth:"", shoot:"Tournage des publicités", networks:"Publicité Facebook et Instagram" },
-  sur:      { formula:"Sur mesure", perMonth:"", shoot:"", networks:"" } };
+  sur:      { formula:"Sur mesure", perMonth:"", shoot:"", networks:"" },
+  print:    { formula:"Graphisme et print", perMonth:"", shoot:"", networks:"" },
+  site:     { formula:"Site et référencement", perMonth:"", shoot:"", networks:"" },
+  ponctuel: { formula:"Prestation ponctuelle", perMonth:"", shoot:"", networks:"" } };
 /* Formule sans les prix (vue du Tableau clients) : « Standard, 500 € HT » → « Standard » ; une formule qui n'est qu'un prix → « — » */
 const noPrice = t => String(t || "").replace(/\s*\([^)]*€[^)]*\)/g, "").replace(/(?:[,;:]|\s+à)?\s*\d[\d \u202f.]*\s*€(?:\s*HT)?(?:\s*\/\s*mois)?(?:\s*\([^)]*\))?/gi, "").replace(/^[\s,;:+]+|[\s,;:+]+$/g, "").replace(/\s{2,}/g, " ").trim() || (t ? "—" : "");
 function packFill(keys){
   const on = SV_KEYS.filter(k => keys.includes(k) && PACK_FILL[k]); if (!on.length) return null;
-  const main = PACK_FILL[on.find(k => k !== "meta" && k !== "sur") || on.find(k => k !== "sur") || "sur"];
+  const main = PACK_FILL[on.find(k => ["perf","perfplus","gestion"].includes(k)) || on.find(k => k === "meta") || on[0]];
   return { formula: on.map(k => PACK_FILL[k].formula).join(" + "), perMonth: main.perMonth, shoot: main.shoot, networks: main.networks };
 }
 function editClient(c){
@@ -514,8 +517,9 @@ function editClient(c){
   const svFields = []; SERVICES.forEach(([k, l]) => { svFields.push({k:"sv"+k, label:l, type:"check", half:true}); svFields.push({k:"sd"+k, label:"Depuis le", type:"date", half:true}); });
   let auto = packFill(Object.keys(sv)) || {};
   openForm({ key:"cf", title: c.id ? "Fiche, "+c.name : "Nouveau client", values:vals,
-    onChange: inp => { const nx = packFill(SV_KEYS.filter(k => inp["sv"+k].checked)) || { formula:"", perMonth:"", shoot:"", networks:"" };
-      ["formula","perMonth","shoot","networks"].forEach(k => { const v = inp[k].value.trim(); if (!v || v === (auto[k] || "")) inp[k].value = nx[k]; }); auto = nx; },
+    // Cocher ou décocher un pack réécrit la formule (et le rythme) d'après les packs cochés ; les champs vides du pack ne remplacent rien
+    onChange: (inp, e) => { if (!e || !e.target || !/^f-cf-sv/.test(e.target.id || "")) return; const nx = packFill(SV_KEYS.filter(k => inp["sv"+k].checked)); if (!nx) return;
+      ["formula","perMonth","shoot","networks"].forEach(k => { if (nx[k] || k === "formula") inp[k].value = nx[k]; }); auto = nx; },
     fields:(c.id ? [] : [{k:"name",label:"Nom du client",req:"Indique le nom du client."}]).concat([{k:"since",label:"Client depuis le",type:"date"}]).concat(svFields).concat([{k:"formula",label:"Formule"},{k:"perMonth",label:"Publications / mois"},{k:"shoot",label:"Tournage",half:true},{k:"networks",label:"Réseaux",half:true},
       {k:"tel",label:"Téléphone",type:"tel",half:true},{k:"email",label:"Courriel",type:"email",half:true},{k:"site",label:"Site internet",half:true,ph:"https://"},{k:"instagram",label:"Instagram",half:true,ph:"@compte ou lien"},{k:"facebook",label:"Facebook",half:true,ph:"Lien de la page"},{k:"tiktok",label:"TikTok",half:true,ph:"@compte ou lien"},{k:"linkedin",label:"LinkedIn",half:true,ph:"Lien de la page"},{k:"youtube",label:"YouTube",half:true,ph:"Lien de la chaîne"},{k:"google",label:"Fiche Google",ph:"Lien de la fiche"},
       {k:"remember",label:"À retenir",type:"textarea"},{k:"ask",label:"À demander au client",type:"textarea"},{k:"leadWeeks",label:"Préparer combien de semaines avant",type:"number",half:true},{k:"color",label:"Couleur dans l’agenda",type:"color",half:true}]),
@@ -3129,14 +3133,34 @@ function renderTabs(){
   $("#mbar-title").textContent = SHORT[S.view] || "";
   $("#me-name").textContent = me;
 }
+/* Menu « Plus » du téléphone : tiroir qui glisse depuis la gauche (profil en haut, grandes rubriques, puis réglages), comme les applis iPhone */
 function openMore(){
-  openModal(md => { md.classList.add("sheet"); const t = el("h3",null,"Menu"); t.id = "mtitle"; md.appendChild(t);
-    const l = el("nav","morelist"); NAV_GROUPS.flatMap(g => g[1]).map(k => [k, SHORT[k]]).filter(([k]) => canSee(k) && !(S.role && S.role !== "owner" ? ["accueil","agenda","taches","messagerie"] : MOBILE_MAIN).includes(k)).forEach(([k,lab]) => { const a = el("a"); a.href = "#"+k; a.appendChild(ico(k)); a.appendChild(el("span",null,lab)); if (k === S.view) a.setAttribute("aria-current","page"); a.onclick = () => closeModal(); l.appendChild(a); }); md.appendChild(l);
-    if (S.secours || !S.user){ const w = el("div","whobox"); w.appendChild(el("span","flabel","Je suis"));
-    w.appendChild(segm(PEOPLE.map(p => [p,p]), S.me, p => { setMe(p); closeModal(); })); md.appendChild(w); }
-    const o = el("div","actions"); o.style.justifyContent = "space-between";
-    o.appendChild(btn("Se déconnecter","sm", () => window.GC && GC.logout())); md.appendChild(o);
-  });
+  if (document.querySelector(".dr-wrap")) return;
+  const me = S.me || "Gabriel", t = (S.team || []).find(x => x.name === me) || {};
+  const wrap = el("div","dr-wrap"), pan = el("aside","dr"); pan.setAttribute("role","dialog"); pan.setAttribute("aria-label","Menu"); wrap.appendChild(pan);
+  const close = () => { wrap.classList.remove("open"); setTimeout(() => wrap.remove(), 260); document.removeEventListener("keydown", esc); };
+  const esc = e => { if (e.key === "Escape") close(); }; document.addEventListener("keydown", esc);
+  wrap.onclick = e => { if (e.target === wrap) close(); };
+  const top = el("div","dr-top"); const av = avatarEl(me, 64); top.appendChild(av);
+  const pb = el("button","dr-prof"); pb.type = "button"; pb.setAttribute("aria-label","Mon compte"); pb.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.6-2-3.4-2.4.9a7.6 7.6 0 0 0-2.6-1.5L14 2.4h-4l-.4 2.5A7.6 7.6 0 0 0 7 6.4l-2.4-.9-2 3.4 2 1.6a7.6 7.6 0 0 0 0 3l-2 1.6 2 3.4 2.4-.9a7.6 7.6 0 0 0 2.6 1.5l.4 2.5h4l.4-2.5a7.6 7.6 0 0 0 2.6-1.5l2.4.9 2-3.4z"/></svg>';
+  pb.onclick = () => { close(); go("parametres"); }; top.appendChild(pb); pan.appendChild(top);
+  pan.appendChild(el("b","dr-name", me)); pan.appendChild(el("span","dr-sub", t.poste || (S.role === "owner" ? "Accès complet" : "Équipe")));
+  const mine = openTasks().filter(x => x.who === me).length, unread = unreadRole() || 0;
+  const st = el("div","dr-stats"); st.innerHTML = ""; [[mine, mine > 1 ? "tâches" : "tâche"], [unread, unread > 1 ? "messages non lus" : "message non lu"]].forEach(([n, l]) => { const x = el("span"); x.append(el("b", null, String(n)), document.createTextNode(" " + l)); st.appendChild(x); }); pan.appendChild(st);
+  const main = S.role && S.role !== "owner" ? ["accueil","agenda","taches","messagerie"] : MOBILE_MAIN;
+  const nav = el("nav","dr-list"); NAV_GROUPS.flatMap(g => g[1]).filter(k => canSee(k) && !main.includes(k) && k !== "parametres").forEach(k => {
+    const a = el("a"); a.href = "#" + k; a.appendChild(ico(k)); a.appendChild(el("span", null, SHORT[k])); if (k === S.view) a.setAttribute("aria-current","page"); a.onclick = () => close(); nav.appendChild(a); });
+  pan.appendChild(nav);
+  if (S.secours || !S.user){ const w = el("div","whobox"); w.appendChild(el("span","flabel","Je suis")); w.appendChild(segm(PEOPLE.map(p => [p,p]), S.me, p => { setMe(p); close(); })); pan.appendChild(w); }
+  const sec = el("nav","dr-sec");
+  const a1 = el("a"); a1.href = "#parametres"; a1.innerHTML = '<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.6-2-3.4-2.4.9a7.6 7.6 0 0 0-2.6-1.5L14 2.4h-4l-.4 2.5A7.6 7.6 0 0 0 7 6.4l-2.4-.9-2 3.4 2 1.6a7.6 7.6 0 0 0 0 3l-2 1.6 2 3.4 2.4-.9a7.6 7.6 0 0 0 2.6 1.5l.4 2.5h4l.4-2.5a7.6 7.6 0 0 0 2.6-1.5l2.4.9 2-3.4z"/></svg>'; a1.appendChild(el("span", null, "Paramètres")); a1.onclick = () => close();
+  const a2 = el("button"); a2.type = "button"; a2.innerHTML = '<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M14 4.5H6.5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2H14M10 12h10M16.5 8.5 20 12l-3.5 3.5"/></svg>'; a2.appendChild(el("span", null, "Se déconnecter")); a2.onclick = () => window.GC && GC.logout();
+  sec.append(a1, a2); pan.appendChild(sec);
+  // Glisser vers la gauche pour fermer
+  let x0 = null; pan.addEventListener("touchstart", e => { x0 = e.touches[0].clientX; }, { passive: true });
+  pan.addEventListener("touchmove", e => { if (x0 == null) return; const dx = Math.min(0, e.touches[0].clientX - x0); pan.style.transform = "translateX(" + dx + "px)"; }, { passive: true });
+  pan.addEventListener("touchend", e => { if (x0 == null) return; const dx = (e.changedTouches[0].clientX - x0); pan.style.transform = ""; x0 = null; if (dx < -70) close(); });
+  document.body.appendChild(wrap); requestAnimationFrame(() => wrap.classList.add("open"));
 }
 let rq = 0;
 function renderSoon(){ if (rq) return; rq = requestAnimationFrame(() => { rq = 0; render(); }); }

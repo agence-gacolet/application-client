@@ -1923,3 +1923,28 @@ html.tg-lock,html.tg-lock body{overflow:hidden}
   .modal h3{font-size:22px}
   img,video,iframe{max-width:100%}
 }
+
+/* Tiroir « Plus » (téléphone) */
+.dr-wrap{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,0);transition:background .26s ease}
+.dr-wrap.open{background:rgba(0,0,0,.55)}
+.dr{position:absolute;top:0;bottom:0;left:0;width:min(84vw,340px);display:flex;flex-direction:column;overflow-y:auto;background:#121211;border-right:1px solid var(--line);padding:calc(22px + env(safe-area-inset-top,0px)) 26px calc(22px + env(safe-area-inset-bottom,0px));transform:translateX(-102%);transition:transform .28s cubic-bezier(.2,.8,.2,1);box-shadow:20px 0 60px rgba(0,0,0,.5)}
+.dr-wrap.open .dr{transform:none}
+.dr-top{display:flex;align-items:flex-start;justify-content:space-between}
+.dr-prof{width:40px;height:40px;border-radius:50%;border:1px solid var(--line-2);background:none;color:var(--ink);display:grid;place-items:center}
+.dr-prof svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6}
+.dr-name{display:block;margin-top:14px;font-size:22px;font-weight:700;color:var(--ink)}
+.dr-sub{display:block;margin-top:2px;font-size:15px;color:var(--muted)}
+.dr-stats{display:flex;gap:18px;margin:14px 0 8px;font-size:15px;color:var(--muted)}
+.dr-stats b{color:var(--ink);font-weight:700}
+.dr-list{display:flex;flex-direction:column;margin:10px 0 6px}
+.dr-list a{display:flex;align-items:center;gap:22px;padding:14px 0;text-decoration:none;color:var(--ink);font-size:22px;font-weight:700;letter-spacing:-.2px}
+.dr-list .ico{width:26px;height:26px;flex:none;stroke-width:1.7;color:var(--ink)}
+.dr-list a[aria-current="page"],.dr-list a[aria-current="page"] .ico{color:var(--lemon)}
+.dr-sec{margin-top:auto;border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column}
+.dr-sec a,.dr-sec button{display:flex;align-items:center;gap:20px;padding:13px 0;border:0;background:none;text-decoration:none;color:var(--ink);font:inherit;font-size:17px;text-align:left}
+.dr-sec .ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.6}
+@media (prefers-reduced-motion:reduce){.dr,.dr-wrap{transition:none}}
+/* Fiche client : chaque service sur une ligne, la date « Depuis le » n'apparaît que si la case est cochée */
+.form .row2:has(input[type=checkbox][id^="f-cf-sv"]){grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:center}
+.form .row2:has(input[type=checkbox][id^="f-cf-sv"]:not(:checked)) > label:last-child{visibility:hidden}
+@media (max-width:640px){.form .row2:has(input[type=checkbox][id^="f-cf-sv"]:not(:checked)) > label:last-child{display:none}.form .row2:has(input[type=checkbox][id^="f-cf-sv"]:not(:checked)){grid-template-columns:1fr}}
