@@ -726,7 +726,7 @@ function vBilans(root){
     const filled = ["okPhrase","okList","decisions","topNum","chiffres","prevu"].some(k => String(x[k] || "").trim());
     if (filled && !genArmed){ genArmed = true; genB.textContent = "Remplacer ce qui est écrit ?"; genB.classList.add("armed"); return; }
     genB.disabled = true; genB.textContent = "Calcul en cours…";
-    try { const out = await GC.api("POST","/api/g-bilan/" + cur + "/genere", { m }); r.draft = Object.assign(x, out.extra || {}); toast("Bilan rempli : relis, corrige si besoin, puis Enregistrer."); render(); }
+    try { const out = await GC.api("POST","/api/g-bilan/" + cur + "/genere", { m }); r.draft = Object.assign(x, out.extra || {}); toast(out.warn && out.warn.length ? "Bilan rempli. " + out.warn.join(" ") : "Bilan rempli : relis, corrige si besoin, puis Enregistrer."); render(); }
     catch(e){ toast(e.message); genB.disabled = false; genB.textContent = "Générer le bilan"; } });
   acts.append(genB, btn("Enregistrer","lemon", send), sendB, btn("Imprimer ou PDF","", () => window.print()));
   if (sv.savedAt) acts.appendChild(el("span","muted bi-pubd","Enregistré le " + fmtFR(sv.savedAt.slice(0, 10)) + " par " + (sv.savedBy || "") + (sv.sent ? ", envoyé au client le " + fmtFR(sv.sent.at.slice(0, 10)) : "")));

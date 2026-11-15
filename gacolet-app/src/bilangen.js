@@ -86,7 +86,7 @@ module.exports = function ({ app, auth, ownerOnly, wrap, db, put, bilanData, nor
     const [S, SP, F, G] = blog ? await Promise.all([monthStats(blog, m), monthStats(blog, p), followers(blog, m), googleReviews(d.client.name, m)]) : [null, null, null, await googleReviews(d.client.name, m)];
     const posts = d.posts.count, reels = (d.posts.types["Réel"] || 0) + (d.posts.types["Réel test"] || 0), pv = d.prev || {}, pposts = pv.posts, preels = pv.types ? (pv.types["Réel"] || 0) + (pv.types["Réel test"] || 0) : null;
     const vidPct = posts ? Math.round(100 * reels / posts) : 0, srcs = new Set(["Metricool (planning)"]);
-    const ok = [], ko = [], rows = [], themes = { ok: [], ko: [] };
+    const ok = [], ko = [], rows = [], warn = [], themes = { ok: [], ko: [] };
     const gain = (label, a, b, sub, unitWord) => { if (a == null || b == null) return; rows.push([label, a, b, sub]); };
     // Abonnés
     if (F && F.ig.now) { srcs.add("Metricool (Instagram)"); gain("Abonnés Instagram", F.ig.before && F.ig.before.v, F.ig.now.v, "fin de période");
@@ -101,7 +101,8 @@ module.exports = function ({ app, auth, ownerOnly, wrap, db, put, bilanData, nor
     if (S && S.fb) cmp("Vues Facebook", SP && SP.fb ? SP.fb.views : null, S.fb.views, "publications de la période", "Facebook");
     // Avis Google
     let gNote = "";
-    if (G) { srcs.add("Google Maps (fiche " + (G.now ? G.now.name : "Google") + ")");
+    if (G && !G.now && !(G.start && G.end)) { rows.push(["Avis Google", null, null, "à compléter : avis reçus sur la période"]); warn.push("Avis Google non comptés : ajoute la clé Google Maps dans Paramètres > Liaisons, ou complète la ligne « Avis Google » à la main."); }
+    if (G && (G.now || (G.start && G.end))) { srcs.add("Google Maps (fiche « " + ((G.now || G.end).name || d.client.name) + " »)");
       if (G.start && G.end) { rows.push(["Avis Google", G.start.count, G.end.count, "total sur la fiche"]); const g = G.end.count - G.start.count; if (g > 0) { ok.push(["Avis Google : +" + g + " sur la période, " + G.end.count + " au total" + (G.end.rating ? " (note " + String(G.end.rating).replace(".", ",") + " sur 5)" : "") + ".", 40 + g]); themes.ok.push("avis"); } }
       else if (G.now) { rows.push(["Avis Google", null, G.now.count, "total relevé le " + dd(G.now.day)]);
         gNote = G.shown ? "Avis Google : au moins " + G.shown + " publié" + (G.shown > 1 ? "s" : "") + " en " + moName(m) + " ; " + G.now.count + " au total le " + dd(G.now.day) + (G.now.rating ? ", note " + String(G.now.rating).replace(".", ",") + " sur 5" : "") + "."
@@ -138,7 +139,7 @@ module.exports = function ({ app, auth, ownerOnly, wrap, db, put, bilanData, nor
       x.koList = ko.slice(0, 4).map(o => o[0]).join("\n");
     } else { x.koPhrase = ""; x.koList = ""; }
     // Chiffres du mois (Publications et Réels sont déjà comptés par l'appli)
-    x.chiffres = rows.map(([l, a, b, s]) => [l, a == null ? "" : Math.round(a), Math.round(b), s].join(" ; ")).join("\n");
+    x.chiffres = rows.map(([l, a, b, s]) => [l, a == null ? "" : Math.round(a), b == null ? "" : Math.round(b), s].join(" ; ")).join("\n");
     if (top) { x.topLabel = top.kind + " du " + dd(top.date); x.topNum = fmt(top.views); x.topTxt = "vues" + (top.title ? " pour « " + top.title + " »" : "") + ", la publication la plus vue de la période sur " + top.net; }
     else if (F && F.ig.now && F.ig.before && F.ig.now.v > F.ig.before.v) { x.topLabel = "Abonnés Instagram"; x.topNum = "+" + fmt(F.ig.now.v - F.ig.before.v); x.topTxt = "nouveaux abonnés en " + moName(m) + ", " + fmt(F.ig.now.v) + " au total"; }
     else { x.topLabel = "Ce mois-ci"; x.topNum = String(posts); x.topTxt = "publications sur la période"; }
@@ -152,8 +153,9 @@ module.exports = function ({ app, auth, ownerOnly, wrap, db, put, bilanData, nor
     x.remarques = notes.length ? notes.join(" ; ").replace(/^./, c => c.toUpperCase()) + "." : "";
     // Le mois prochain
     const dec = [], need = ["Validation du calendrier de " + moName(nx) + " sous 3 jours ouvrés"];
-    const target = Math.max(reels + 1, Math.ceil(0.6 * Math.max(posts, Number(pmN) || 0)));
-    if (vidPct < 60 || has(themes.ko, "vidéo") || has(themes.ko, "réels")) { dec.push("Plus de vidéo : au moins " + target + " réels en " + moName(nx) + ", pour passer de " + vidPct + " % à près de 60 % de vidéo."); need.push("Un créneau de tournage en " + moName(nx)); }
+    const planned = Number((pm.match(/(\d+)\s*(?:réels|vidéos)/i) || [])[1]) || 0;
+    if (planned > reels) { dec.push("Plus de vidéo : " + planned + " réels en " + moName(nx) + ", comme prévu dans la formule (" + reels + " en " + moName(m) + ")."); need.push("Un créneau de tournage en " + moName(nx)); }
+    else if (!planned && (vidPct < 60 || has(themes.ko, "vidéo") || has(themes.ko, "réels"))) { const target = Math.max(reels + 1, Math.ceil(0.6 * Math.max(posts, Number(pmN) || 0))); dec.push("Plus de vidéo : au moins " + target + " réels en " + moName(nx) + ", pour passer de " + vidPct + " % à près de 60 % de vidéo."); need.push("Un créneau de tournage en " + moName(nx)); }
     if (top && top.title) dec.push("Dans la lignée du " + top.kind.toLowerCase() + " du " + dd(top.date) + " : reprendre le sujet « " + top.title + " » sous un autre angle.");
     if (has(themes.ko, "interactions") || has(themes.ko, "vues Instagram")) dec.push("Engagement : une question ou un appel à commenter dans chaque description, et des réponses aux commentaires dans la journée.");
     if (G) { dec.push("Avis Google : demander un avis après chaque intervention, avec le lien direct vers la fiche."); need.push("Le lien d’avis Google envoyé à chaque client satisfait"); }
@@ -165,20 +167,20 @@ module.exports = function ({ app, auth, ownerOnly, wrap, db, put, bilanData, nor
     x.besoins = need.join("\n");
     // En résumé
     const t1 = has(themes.ok, "communauté") ? "Une communauté qui grandit," : top ? (top.kind === "Réel" ? "Les réels en tête," : "Une publication qui porte le mois,") : "Un mois tenu,";
-    const t2 = ko.length ? (has(themes.ko, "vues Instagram") ? "des vues à relancer," : has(themes.ko, "interactions") ? "des interactions à relancer," : "un rythme à retrouver,") : (has(themes.ok, "avis") ? "des avis qui arrivent," : "un rythme tenu,");
-    const t3 = dec[0] ? dec[0].split(":")[0].toLowerCase() + " en " + moName(nx) : "on continue en " + moName(nx);
+    const t2 = ko.length ? (has(themes.ko, "vues Instagram") ? "des vues à relancer," : has(themes.ko, "interactions") ? "des interactions à relancer," : has(themes.ko, "vidéo") || has(themes.ko, "réels") ? "des réels à ajouter," : has(themes.ko, "Facebook") ? "Facebook à relancer," : "un rythme à retrouver,") : (has(themes.ok, "avis") ? "des avis qui arrivent," : "un rythme tenu,");
+    const t3 = dec[0] ? dec[0].split(":")[0].trim().toLowerCase() + " en " + moName(nx) : "on continue en " + moName(nx);
     x.resumeTitre = [t1, t2, t3].join("\n");
-    x.resumeTxt = (x.okPhrase || "") + (dec[0] ? " En " + moName(nx) + ", on propose : " + dec[0].split(":").slice(1).join(":").trim().replace(/\.$/, "").replace(/^./, c => c.toLowerCase()) + "." : "");
+    x.resumeTxt = (x.okPhrase || "") + (dec[0] ? " Pour " + moName(nx) + ", on propose : " + dec[0].split(":").slice(1).join(":").trim().replace(/\.$/, "").replace(" en " + moName(nx), "").replace(/^./, c => c.toLowerCase()) + "." : "");
     x.source = "Source : " + Array.from(srcs).join(", ") + ", du 01/" + m.slice(5, 7) + " au " + dd(monthEnd(m)) + "/" + m.slice(0, 4) + ", comparé à " + moName(p) + " " + p.slice(0, 4) + ". Vues et interactions des publications de chaque mois.";
     // Garde-fou des règles de l'agence : pas de double tiret, pas de tiret long
     Object.keys(x).forEach(k => { x[k] = String(x[k] || "").replace(/\s?--\s?/g, " : ").replace(/\s[–—]\s/g, " : ").replace(/[–—]/g, " "); });
-    return x;
+    return { extra: x, warn };
   }
   app.post("/api/g-bilan/:cid/genere", auth, ownerOnly, wrap(async (req, res) => {
     const raw = String(req.params.cid), cid = /^b\d+$/.test(raw) ? raw : Number(raw), m = String((req.body || {}).m || req.query.m || "");
     if (!cid || !/^\d{4}-(0[1-9]|1[0-2])$/.test(m)) return res.status(400).json({ error: "Demande invalide." });
     if (!process.env.METRICOOL_USER_TOKEN) return res.status(400).json({ error: "Clé Metricool absente : Paramètres > Liaisons." });
-    const extra = await generate(cid, m); if (!extra) return res.status(404).json({ error: "Client introuvable." });
-    res.json({ extra });
+    const g = await generate(cid, m); if (!g) return res.status(404).json({ error: "Client introuvable." });
+    res.json({ extra: g.extra, warn: g.warn });
   }));
 };
