@@ -520,7 +520,7 @@ details.box[open] summary::after{content:"\2212"}
 .msg-a button.rm:hover{color:#FF7A70}
 .msg-a button.rm.armed{font-weight:700;text-decoration:underline}
 /* Agenda : en-tête fixe quel que soit l’affichage */
-@media (min-width:901px){.ag-head{flex-wrap:nowrap}.ag-head h1{white-space:nowrap;font-size:clamp(40px,4.6vw,80px)}.ag-head .tools{flex-wrap:nowrap;flex:none}}
+@media (min-width:901px){.ag-head>div:first-child{flex:none}.ag-head h1{white-space:nowrap;font-size:clamp(40px,4.6vw,80px)}.ag-head .tools{flex-wrap:nowrap;flex:none}}
 /* Paramètres, comptes et aperçu */
 .pm{display:grid;gap:18px;padding:24px 0 40px;max-width:980px}
 .pm-card{background:var(--card);border:1px solid var(--line-2);border-radius:14px;padding:20px 22px}
@@ -1703,7 +1703,7 @@ html.tg-lock,html.tg-lock body{overflow:hidden}
 .of-ub h3{margin:0 0 8px;font:400 var(--fs-2xl)/1 var(--display);font-style:italic;text-transform:uppercase}
 .of-ur{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--line-2);font-size:var(--fs-m)}
 .of-ur:last-child{border-bottom:0}
-.of-ur b{white-space:nowrap}
+.of-ur{flex-wrap:wrap;row-gap:2px}.of-ur b{margin-left:auto;text-align:right}
 
 /* Fond de conversation (14/11/2026) : ni noir ni blanc, un brun graphite chaud avec un léger halo citron et un grain discret */
 .wa-msgs{background-color:#181713;background-image:radial-gradient(90% 60% at 100% 0%,rgba(198,255,51,.07),transparent 60%),radial-gradient(70% 50% at 0% 100%,rgba(255,170,90,.05),transparent 60%);background-attachment:local}

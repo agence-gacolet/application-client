@@ -722,7 +722,6 @@ function vOffres(root){
     const cl = el("button","of-n", plural(n("sur"), "client") + " en sur mesure"); cl.type = "button"; cl.onclick = () => { S.ui.fiTab = "clients"; S.ui.fiSv = "sur"; remember(); render(); }; b.appendChild(cl); u.appendChild(b); }
   UNITES.forEach(([t, rows]) => { const b = el("div","of-ub"); b.appendChild(el("h3", null, t)); rows.forEach(([l, p]) => { const r = el("div","of-ur"); r.append(el("span", null, l), el("b", null, p)); b.appendChild(r); }); u.appendChild(b); });
   root.appendChild(u);
-  root.appendChild(el("p","status","Source : plaquette des offres v12 du 03/11/2026 ; Pack Meta d’après les règles de l’agence (agence.md). Acompte de 30 % sur les prestations à l’unité ; déplacement compris jusqu’à 10 km, puis +15 € à +40 € jusqu’à 50 km."));
 }
 function vFiches(root){
   const fiTab = ["offres","bilans"].includes(S.ui.fiTab) ? S.ui.fiTab : "clients";
