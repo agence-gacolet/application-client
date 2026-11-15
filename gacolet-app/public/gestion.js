@@ -671,66 +671,37 @@ function bilanSlides(d, x){
   return W;
 }
 function vBilans(root){
+  // Page volontairement minimale : un client, un mois, un bouton. Le bilan généré s'affiche dessous, prêt à imprimer ou à envoyer.
   const months = []; { const d = new Date(); d.setDate(1); for (let i = 0; i < 7; i++){ months.push(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0")); d.setMonth(d.getMonth() - 1); } }
   const m = months.includes(S.ui.biM) ? S.ui.biM : biPrev();
-  if (BI.m !== m || !BI.list) { if (BI.m !== m) biLoadList(m); }
-  const f = el("div","filters ag-f"); const g = el("div","fgroup"); const lb = el("label","flabel","Mois"); lb.htmlFor = "bi-m"; const sel = el("select","pick"); sel.id = "bi-m";
-  months.forEach(x => { const o = el("option", null, biLabel(x)); o.value = x; sel.appendChild(o); }); sel.value = m; sel.onchange = () => { S.ui.biM = sel.value; remember(); render(); }; g.append(lb, sel); f.appendChild(g); root.appendChild(f);
   if (!BI.cl){ if (!BI.clLoading){ BI.clLoading = true; GC.api("GET","/api/g-bilan-clients").then(r => { BI.cl = r.clients || []; }).catch(() => { BI.cl = (S.cgroups || []).map(c => ({ id: c.id, name: c.name, space: true })); }).then(() => { BI.clLoading = false; render(); }); }
     root.appendChild(el("div","sk sk-page")); return; }
-  const cls = BI.cl.slice().sort((a, b) => a.name.localeCompare(b.name, "fr"));
-  if (!cls.length){ root.appendChild(el("p","empty","Aucun client relié à un espace client pour l’instant : le bilan se calcule à partir de son planning Metricool et de ses contacts Meta.")); return; }
-  const st = cid => (BI.list || []).some(x => x.cid === cid) ? "saved" : "todo";
+  const cls = BI.cl.filter(c => !/^test/i.test(c.name)).sort((a, b) => a.name.localeCompare(b.name, "fr"));
+  if (!cls.length) return;
   const cur = cls.some(c => String(c.id) === String(S.ui.biC)) ? cls.find(c => String(c.id) === String(S.ui.biC)).id : cls[0].id, curC = cls.find(c => c.id === cur) || {};
-  const wrap = el("div","bi-wrap"); const side = el("div","bi-side");
-  cls.forEach(c => { const s = BI.list ? st(c.id) : ""; const b = el("button","bi-ci" + (c.id === cur ? " on" : "")); b.type = "button";
-    b.append(el("b", null, c.name), el("span","pill" + (s === "saved" ? " ok" : ""), s === "saved" ? "Prêt" : s ? "À préparer" : "…")); if (!c.space) b.title = "Pas d’espace client : bilan à imprimer ou en PDF";
-    b.onclick = () => { S.ui.biC = c.id; remember(); render(); }; side.appendChild(b); });
-  const main = el("div","bi-main"); wrap.append(side, main); root.appendChild(wrap);
+  const f = el("div","filters ag-f");
+  const pick = (id, label, opts, val, on) => { const g = el("div","fgroup"); const lb = el("label","flabel", label); lb.htmlFor = id; const sel = el("select","pick"); sel.id = id;
+    opts.forEach(([v, t]) => { const o = el("option", null, t); o.value = String(v); sel.appendChild(o); }); sel.value = String(val); sel.onchange = () => on(sel.value); g.append(lb, sel); f.appendChild(g); };
+  pick("bi-c", "Client", cls.map(c => [c.id, c.name]), cur, v => { S.ui.biC = /^b\d+$/.test(v) ? v : Number(v); remember(); render(); });
+  pick("bi-m", "Mois", months.map(x => [x, biLabel(x)]), m, v => { S.ui.biM = v; remember(); render(); });
   const k = cur + "|" + m, r = BI.data[k];
-  if (!r){ biLoad(cur, m); main.appendChild(el("div","sk sk-page")); return; }
-  if (r.error){ main.appendChild(el("p","empty", r.error)); return; }
-  const sv = r.saved || {}, x = r.draft || (r.draft = Object.assign({}, sv.extra || {}));
-  const form = el("div","bi-form"); let deck;
-  const redraw = () => { const n = bilanSlides(r.data, x); deck.replaceWith(n); deck = n; };
-  const sec = t => form.appendChild(el("h4","bi-fs", t));
-  const fld = (key, label, ph, rows, help) => { const l = el("label", null, label); const i = rows ? el("textarea") : el("input"); if (rows) i.rows = rows; else i.type = "text"; i.placeholder = ph || ""; i.value = x[key] || ""; i.oninput = () => { x[key] = i.value; redraw(); }; l.appendChild(i); if (help) l.appendChild(el("small", null, help)); form.appendChild(l); return l; };
-  sec("Les chiffres du mois");
-  fld("chiffres","Autres indicateurs","Abonnés Instagram ; 2782 ; 2878 ; fin de période\nVues Instagram ; 54590 ; 32212 ; sur la période", 4, "Une ligne par indicateur : nom ; avant ; ce mois ; précision. L’évolution se calcule seule. Publications, réels et demandes Meta sont déjà comptés par l’appli.");
-  { const r3 = el("div","row2"); form.appendChild(r3); r3.append(fld("topNum","Chiffre fort","1 551"), fld("topLabel","Au-dessus","Carrousel du 05/10")); }
-  fld("topTxt","Sous le chiffre fort","vues pour le menu Côte d’Ivoire, la publication la plus vue");
-  if (r.data.meta) { sec("Publicité Meta"); fld("budget","Budget dépensé sur la période (€)","485", 0, "Sert à calculer le coût par demande."); }
-  sec("Ce qui a été livré");
-  fld("prevu","Prévu","3 publications par semaine\nle contenu de la formule reste à confirmer", 2, "1re ligne en gros, la suite en dessous. Vide : le rythme de la fiche client.");
-  fld("remarques","À noter","4 publications affichent encore un autre numéro");
-  sec("Ce qui a fonctionné");
-  fld("okPhrase","En une phrase","L’édition Côte d’Ivoire et Facebook portent la période.");
-  fld("okList","Les faits","Carrousel du 05/10 : 1 551 vues et 47 interactions\nAbonnés : +96 sur Instagram", 3, "Une ligne par point.");
-  sec("Ce qui a moins fonctionné");
-  fld("koPhrase","En une phrase","Moins de vues sur Instagram, et pas encore de cuisine filmée.");
-  fld("koList","Les faits","Vues Instagram : 32 212 contre 54 590", 3);
-  sec("Le mois prochain");
-  fld("decisions","Décisions proposées","En cuisine : un réel tourné en cuisine chaque semaine\nPlus de vidéo : au moins 7 réels par mois", 4, "Une ligne par décision, « Titre : texte », 4 au plus.");
-  fld("besoins","Ce dont on a besoin du client","Validation du calendrier sous 3 jours ouvrés\nUn créneau de tournage en novembre", 3);
-  sec("En résumé");
-  fld("resumeTitre","Titre (la dernière ligne en citron)","Moins de vues sur Instagram,\nplus sur Facebook,\nla cuisine d’abord", 3);
-  fld("resumeTxt","Phrase","L’édition Côte d’Ivoire a porté la période.", 2);
-  const acts = el("div","bi-acts");
-  const send = async () => { try { const out = await GC.api("PUT","/api/g-bilan/" + cur, { m, extra: x }); r.saved = out.saved; BI.list = null; biLoadList(m); BI.todo = null; toast("Bilan enregistré."); render(); } catch(e){ toast(e.message); } };
-  let armed = false; const sendB = btn(sv.sent ? "Renvoyer au client" : "Envoyer au client","", async () => {
-    if (!armed){ armed = true; sendB.textContent = "Confirmer l’envoi"; sendB.classList.add("armed"); toast("Le bilan apparaîtra dans l’onglet Bilans de l’espace de " + r.data.client.name + "."); return; }
-    sendB.disabled = true; try { const out = await GC.api("PUT","/api/g-bilan/" + cur, { m, extra: x, send: true, html: deck.outerHTML }); r.saved = out.saved; BI.list = null; biLoadList(m); toast("Bilan envoyé dans l’espace du client."); render(); } catch(e){ toast(e.message); sendB.disabled = false; } });
-  if (!curC.space){ sendB.disabled = true; sendB.title = "Ce client n’a pas d’espace client : imprime le bilan ou fais-en un PDF."; }
-  // « Générer le bilan » : l'appli remplit tout le bilan (chiffres Metricool, avis Google des fiches gérées), à relire puis enregistrer
-  let genArmed = false; const genB = btn("Générer le bilan","", async () => {
-    const filled = ["okPhrase","okList","decisions","topNum","chiffres","prevu"].some(k => String(x[k] || "").trim());
-    if (filled && !genArmed){ genArmed = true; genB.textContent = "Remplacer ce qui est écrit ?"; genB.classList.add("armed"); return; }
+  const genB = btn(r && r.saved ? "Regénérer le bilan" : "Générer le bilan", "lemon", async () => {
     genB.disabled = true; genB.textContent = "Calcul en cours…";
-    try { const out = await GC.api("POST","/api/g-bilan/" + cur + "/genere", { m }); r.draft = Object.assign(x, out.extra || {}); toast(out.warn && out.warn.length ? "Bilan rempli. " + out.warn.join(" ") : "Bilan rempli : relis, corrige si besoin, puis Enregistrer."); render(); }
+    try { const out = await GC.api("POST","/api/g-bilan/" + cur + "/genere", { m }); const sv = await GC.api("PUT","/api/g-bilan/" + cur, { m, extra: out.extra || {} });
+      BI.data[k] = Object.assign(BI.data[k] || {}, { saved: sv.saved, draft: null }); delete BI.data[k].error; BI.list = null; BI.todo = null; delete BI.data[k].data;
+      if (out.warn && out.warn.length) toast(out.warn.join(" ")); biLoad(cur, m); }
     catch(e){ toast(e.message); genB.disabled = false; genB.textContent = "Générer le bilan"; } });
-  acts.append(genB, btn("Enregistrer","lemon", send), sendB, btn("Imprimer ou PDF","", () => window.print()));
-  if (sv.savedAt) acts.appendChild(el("span","muted bi-pubd","Enregistré le " + fmtFR(sv.savedAt.slice(0, 10)) + " par " + (sv.savedBy || "") + (sv.sent ? ", envoyé au client le " + fmtFR(sv.sent.at.slice(0, 10)) : "")));
-  const col = el("div","bi-col"); col.append(acts, form); deck = bilanSlides(r.data, x); main.append(col, deck);
+  f.appendChild(genB); root.appendChild(f);
+  if (!r){ biLoad(cur, m); return; }
+  if (r.error || !r.data || !r.saved) return;
+  const sv = r.saved, x = sv.extra || {};
+  const acts = el("div","bi-acts"); acts.style.margin = "14px 0";
+  acts.appendChild(btn("Imprimer ou PDF","", () => window.print()));
+  if (curC.space){ let armed = false; const sendB = btn(sv.sent ? "Renvoyer au client" : "Envoyer au client","", async () => {
+      if (!armed){ armed = true; sendB.textContent = "Confirmer l’envoi"; sendB.classList.add("armed"); return; }
+      sendB.disabled = true; try { const out = await GC.api("PUT","/api/g-bilan/" + cur, { m, extra: x, send: true, html: deck.outerHTML }); r.saved = out.saved; toast("Bilan envoyé dans l’espace du client."); render(); } catch(e){ toast(e.message); sendB.disabled = false; } });
+    acts.appendChild(sendB); }
+  const deck = bilanSlides(r.data, x); root.append(acts, deck);
 }
 
 /* Offres de l'agence, d'après la plaquette v12 du 03/11/2026 ; le Pack Meta (campagnes seules, hors pack) n'y figure pas : conditions tirées de agence.md (campagnes Meta). */
@@ -773,7 +744,7 @@ function vOffres(root){
 }
 function vFiches(root){
   const fiTab = ["offres","bilans","archives"].includes(S.ui.fiTab) ? S.ui.fiTab : "clients";
-  root.appendChild(head("Tableau clients", fiTab === "archives" ? "Les clients avec qui la collaboration s’est arrêtée : services, motif, notes et pièces jointes. Ils n’apparaissent plus dans les listes de l’appli." : fiTab === "bilans" ? "Le bilan du mois de chaque client, calculé par l’appli, pour faire le point avec lui. Interne : le client ne le voit pas dans son espace." : fiTab === "offres" ? "Les offres de l’agence et ce que chaque pack comprend. Prix hors taxes." : "Réservé à " + fullNames() + " : depuis quand, quels services, la formule et ce qu’il faut penser.", [segm([["clients","Clients"],["offres","Offres"],["bilans","Bilans"],["archives","Archives"]], fiTab, v => { S.ui.fiTab = v; remember(); render(); }), fiTab === "clients" ? addBtn("Nouveau client", () => editClient({})) : null]));
+  root.appendChild(head("Tableau clients", fiTab === "archives" ? "Les clients avec qui la collaboration s’est arrêtée : services, motif, notes et pièces jointes. Ils n’apparaissent plus dans les listes de l’appli." : fiTab === "bilans" ? "" : fiTab === "offres" ? "Les offres de l’agence et ce que chaque pack comprend. Prix hors taxes." : "Réservé à " + fullNames() + " : depuis quand, quels services, la formule et ce qu’il faut penser.", [segm([["clients","Clients"],["offres","Offres"],["bilans","Bilans"],["archives","Archives"]], fiTab, v => { S.ui.fiTab = v; remember(); render(); }), fiTab === "clients" ? addBtn("Nouveau client", () => editClient({})) : null]));
   if (fiTab === "offres") return vOffres(root);
   if (fiTab === "bilans") return vBilans(root);
   if (fiTab === "archives") return vArchives(root);
