@@ -1518,6 +1518,26 @@ function sxEdit(st, sec){ const p = sxParse(st.raw), s = sec ? p.sections.find(x
     onDelete: sec ? null : () => remove("strategies", st.id),
     onSave: o => { let raw = sec ? sxSetSection(st.raw, sec, () => o.md.trim() + "\n") : o.md; raw = raw.replace(/^(Dernière mise à jour\s*:\s*).*$/m, "$1" + fmtFR(today())); return patch("strategies", st.id, { raw }); } }); }
 function sxPick(){ const inp = el("input"); inp.type = "file"; inp.accept = ".md,text/markdown,text/plain"; inp.multiple = true; inp.onchange = () => { if (inp.files.length) sxImport([...inp.files]).catch(x => toast(x.message || "Import impossible.")); }; inp.click(); }
+/* Fiche stratégie en PDF (document interne) : objectifs et leur état, puis toute la fiche, aux couleurs de l'agence */
+function sxPdf(st){
+  const p = sxParse(st.raw), E = t => String(t == null ? "" : t).replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" })[c]);
+  const goals = p.goals.map(g => { const x = sxState(st, g); return "<tr><td><b>" + E(g.ind) + "</b><br><small>" + E(g.volet) + "</small></td><td>" + E(g.depTxt) + "</td><td>" + E(g.cibTxt + (g.echTxt ? ", " + g.echTxt : "")) + "</td><td>" + (x.last ? E(sxFmt(x.last.val) + ", " + fmtD(x.last.date)) : "—") + "</td><td>" + E(x.label) + "</td></tr>"; }).join("");
+  const secs = p.sections.map(x => "<section><h2>" + E(x.title) + "</h2>" + sxMd(x.md).innerHTML + "</section>").join("");
+  const html = '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Stratégie ' + E(st.client) + '</title><style>'
+    + '@page{size:A4;margin:14mm}*{box-sizing:border-box}body{margin:0;font:11.5px/1.5 -apple-system,"Helvetica Neue",Arial,sans-serif;color:#1D1D1B;-webkit-print-color-adjust:exact;print-color-adjust:exact}'
+    + 'header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #C6FF33;padding-bottom:8px;margin-bottom:14px}h1{margin:0;font:italic 800 28px/1 "Helvetica Neue",Arial,sans-serif;text-transform:uppercase}'
+    + 'h1 small{display:block;font-size:12px;font-weight:600;font-style:normal;text-transform:none;color:#6b6b66;margin-top:5px}.ag{font-weight:800;letter-spacing:.2em;font-size:10px}'
+    + 'h2{font:italic 800 15px/1.2 "Helvetica Neue",Arial,sans-serif;text-transform:uppercase;margin:18px 0 6px;padding-left:8px;border-left:4px solid #C6FF33;break-after:avoid}'
+    + 'h4{margin:10px 0 4px;font-size:12px}table{width:100%;border-collapse:collapse;margin:6px 0;break-inside:auto}th,td{border:1px solid #ddd;padding:4px 6px;text-align:left;vertical-align:top;font-size:10.5px}th{background:#1D1D1B;color:#fff}tr{break-inside:avoid}'
+    + 'ul,ol{margin:4px 0;padding-left:18px}p{margin:4px 0}section{break-inside:auto}footer{margin-top:14px;font-size:9.5px;color:#6b6b66}.tw{overflow:visible}'
+    + '</style></head><body><header><h1>Stratégie<small>' + E(st.client) + ' · plan ' + E(p.plan || "?") + (p.end ? ', cycle jusqu’au ' + E(fmtFR(p.end)) : '') + ' · fiche mise à jour le ' + E(p.head["dernière mise à jour"] || "?") + '</small></h1><span class="ag">AGENCE GACOLET</span></header>'
+    + (goals ? '<h2>Objectifs</h2><table><tr><th>Objectif</th><th>Départ</th><th>Cible</th><th>Dernier relevé</th><th>État</th></tr>' + goals + '</table>' : '')
+    + secs + '<footer>Document interne de l’Agence Gacolet, édité le ' + E(fmtFR(today())) + '.</footer></body></html>';
+  const fr = document.createElement("iframe"); fr.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0"; document.body.appendChild(fr);
+  fr.contentDocument.open(); fr.contentDocument.write(html); fr.contentDocument.close();
+  setTimeout(() => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch(e){ toast("Impression impossible : " + e.message); } setTimeout(() => fr.remove(), 60000); }, 300);
+  toast("Choisis « Enregistrer en PDF » dans la fenêtre d’impression.");
+}
 function vStrategie(root){
   const all = STRATS(), cur = all.find(s => s.id === S.ui.sxId) || null;
   const sel = el("select","pick"); [["","Vue d’ensemble"]].concat(all.map(s => [s.id, s.client])).forEach(([v, l]) => { const o = el("option", null, l); o.value = v; sel.appendChild(o); }); sel.value = cur ? cur.id : ""; sel.onchange = () => { S.ui.sxId = sel.value; remember(); render(); };
@@ -1534,7 +1554,7 @@ function vStrategie(root){
       g.appendChild(card); });
     root.appendChild(g); return; }
   const p = sxParse(cur.raw), bar = el("div","fin-btns");
-  bar.append(btn("‹ Tous les clients","sm", () => { S.ui.sxId = ""; remember(); render(); }), btn("Point de la semaine","sm lemon", () => sxReading(cur)), btn("Changer de plan","sm", () => sxPlan(cur)));
+  bar.append(btn("‹ Tous les clients","sm", () => { S.ui.sxId = ""; remember(); render(); }), btn("Point de la semaine","sm lemon", () => sxReading(cur)), btn("Changer de plan","sm", () => sxPlan(cur)), btn("PDF","sm", () => sxPdf(cur)));
   root.appendChild(bar);
   root.appendChild(el("p","muted", ["Plan " + (p.plan || "?"), p.end ? "cycle jusqu’au " + fmtFR(p.end) : "", "fiche mise à jour le " + (p.head["dernière mise à jour"] || "?")].filter(Boolean).join(" · ")));
   root.appendChild(el("h2","fin-h","Objectifs"));
