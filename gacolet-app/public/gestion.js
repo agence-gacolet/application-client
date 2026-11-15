@@ -3753,6 +3753,10 @@ function pmNotif(w){
 
 /* Codes clients : un code par client, partagé par toutes les personnes de ce client */
 const MOD_LABEL = { "com":"Réseaux sociaux", "meta":"Publicité Meta", "com,meta":"Réseaux et Meta" };
+/* Espace client d'après les offres : Pack Performance = réseaux + Meta (pub au résultat comprise) ; Pack Meta = Meta ; packs réseaux et sur mesure = réseaux ; print, site, ponctuel seuls = réseaux (accueil, messagerie, tournages) */
+const modsFromSv = ks => { const meta = ks.includes("perf") || ks.includes("meta"), com = ks.some(k => ["perf","perfplus","gestion","sur","print","site","ponctuel"].includes(k)); return [com || !meta ? "com" : "", meta ? "meta" : ""].filter(Boolean).join(","); };
+const ficheOf = name => (S.d && S.d.clients || []).find(c => norm(c.name) === norm(name));
+const svShort = x => { const f = ficheOf(x.name), ks = f ? Object.keys(svOf(f)) : []; return ks.length ? SERVICES.filter(([k]) => ks.includes(k)).map(y => y[2]).join(", ") : (MOD_LABEL[x.modules] || x.modules || ""); };
 async function reloadCodes(){ try { const r = await GC.api("GET","/api/g-codes"); S.codes = r.clients; } catch(e){ toast(e.message); if (!S.codes) S.codes = []; } render(); }
 function copyCode(code){ (navigator.clipboard ? navigator.clipboard.writeText(code) : Promise.reject()).then(() => toast("Code " + code + " copié."), () => toast(code)); }
 function pmCodes(w){
@@ -3770,10 +3774,10 @@ function pmCodes(w){
   const withAcc = new Set(S.codes.map(x => norm(x.name)));
   clientNames().filter(n => n !== AGENCE && !withAcc.has(norm(n)) && (!t || norm(n).includes(t))).sort((a, b) => a.localeCompare(b, "fr")).forEach(n => {
     const tr = el("tr","row"); tr.onclick = () => editCode({ name: n });
-    td(tr, n,"ttl"); td(tr, el("span","muted","Pas d’accès"),"nw"); td(tr, "","nw hm"); td(tr, "","nw"); td(tr, links(n),"nw");
+    td(tr, n,"ttl"); td(tr, el("span","muted","Pas d’accès"),"nw"); td(tr, svShort({ name: n }),"nw hm"); td(tr, "","nw"); td(tr, links(n),"nw");
     td(tr, btn("Créer l’accès","sm lemon", e => { e.stopPropagation(); editCode({ name: n }); }),"nw"); tb.appendChild(tr); });
   rows.forEach(x => { const tr = el("tr","row" + (x.active ? "" : " done")); tr.onclick = () => editCode(x);
-    td(tr, x.name,"ttl"); td(tr, el("code","cd-code", x.code),"nw"); td(tr, MOD_LABEL[x.modules] || x.modules,"nw hm");
+    td(tr, x.name,"ttl"); td(tr, el("code","cd-code", x.code),"nw"); td(tr, svShort(x),"nw hm");
     td(tr, x.people.length ? x.people.length + (x.people.length > 1 ? " personnes" : " personne") : el("span","muted","Personne"),"nw");
     td(tr, links(x.name, x.id),"nw");
     const a = el("div","cd-act");
@@ -3859,11 +3863,23 @@ function editCode(x){
     const fld = (label, inp, half) => { const l = el("label", half ? null : "full"); l.appendChild(el("span",null,label)); l.appendChild(inp); f.appendChild(l); return inp; };
     const iN = fld("Nom du client", Object.assign(el("input"), { value: x.name || "", required: true, readOnly: isNew }));
     if (isNew) m.appendChild(el("p","muted","Le code, le groupe de discussion avec le client et la discussion interne seront rattachés à ce client. Avant d’envoyer le code, clique sur Aperçu pour voir son espace."));
-    const iM = el("select"); Object.entries(MOD_LABEL).forEach(([v, l]) => { const o = el("option",null,l); o.value = v; iM.appendChild(o); }); iM.value = x.modules || "com"; fld("Services de l’espace client", iM, true);
-    const iF = fld("Formule", Object.assign(el("input"), { value: x.formula || "", placeholder: "Ex. Pack réseaux" }), true);
+    // Services = les offres de l'agence (comme dans la fiche du Tableau clients), cochées d'après la fiche ; l'espace client (réseaux, Meta) et la formule en découlent
+    const fc = ficheOf(x.name), sv0 = fc ? svOf(fc) : {}, had = Object.keys(sv0);
+    if (!had.length && x.modules){ if (x.modules.includes("meta") && !x.modules.includes("com")) had.push("meta"); }
+    const svBox = el("div","cd-sv"), svIn = {};
+    SERVICES.forEach(([k, l]) => { const lab = el("label","inline"), c = el("input"); c.type = "checkbox"; c.checked = had.includes(k); svIn[k] = c; lab.append(c, document.createTextNode(l)); svBox.appendChild(lab); });
+    { const l = el("label","full"); l.appendChild(el("span",null,"Services du client")); l.appendChild(svBox); f.appendChild(l); }
+    const svNote = el("p","muted cd-svn"); f.appendChild(svNote);
+    const iF = fld("Formule", Object.assign(el("input"), { value: x.formula || (packFill(had) || {}).formula || "", placeholder: "Ex. Pack Performance" }), true);
+    const picked = () => SV_KEYS.filter(k => svIn[k].checked);
+    const showMods = () => { const m = modsFromSv(picked()); svNote.textContent = "Son espace montrera : " + (MOD_LABEL[m] || m).toLowerCase() + "."; iG.closest("label").style.display = iQ.closest("label").style.display = m.includes("meta") ? "" : "none"; };
+    let autoF = iF.value === ((packFill(had) || {}).formula || "") ;
+    iF.oninput = () => { autoF = false; };
+    Object.values(svIn).forEach(c => c.onchange = () => { const nx = packFill(picked()); if (autoF || !iF.value.trim()){ iF.value = nx ? nx.formula : ""; autoF = true; } showMods(); });
     const iG = fld("Objectif de contacts par mois (Meta)", Object.assign(el("input"), { type: "number", min: 0, value: x.contacts_goal || "" }), true);
     const iA = el("select"); [["1","Actif"],["0","Désactivé"]].forEach(([v,l]) => { const o = el("option",null,l); o.value = v; iA.appendChild(o); }); iA.value = x.active === 0 ? "0" : "1"; if (!isNew) fld("Accès", iA, true);
     const iQ = fld("Définition écrite du contact qualifié (Meta)", Object.assign(el("textarea"), { rows: 3, value: x.qualified_definition || "" }));
+    showMods();
     m.appendChild(f);
     if (!isNew){
       m.appendChild(el("h4","cd-h", "Personnes inscrites"));
@@ -3876,7 +3892,11 @@ function editCode(x){
     const act = el("div","actions");
     act.append(btn("Annuler","", () => closeModal()), btn(isNew ? "Créer et générer le code" : "Enregistrer","lemon", async () => {
       if (!iN.value.trim()){ iN.focus(); toast("Indique le nom du client."); return; }
-      const body = { name: iN.value.trim(), modules: iM.value.split(","), formula: iF.value.trim(), goal: Number(iG.value) || 0, qualifiedDef: iQ.value.trim() };
+      const pk = picked(); if (!pk.length){ toast("Coche au moins un service."); return; }
+      const body = { name: iN.value.trim(), modules: modsFromSv(pk).split(","), formula: iF.value.trim(), goal: Number(iG.value) || 0, qualifiedDef: iQ.value.trim() };
+      // Les services cochés sont repris dans la fiche du client (Tableau clients), dates « Depuis le » gardées
+      if (fc && pk.join() !== Object.keys(sv0).filter(k => SV_KEYS.includes(k)).sort((a, b) => SV_KEYS.indexOf(a) - SV_KEYS.indexOf(b)).join()){
+        const services = {}; pk.forEach(k => { services[k] = sv0[k] || ""; }); try { await save("clients", fc.id, { services }, { merge: true }); } catch(e){ if (e.message !== "ro") toast(e.message); } }
       try { if (isNew){ const r = await GC.api("POST","/api/g-codes", body); toast("Code créé : " + r.code); copyCode(r.code); } else { body.active = iA.value === "1"; await GC.api("PATCH","/api/g-codes/" + x.id, body); toast("Client enregistré."); } closeModal(); reloadCodes(); loadCgroups(); S.meta = null; } catch(e){ toast(e.message); } }));
     m.appendChild(act);
   });

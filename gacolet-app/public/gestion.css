@@ -2078,3 +2078,9 @@ html.tg-lock,html.tg-lock body{overflow:hidden}
 }
 @media (prefers-reduced-motion:reduce){ .btn,.dp-tile,.pb-card,.pd-prop{transition:none} .btn:hover,.dp-tile:hover,.pb-card:hover,.pd-prop:hover{transform:none} }
 @media (hover:hover){ .btn:not(:disabled):hover:active{transform:scale(.95)} }
+
+/* Codes clients : services cochables */
+.cd-sv{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 14px;margin-top:4px}
+.cd-sv label.inline{display:flex;align-items:center;gap:8px;font-weight:400}
+.cd-svn{grid-column:1/-1;margin:-4px 0 2px;font-size:12px}
+@media (max-width:640px){.cd-sv{grid-template-columns:1fr}}
