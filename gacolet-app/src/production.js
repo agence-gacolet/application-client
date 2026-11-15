@@ -32,6 +32,17 @@ module.exports = function production({ app, auth, wrap, db, current, put, pubPla
     // Date conseillée : selon ce qui est déjà publié ou programmé ce mois-ci, ce qui manque pour la formule (posts par mois),
     // les jours de publication écrits dans la fiche ou la stratégie (« mardi 12 h », « le lundi »), jamais deux le même jour
     const name = String(req.query.client || ""), n = Math.max(1, Math.min(20, Number(req.query.n) || 1));
+    // Gabriel : 10 publications par jour sur une grille d'horaires fixe ; on prend les prochains créneaux libres
+    if (norm(name) === "gabriel") {
+      const GRID = ["08:30","09:30","10:15","11:00","12:00","13:30","15:00","16:30","18:00","19:30"], used = new Set(), blogG = blogOf(name);
+      const d0 = new Date(), d1 = new Date(); d1.setDate(d1.getDate() + 20); const isoD = x => x.toLocaleDateString("sv-SE", { timeZone: "Europe/Paris" });
+      if (process.env.METRICOOL_USER_TOKEN) { try { const j = await mc("GET", "/v2/scheduler/posts", { blogId: blogG, start: isoD(d0) + "T00:00:00", end: isoD(d1) + "T23:59:59", timezone: "Europe/Paris" });
+        (Array.isArray(j) ? j : (j && j.data) || []).forEach(p => { const dt = String((p.publicationDate && p.publicationDate.dateTime) || ""); if (dt) used.add(dt.slice(0, 16)); }); } catch (e) {} }
+      const nowP = new Date().toLocaleString("sv-SE", { timeZone: "Europe/Paris" }).slice(0, 16).replace(" ", "T"), out = [];
+      for (let k = 0; k < 20 && out.length < n; k++) { const d = new Date(); d.setDate(d.getDate() + k); const day = isoD(d);
+        for (const t of GRID) { const key = day + "T" + t; if (key <= nowP || used.has(key)) continue; out.push({ date: day, time: t }); used.add(key); if (out.length >= n) break; } }
+      return res.json({ slots: out, blog: true, hour: "", perMonth: 300 });
+    }
     const { fiche, strat } = await clientContext(name), blog = blogOf(name), hour = usualHour(fiche), plan = perMonth(fiche);
     const DAYS = ["dimanche","lundi","mardi","mercredi","jeudi","vendredi","samedi"], rythme = (String(strat).match(/##\s*Rythme[\s\S]*?(?=\n##\s|$)/i) || [""])[0] + " " + (fiche.perMonth || "");
     const pref = DAYS.map((d, k) => new RegExp("\\b" + d + "s?\\b", "i").test(rythme) ? k : -1).filter(k => k >= 0);
