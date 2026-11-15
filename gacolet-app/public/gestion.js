@@ -429,9 +429,11 @@ function editCommercial(c){
 
 /* Campagnes */
 function editCampaign(k){
+  if (!S.metaAds){ S.metaAds = []; GC.api("GET","/api/g-metaads").then(r => { S.metaAds = r.accounts || []; }).catch(() => {}); }
   openForm({ key:"ca", title: k.id ? "Campagne, "+k.client : "Nouvelle campagne", values: Object.assign({status:"À lancer"}, k),
     fields:[{k:"client",label:"Client",list:clientNames(),req:"Indique le client."},{k:"status",label:"Statut",type:"select",options:CAMP_STATUS,half:true},{k:"budget",label:"Budget",half:true,ph:"Ex. 500 € / mois"},
-      {k:"launchedAt",label:"Lancée le",type:"date",half:true},{k:"link",label:"Suivi des contacts (lien)",half:true,ph:"https://"},{k:"note",label:"À savoir",type:"textarea"}],
+      {k:"launchedAt",label:"Lancée le",type:"date",half:true},{k:"link",label:"Suivi des contacts (lien)",half:true,ph:"https://"},
+      {k:"adAccount",label:"Compte publicitaire Meta",type:"select",options:[["","Trouvé tout seul d’après le nom du client"]].concat((S.metaAds || []).map(a => [a.id, a.name]))},{k:"note",label:"À savoir",type:"textarea"}],
     onDelete: k.id ? () => remove("campaigns", k.id) : null,
     onSave: out => save("campaigns", k.id || null, Object.assign(k.id ? strip(k) : {order:999}, out)) });
 }
@@ -1197,8 +1199,15 @@ function callImport(){
 (function(){ const st = document.createElement("style"); st.textContent = ".cl-ph{display:flex;gap:8px;align-items:center}.cl-tel{color:#C6FF33;font-weight:600;white-space:nowrap}.cl-pin{width:120px}.cl-web{color:#C6FF33}.cl-find{font-size:12px;color:var(--muted,#9a9a94);text-decoration:underline}.cl-res .cl-list{list-style:none;margin:6px 0;padding:0;max-height:38vh;overflow:auto;display:grid;gap:4px}.cl-list li{display:flex;gap:10px;align-items:center;padding:4px 0;border-bottom:1px solid var(--line-2)}"; document.head.appendChild(st); })();
 
 /* ---------- Campagnes ---------- */
+// Ce que Meta dit d'une campagne (lu par le serveur toutes les heures)
+function metaNote(c){ const m = c.meta; if (!m) return null; const d = el("div","mt-meta");
+  d.textContent = "Meta : " + (m.live && m.live.length ? plural(m.live.length, "active", "actives") : "rien d’actif") + (m.spend ? ", " + Math.round(m.spend) + " € ce mois" : "") + (m.leads ? ", " + plural(m.leads, "contact") : "");
+  d.title = (m.account || "") + (m.live && m.live.length ? " : " + m.live.join(", ") : "") + "\nLu le " + (m.at ? new Date(m.at).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""); return d; }
+(function(){ const st = document.createElement("style"); st.textContent = ".mt-meta{margin-top:4px;min-width:150px;font-size:var(--fs-xs,12px);line-height:1.35;color:var(--muted);white-space:normal}"; document.head.appendChild(st); })();
+function metaSyncBtn(){ const b = btn("Actualiser depuis Meta","", async () => { b.disabled = true; b.textContent = "Lecture de Meta…";
+    try { const r = await GC.api("POST","/api/g-metaads/sync"); toast("État des campagnes lu sur Meta (" + plural(r.accounts, "compte") + ")."); } catch(e){ toast(e.message); } b.disabled = false; b.textContent = "Actualiser depuis Meta"; }); return b; }
 function vCampagnes(root){
-  root.appendChild(head("Campagnes", "Publicité Meta : le budget est payé par le client directement à Meta.", [addBtn("Nouvelle campagne", () => editCampaign({}))]));
+  root.appendChild(head("Campagnes", "Publicité Meta : le budget est payé par le client directement à Meta. L’état se met à jour tout seul depuis Meta toutes les heures.", [metaSyncBtn(), addBtn("Nouvelle campagne", () => editCampaign({}))]));
   const CATS = [["En cours","EN COURS"],["À lancer","À LANCER"],["Arrêtée","ARRÊTÉES"]];
   const cur = CATS.some(c => c[0] === S.ui.cpStatus) ? S.ui.cpStatus : "";
   { const f = el("div","filters ag-f"); const g = el("div","fgroup"); const lb = el("label","flabel","Statut"); lb.htmlFor = "cp-status"; const s = el("select","pick"); s.id = "cp-status";
@@ -1211,7 +1220,7 @@ function vCampagnes(root){
     rows.forEach(c => { const tr = el("tr","row"); tr.onclick = () => editCampaign(c);
       td(tr, clientTag(c.client),"nw");
       const sel = el("select","inl"); CAMP_STATUS.forEach(x => { const o = el("option",null,x); o.value = x; sel.appendChild(o); }); sel.value = c.status; sel.disabled = !writable(); sel.onclick = e => e.stopPropagation(); sel.onchange = () => patch("campaigns", c.id, {status:sel.value}).then(() => toast("Campagne passée en « "+sel.value+" ». Pense à la fiche 50_PUBLICITE."));
-      td(tr, sel); td(tr, c.budget,"nw"); td(tr, fmtFR(c.launchedAt),"nw"); td(tr, el("div","note",c.note));
+      { const sc = el("div"); sc.appendChild(sel); const mn = metaNote(c); if (mn) sc.appendChild(mn); td(tr, sc); } td(tr, c.budget,"nw"); td(tr, fmtFR(c.launchedAt),"nw"); td(tr, el("div","note",c.note));
       const l = linkNode(c.link, "Contacts"); if (l instanceof Node) l.onclick = e => e.stopPropagation(); td(tr, l);
       tb.appendChild(tr); });
   });
@@ -1319,7 +1328,7 @@ function vMeta(root){
     if (cur){ const d = el("span","mt-dot"); d.style.setProperty("--c", colorOf(cur)); g.appendChild(d); }
     tabs.appendChild(g); }
   if (!cur){
-    root.appendChild(head("Meta", "Publicité Meta, un onglet par client. Le budget est payé par le client directement à Meta.", [addBtn("Nouvelle campagne", () => editCampaign({}))]));
+    root.appendChild(head("Meta", "Publicité Meta, un onglet par client. Le budget est payé par le client directement à Meta. L’état des campagnes se lit tout seul sur Meta toutes les heures.", [metaSyncBtn(), addBtn("Nouvelle campagne", () => editCampaign({}))]));
     root.appendChild(tabs);
     const {w, tb} = table(["Client","Campagne","Budget","~Contacts ce mois","~Qualifiés ce mois","~Dernier contact"]);
     names.filter(n => mtCat < 0 || rank(n) === mtCat).forEach(n => {
@@ -1327,7 +1336,7 @@ function vMeta(root){
       const top = cs[0], ls = leadsOf(n), lm = ls.filter(l => (l.date || "").slice(0, 7) === month), c = mc(n), ms = msStats(n, month);
       const tr = el("tr","row"); tr.onclick = () => { S.ui.mtTab = n; remember(); render(); };
       td(tr, clientTag(n),"nw");
-      td(tr, top ? el("span","pill" + (top.status === "En cours" ? " ok" : top.status === "Arrêtée" ? " l2" : ""), top.status + (cs.length > 1 ? " (" + cs.length + ")" : "")) : el("span","muted","Aucune"),"nw");
+      { const sc = el("div"); sc.appendChild(top ? el("span","pill" + (top.status === "En cours" ? " ok" : top.status === "Arrêtée" ? " l2" : ""), top.status + (cs.length > 1 ? " (" + cs.length + ")" : "")) : el("span","muted","Aucune")); const mn = top && metaNote(top); if (mn) sc.appendChild(mn); td(tr, sc); }
       td(tr, top ? top.budget || "—" : "—","nw");
       td(tr, ms ? String(ms.month) : c ? lm.length + (c.goal ? " / " + c.goal : "") : "—","nw hm");
       td(tr, ms ? String(ms.qualified) : c ? String(lm.filter(l => l.qualified === 1).length) : "—","nw hm");
@@ -1341,7 +1350,7 @@ function vMeta(root){
 
   const c = mc(cur), cs = S.d.campaigns.filter(x => x.client === cur).sort((a, b) => (CAMP_RANK[a.status] ?? 3) - (CAMP_RANK[b.status] ?? 3));
   const ls = leadsOf(cur), lm = ls.filter(l => (l.date || "").slice(0, 7) === month);
-  const tools = [addBtn("Nouvelle campagne", () => editCampaign({ client: cur }))];
+  const tools = [metaSyncBtn(), addBtn("Nouvelle campagne", () => editCampaign({ client: cur }))];
   if (c) tools.push(btn("Ajouter un contact","", () => addLead(c)));
   root.appendChild(head(cur, "Publicité Meta, budget payé par le client directement à Meta.", tools));
   root.appendChild(tabs);
@@ -1361,7 +1370,7 @@ function vMeta(root){
     const {w, tb} = table(["Statut","Budget","Lancée le","À savoir","Suivi"]);
     cs.forEach(x => { const tr = el("tr","row"); tr.onclick = () => editCampaign(x);
       const sel = el("select","inl"); CAMP_STATUS.forEach(v => { const o = el("option",null,v); o.value = v; sel.appendChild(o); }); sel.value = x.status; sel.disabled = !writable(); sel.onclick = e => e.stopPropagation(); sel.onchange = () => patch("campaigns", x.id, {status:sel.value}).then(() => toast("Campagne passée en « "+sel.value+" »."));
-      td(tr, sel); td(tr, x.budget,"nw"); td(tr, fmtFR(x.launchedAt),"nw"); td(tr, el("div","note",x.note));
+      { const sc = el("div"); sc.appendChild(sel); const mn = metaNote(x); if (mn) sc.appendChild(mn); td(tr, sc); } td(tr, x.budget,"nw"); td(tr, fmtFR(x.launchedAt),"nw"); td(tr, el("div","note",x.note));
       const l = linkNode(x.link, "Tableau"); if (l instanceof Node) l.onclick = e => e.stopPropagation(); td(tr, l); tb.appendChild(tr); });
     root.appendChild(w);
   } else root.appendChild(el("p","empty","Aucune campagne pour ce client."));
@@ -3479,6 +3488,16 @@ function pmClaude(w){
   a.appendChild(b); c.appendChild(a);
 }
 /* Clé Google Maps (Places API) pour les listes d'appels */
+/* Meta : jeton d'un utilisateur système du Business Manager (droit ads_read) ; l'appli lit alors l'état des campagnes toutes les heures */
+function pmMetaAds(w){
+  const c = pmCard("Meta (publicités)", "Sert à mettre à jour tout seul l’état des campagnes (en cours, arrêtée), la dépense et les contacts du mois. Jeton d’un utilisateur système du Business Manager de l’agence, avec le droit « ads_read » sur les comptes publicitaires des clients.");
+  w.appendChild(c); const st = el("p","note","Vérification…"); c.appendChild(st);
+  GC.api("GET","/api/g-metaads").then(r => { st.textContent = !r.configured ? "Pas encore relié." : r.error ? "Relié, mais Meta répond : " + r.error : "Relié : " + plural(r.accounts.length, "compte publicitaire") + (r.at ? ", dernière lecture le " + new Date(r.at).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "") + (r.unmatched.length ? ". Sans campagne dans l’appli : " + r.unmatched.join(", ") + "." : "."); if (r.configured && !r.error) st.style.color = "var(--ok, #9BD85C)"; }).catch(() => { st.textContent = ""; });
+  const f = el("div","form"), l = el("label", null, "Jeton Meta"), i = el("input"); i.type = "password"; i.autocomplete = "off"; i.placeholder = "EAA…"; l.appendChild(i); f.appendChild(l); c.appendChild(f);
+  const a = el("div","pm-actions"), b = btn("Enregistrer le jeton","lemon", async () => { if (!i.value.trim()) return toast("Colle d’abord le jeton."); b.disabled = true;
+    try { const r = await GC.api("PUT","/api/g-keys/meta", { token: i.value.trim() }); i.value = ""; toast("Meta relié : " + plural(r.accounts, "compte publicitaire") + "."); render(); } catch(x){ toast(x.message); } b.disabled = false; });
+  a.appendChild(b); c.appendChild(a);
+}
 function pmPlaces(w){
   const c = pmCard("Google Maps (listes d’appels)", "Sert à générer les listes d’appels avec le téléphone, le site et les avis Google. Clé à créer dans Google Cloud (API « Places API (New) »). Environ 1 000 recherches gratuites par mois, puis quelques centimes par recherche.");
   w.appendChild(c);
@@ -3543,7 +3562,7 @@ function pmLiaisons(w){
   const a = el("div","pm-actions"); const b = btn("Enregistrer la clé","lemon", async () => { const v = inp.value.trim(); if (!v) return toast("Colle d’abord la clé.");
     b.disabled = true; try { await GC.api("PUT","/api/g-keys/metricool",{ token: v }); inp.value = ""; toast("Metricool relié."); S.pubs = {}; pubAt = {}; render(); } catch(x){ toast(x.message || "Enregistrement impossible."); b.disabled = false; } });
   a.appendChild(b); c.appendChild(a); w.appendChild(c);
-  pmGsheets(w); pmPlaces(w); pmClaude(w);
+  pmMetaAds(w); pmGsheets(w); pmPlaces(w); pmClaude(w);
   pmMaj(w);
 }
 
