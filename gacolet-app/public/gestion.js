@@ -1108,14 +1108,18 @@ const CAMP_RANK = { "En cours":0, "À lancer":1, "Arrêtée":2 };
 /* Tableaux de suivi copiés depuis Google Sheets par Make (lecture seule, mis à jour automatiquement) */
 const msBase = n => norm(n).replace(/\s*\(.*\)\s*$/, "").replace(/\s+/g, " ").trim();
 const sheetsOf = name => (S.d.msheets || []).filter(x => msBase(x.client) === msBase(name) || norm(x.client) === norm(name));
-const TAB_RANK = t => /^contacts$/i.test(t) ? 0 : /factur/i.test(t) ? 1 : /r[ée]cap/i.test(t) ? 2 : /mode d/i.test(t) ? 9 : 5;
+const isContactTab = x => /^contacts$/i.test(x.tab) || ((x.rows || [])[0] || []).some(v => /^re[çc]u le$/i.test(String(v).trim()));
+const TAB_RANK = t => /^contacts$|^leads$/i.test(t) ? 0 : /factur/i.test(t) ? 1 : /r[ée]cap/i.test(t) ? 2 : /mode d/i.test(t) ? 9 : 5;
 const msDate = v => { const s = String(v || "").trim(); let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); if (m) return m[3] + "-" + m[2].padStart(2,"0") + "-" + m[1].padStart(2,"0"); m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[0] : ""; };
 const msStatusCol = h => { const i = h.findIndex(x => /^statut final$/i.test(x)); if (i >= 0) return i; const j = h.findIndex(x => /^statut$/i.test(x)); if (j >= 0) return j; return h.findIndex(x => /^suite$/i.test(x)); };
 const msTone = v => /^(qualifié|commande|signé|oui$)/i.test(v) ? "ok" : /^(non qualifié|exclu|pas de commande|sans suite|non$)/i.test(v) ? "l2" : v ? "l3" : "";
 function msContacts(name){
-  const sh = sheetsOf(name).find(x => /^contacts$/i.test(x.tab)); if (!sh || !sh.rows || !sh.rows.length) return null;
-  const h = sh.rows[0], rows = sh.rows.slice(1).filter(r => r.some(v => v !== "")), di = h.findIndex(x => /^reçu le$/i.test(x)), si = msStatusCol(h);
-  return { sh, h, rows, date: r => di >= 0 ? msDate(r[di]) : "", status: r => si >= 0 ? r[si] : "" };
+  // Tous les onglets de contacts du client (Locamex : « Leads » et « Piscinistes »), chacun avec ses propres colonnes
+  const tabs = sheetsOf(name).filter(x => isContactTab(x) && x.rows && x.rows.length > 1); if (!tabs.length) return null;
+  const rows = [], sh = tabs[0], h = sh.rows[0];
+  tabs.forEach(t => { const th = t.rows[0], di = th.findIndex(x => /^re[çc]u le$/i.test(String(x).trim())), si = msStatusCol(th);
+    t.rows.slice(1).filter(r => r.some(v => v !== "")).forEach(r => { const o = r.slice(); o._d = di >= 0 ? msDate(r[di]) : ""; o._s = si >= 0 ? r[si] : ""; rows.push(o); }); });
+  return { sh, h, rows, date: r => r._d || "", status: r => r._s || "" };
 }
 function msStats(name, month){
   const c = msContacts(name); if (!c) return null;
@@ -1136,7 +1140,7 @@ function msSection(root, name){
   root.appendChild(bar);
   const rows = (cur.rows || []).filter(r => r.some(v => v !== ""));
   if (/mode d/i.test(cur.tab)){ const box = el("div","ms-doc"); rows.forEach(r => { const t = r.filter(Boolean).join(" "); const p = el("p", /^[A-ZÀ-Ý][^.:]{0,40}$/.test(t) ? "ms-dh" : null, t); box.appendChild(p); }); root.appendChild(box); }
-  else if (/^contacts$|factur/i.test(cur.tab) && rows.length){
+  else if ((isContactTab(cur) || /factur/i.test(cur.tab)) && rows.length){
     const h = rows[0]; let data = rows.slice(1);
     const used = h.map((_, i) => data.some(r => r[i] !== "")), si = msStatusCol(h);
     const tools = el("div","filters ag-f");
@@ -1166,7 +1170,7 @@ function msSection(root, name){
       for (let i = 0; i < n; i++){ const c = el(ri === hi ? "th" : "td"); c.appendChild(msCell(r[i] || "")); tr.appendChild(c); } body.appendChild(tr); });
     tb.appendChild(body); w.appendChild(tb); root.appendChild(w);
   }
-  const st = el("p","status","Copie du tableau Google Sheets, mise à jour automatiquement" + (cur.syncedAt ? " (dernière mise à jour le " + fmtFR(cur.syncedAt.slice(0, 10)) + " à " + fmtTime(cur.syncedAt.slice(11, 16)) + ", heure UTC)" : "") + ". Le client et l’agence continuent de remplir le Sheets. ");
+  const st = el("p","status","Copie du tableau Google Sheets, relue toutes les 10 minutes" + (cur.syncedAt ? " (dernière mise à jour le " + fmtFR(cur.syncedAt.slice(0, 10)) + " à " + fmtTime(cur.syncedAt.slice(11, 16)) + ", heure UTC)" : "") + ". Le client et l’agence continuent de remplir le Sheets. ");
   if (cur.url){ const a = el("a",null,"Ouvrir le Sheets"); a.href = cur.url; a.target = "_blank"; a.rel = "noopener"; st.appendChild(a); }
   root.appendChild(st);
   return true;
@@ -3073,6 +3077,32 @@ function pmCorbeille(w){
   c.appendChild(tw);
   c.appendChild(el("p","status","En cas de problème plus grave (données abîmées), une copie complète de l’appli est faite chaque jour sur le Mac de Matis, et Infomaniak garde 7 jours de sauvegardes."));
 }
+/* Google Sheets : les tableaux de suivi Meta lus directement par le serveur (compte de service), toutes les 10 minutes */
+function pmGsheets(w){
+  const c = pmCard("Tableaux de suivi Meta (Google Sheets)", "Le serveur relit toutes les 10 minutes les tableaux partagés avec son compte Google, et les recopie dans Campagnes (contacts, statuts, récap). Rien n’est modifié dans les tableaux.");
+  w.appendChild(c);
+  if (!S.gs){ c.appendChild(skeleton(2)); GC.api("GET","/api/g-gsheets").then(r => { S.gs = r; render(); }).catch(e => { S.gs = { error: e.message }; render(); }); return; }
+  const G = S.gs; if (G.error){ c.appendChild(el("p","note", G.error)); return; }
+  const cfg = G.cfg || { files: {} };
+  if (G.configured){
+    const p = el("p","note"); p.append(document.createTextNode("Relié. Compte de service : "), el("b", null, G.email), document.createTextNode(". Pour ajouter un tableau, partage-le (ou son dossier) avec cette adresse, en lecture.")); c.appendChild(p);
+    if (cfg.lastRun) c.appendChild(el("p","muted", "Dernière lecture : " + fmtFR(cfg.lastRun.slice(0, 10)) + " à " + cfg.lastRun.slice(11, 16).replace(":", " h ") + " (UTC)" + (cfg.lastError ? ". Problème : " + cfg.lastError : ".")));
+    const files = Object.entries(cfg.files || {}).sort((a, b) => a[1].name.localeCompare(b[1].name, "fr"));
+    if (files.length){
+      const names = [...new Set(S.d.campaigns.map(x => x.client).filter(Boolean))].sort((a, b) => a.localeCompare(b, "fr"));
+      const {w: tw, tb} = table(["Tableau","Client dans l’appli","Lu le",""]);
+      files.forEach(([id, f]) => { const tr = el("tr"); td(tr, f.name, "ttl w");
+        const sel = el("select","inl"); [["","À choisir"]].concat(names.map(n => [n, n])).forEach(([v, l]) => { const o = el("option", null, l); o.value = v; sel.appendChild(o); }); if (f.client && !names.includes(f.client)){ const o = el("option", null, f.client); o.value = f.client; sel.appendChild(o); } sel.value = f.client || "";
+        sel.onchange = async () => { try { await GC.api("PUT","/api/g-gsheets/file/" + id, { client: sel.value }); S.gs = null; toast(sel.value ? "Tableau relié à " + sel.value + "." : "Tableau détaché."); render(); } catch(e){ toast(e.message); } };
+        td(tr, sel); td(tr, f.error ? el("span","pill l2","Erreur") : f.syncedAt ? fmtFR(f.syncedAt.slice(0, 10)) + " " + f.syncedAt.slice(11, 16) : "—", "nw");
+        const off = btn(f.off ? "Reprendre" : "Ignorer", "sm", async () => { try { await GC.api("PUT","/api/g-gsheets/file/" + id, { off: !f.off }); S.gs = null; render(); } catch(e){ toast(e.message); } }); td(tr, off); tb.appendChild(tr); });
+      c.appendChild(tw);
+    } else c.appendChild(el("p","empty","Aucun tableau partagé avec le compte de service pour l’instant."));
+    const a = el("div","pm-actions"); const b = btn("Relire maintenant","lemon", async () => { b.disabled = true; try { const r = await GC.api("POST","/api/g-gsheets/run"); toast(r.files + " tableau" + (r.files > 1 ? "x" : "") + " relu" + (r.files > 1 ? "s" : "") + (r.errors.length ? ", " + r.errors.length + " erreur(s)" : "") + "."); S.gs = null; render(); } catch(e){ toast(e.message); b.disabled = false; } }); a.appendChild(b); c.appendChild(a);
+  } else c.appendChild(el("p","note","Pas encore relié : colle ci-dessous la clé JSON du compte de service Google."));
+  const f = el("div","form"); const lab = el("label", null, G.configured ? "Remplacer la clé du compte de service" : "Clé JSON du compte de service"); const ta = el("textarea"); ta.rows = 3; ta.placeholder = "Colle ici tout le contenu du fichier .json téléchargé"; ta.autocomplete = "off"; lab.appendChild(ta); f.appendChild(lab); c.appendChild(f);
+  const a2 = el("div","pm-actions"); const b2 = btn("Enregistrer la clé", G.configured ? "" : "lemon", async () => { const v = ta.value.trim(); if (!v) return toast("Colle d’abord la clé."); b2.disabled = true; try { const r = await GC.api("PUT","/api/g-keys/gsheets", { json: v }); ta.value = ""; toast("Google Sheets relié (" + r.email + ")."); S.gs = null; render(); } catch(e){ toast(e.message); b2.disabled = false; } }); a2.appendChild(b2); c.appendChild(a2);
+}
 /* Mise à jour de l'appli depuis GitHub (Matis) : même chose que le bouton Build d'Infomaniak */
 function pmMaj(w){
   if ((S.me || "") !== "Matis" || S.role !== "owner") return;
@@ -3094,6 +3124,7 @@ function pmLiaisons(w){
   const a = el("div","pm-actions"); const b = btn("Enregistrer la clé","lemon", async () => { const v = inp.value.trim(); if (!v) return toast("Colle d’abord la clé.");
     b.disabled = true; try { await GC.api("PUT","/api/g-keys/metricool",{ token: v }); inp.value = ""; toast("Metricool relié."); S.pubs = {}; pubAt = {}; render(); } catch(x){ toast(x.message || "Enregistrement impossible."); b.disabled = false; } });
   a.appendChild(b); c.appendChild(a); w.appendChild(c);
+  pmGsheets(w);
   pmMaj(w);
 }
 
