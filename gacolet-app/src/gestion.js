@@ -1146,7 +1146,7 @@ module.exports = function (app, { db, wrap, root }) {
     res.sendFile(p, err => { if (err && !res.headersSent) res.status(404).end(); });
   });
 
-  // ---------- Mise à jour de l'appli depuis GitHub, sans passer par le Manager Infomaniak (Matis seulement) ----------
+  // ---------- Mise à jour de l’appli depuis GitHub, sans passer par le Manager Infomaniak (Matis ou la clé du Mac) ----------
   // Même chose que le bouton Build : git pull, copie de gacolet-app à la racine, npm install si besoin.
   // Si le code du serveur a changé, l'appli s'arrête juste après la réponse pour repartir sur la nouvelle version.
   const { execFile } = require("child_process");
