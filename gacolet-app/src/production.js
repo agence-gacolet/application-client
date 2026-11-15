@@ -165,6 +165,14 @@ module.exports = function production({ app, auth, wrap, db, current, put, pubPla
   setTimeout(() => purgeFiles().catch(() => {}), 20000).unref();
 
   // Clé Claude (propositions de description)
+  // Bouton « Supprimer » du Dépôt : efface du serveur un fichier déposé et pas encore envoyé à Metricool
+  app.post("/api/g-prod/delete", auth, wrap(async (req, res) => {
+    const fn = pathP.basename(String((req.body || {}).url || "").replace(/^\/f\//, ""));
+    if (!/^[a-f0-9]{32}(\.[a-z0-9]{1,7})?$/.test(fn)) return res.status(400).json({ error: "Fichier inconnu." });
+    if ((await docsOf("_purge")).some(q => q.file === fn && !q.done)) return res.status(409).json({ error: "Ce fichier est déjà programmé dans Metricool : supprime la publication là-bas." });
+    if (upDir) { try { fsP.unlinkSync(pathP.join(upDir, fn)); } catch (e) {} }
+    res.json({ ok: true });
+  }));
   app.get("/api/g-prod/status", auth, (req, res) => res.json({ claude: !!process.env.ANTHROPIC_API_KEY, queue: true, metricool: !!process.env.METRICOOL_USER_TOKEN }));
   app.put("/api/g-keys/anthropic", auth, wrap(async (req, res) => {
     if (req.user.role !== "owner") return res.status(403).json({ error: "Réservé à l’accès complet." });
