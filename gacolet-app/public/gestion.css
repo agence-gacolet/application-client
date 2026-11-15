@@ -1706,7 +1706,7 @@ html.tg-lock,html.tg-lock body{overflow:hidden}
 .of-ur b{white-space:nowrap}
 
 /* Fond de conversation (14/11/2026) : ni noir ni blanc, un brun graphite chaud avec un léger halo citron et un grain discret */
-.wa-msgs{background-color:#181713;background-image:radial-gradient(90% 60% at 100% 0%,rgba(198,255,51,.07),transparent 60%),radial-gradient(70% 50% at 0% 100%,rgba(255,170,90,.05),transparent 60%),radial-gradient(rgba(255,255,255,.035) 1px,transparent 1.2px);background-size:auto,auto,18px 18px;background-attachment:local}
+.wa-msgs{background-color:#181713;background-image:radial-gradient(90% 60% at 100% 0%,rgba(198,255,51,.07),transparent 60%),radial-gradient(70% 50% at 0% 100%,rgba(255,170,90,.05),transparent 60%);background-attachment:local}
 .wa-bub{background:#26241F;border-color:rgba(255,240,220,.06);color:#EEEAE2}
 .wa-line.mine .wa-bub{background:#36401F;border-color:rgba(198,255,51,.18);color:#F3F7E8}
 .wa-name{color:rgba(238,234,226,.45)!important}
@@ -1895,3 +1895,6 @@ html.tg-lock,html.tg-lock body{overflow:hidden}
 .wa-re button.on{background:rgba(10,132,255,.18);border-color:rgba(10,132,255,.5)}
 
 .pm-log{margin:12px 0 0;padding:12px 14px;border:1px solid var(--line-2);border-radius:10px;background:#0E0E0D;font:var(--fs-s)/1.5 ui-monospace,Menlo,monospace;color:var(--ink-2);white-space:pre-wrap;max-height:260px;overflow:auto}
+
+.steps{margin:8px 0 12px;padding-left:20px;display:grid;gap:6px;color:var(--muted,#aaa);font-size:var(--fs-sm,13px)}
+.steps a{color:#C6FF33}

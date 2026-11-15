@@ -37,10 +37,14 @@ module.exports = function gsheets({ db, put, current, stamp, bump }) {
     if (!tabs.length) return 0;
     const qs = tabs.map(t => "ranges=" + encodeURIComponent("'" + t.replace(/'/g, "''") + "'")).join("&");
     const v = await g("https://sheets.googleapis.com/v4/spreadsheets/" + f.id + "/values:batchGet?majorDimension=ROWS&valueRenderOption=FORMATTED_VALUE&" + qs);
+    return store(f, client, (v.valueRanges || []).map(r => ({ tab: String(r.range || "").split("!")[0].replace(/^'|'$/g, "").replace(/''/g, "'"), values: r.values })));
+  }
+  // Recopie des onglets d'un fichier (lus par le compte de service ou envoyés par le script Google de l'agence)
+  async function store(f, client, tabs) {
     let n = 0;
-    for (const r of v.valueRanges || []) {
-      const tab = String(r.range || "").split("!")[0].replace(/^'|'$/g, "").replace(/''/g, "'").trim().slice(0, 60);
-      let rows = (r.values || []).map(row => row.map(x => x == null ? "" : String(x).slice(0, 4000)));
+    for (const r of tabs || []) {
+      const tab = String(r.tab || "").trim().slice(0, 60); if (!tab || SKIP.test(tab)) continue;
+      let rows = (Array.isArray(r.values) ? r.values : []).map(row => (Array.isArray(row) ? row : []).map(x => x == null ? "" : String(x).slice(0, 4000)));
       // ligne d'en-tête : la première qui contient « Reçu le » ou au moins 3 cellules courtes (le tableau « Contacts » commence parfois plus bas)
       const hi = rows.findIndex(row => row.some(x => /^re[çc]u le$/i.test(x.trim())));
       if (hi > 0) rows = rows.slice(hi);
@@ -76,7 +80,27 @@ module.exports = function gsheets({ db, put, current, stamp, bump }) {
     })();
     try { return await running; } finally { running = null; }
   }
+  // Mode « script Google » : un script Apps Script du compte de l'agence lit le dossier des tableaux et poste ici toutes les 10 minutes.
+  // Corps : { files: [{ id, name, url, modified, tabs: [{ tab, values }] | null }] } (tabs null = fichier inchangé, seulement listé).
+  // Réponse : stored = fichiers recopiés ; again = fichiers à renvoyer en entier au prochain passage (client changé, « Relire maintenant »).
+  async function pushKey() { const c = await cfg(); if (!c.pushKey) { c.pushKey = crypto.randomBytes(24).toString("hex"); await put("_msources", "cfg", c); } return c.pushKey; }
+  async function push(body) {
+    const c = await cfg(), out = { stored: [], waiting: [], again: [], tabs: 0, errors: [] };
+    for (const f of (body && Array.isArray(body.files) ? body.files : []).slice(0, 200)) {
+      const id = String(f.id || ""); if (!/^[\w-]{10,80}$/.test(id)) continue;
+      const e = c.files[id] || (c.files[id] = { name: String(f.name || id), client: await guessClient(f.name), off: false, modified: "" });
+      e.name = String(f.name || e.name).slice(0, 200); e.seen = new Date().toISOString();
+      if (e.off || !e.client){ out.waiting.push(id); continue; }
+      if (!Array.isArray(f.tabs)){ if (e.resend) out.again.push(id); continue; }
+      try { out.tabs += await store({ id, name: e.name, webViewLink: /^https:\/\/docs\.google\.com\//.test(f.url || "") ? String(f.url) : "" }, e.client, f.tabs);
+        e.modified = String(f.modified || ""); e.syncedAt = new Date().toISOString(); e.error = ""; e.resend = false; out.stored.push(id); }
+      catch (err) { e.error = String(err.message || err).slice(0, 200); out.errors.push(e.name + " : " + e.error); }
+    }
+    c.lastRun = new Date().toISOString(); c.lastPush = c.lastRun; c.lastError = out.errors.join(" ; ").slice(0, 500);
+    await put("_msources", "cfg", c); if (out.tabs) bump();
+    return out;
+  }
   setInterval(() => { if (sa()) run(false).catch(() => {}); }, 10 * 60 * 1000).unref();
   setTimeout(() => { if (sa()) run(false).catch(() => {}); }, 20000).unref();
-  return { run, cfg, sa, list };
+  return { run, cfg, sa, list, push, pushKey };
 };

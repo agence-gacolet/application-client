@@ -643,7 +643,14 @@ module.exports = function (app, { db, wrap, root }) {
     const r = await db.run("UPDATE docs SET data = ?, deleted = 0, updated_at = ? WHERE col = ? AND id = ?", [s, t, col, id]);
     if (!r.changes) await db.run("INSERT INTO docs (col, id, data, deleted, updated_at) VALUES (?,?,?,0,?)", [col, id, s, t]); };
   const GS = require("./gsheets")({ db, put: putBig, current, stamp, bump: () => bump() });
-  app.get("/api/g-gsheets", auth, ownerOnly, wrap(async (req, res) => { const k = GS.sa(); res.json({ configured: !!k, email: k ? k.client_email : "", cfg: await GS.cfg() }); }));
+  app.get("/api/g-gsheets", auth, ownerOnly, wrap(async (req, res) => { const k = GS.sa(), key = await GS.pushKey(), cfg = await GS.cfg(); delete cfg.pushKey;
+    res.json({ configured: !!k || !!cfg.lastPush, email: k ? k.client_email : "", pushKey: key, cfg }); }));
+  // Réception du script Google de l'agence (clé générée par l'appli, montrée dans Paramètres > Liaisons)
+  app.post("/api/hook/gsheet", wrap(async (req, res) => {
+    await ensure(); const key = await GS.pushKey(), got = String(req.get("x-gacolet-key") || req.query.key || "");
+    if (got.length !== key.length || !crypto.timingSafeEqual(Buffer.from(got), Buffer.from(key))) return res.status(401).json({ error: "Clé refusée." });
+    res.json(await GS.push(req.body));
+  }));
   app.put("/api/g-keys/gsheets", auth, ownerOnly, wrap(async (req, res) => {
     let k; try { k = JSON.parse(String((req.body || {}).json || "")); } catch (e) { return res.status(400).json({ error: "Ce n’est pas un fichier de clé JSON valide." }); }
     if (!k || k.type !== "service_account" || !k.client_email || !/BEGIN PRIVATE KEY/.test(k.private_key || "")) return res.status(400).json({ error: "Il faut la clé JSON d’un compte de service Google (type « service_account »)." });
@@ -653,13 +660,17 @@ module.exports = function (app, { db, wrap, root }) {
     fs.writeFileSync(ENV, txt.replace(/^\n+/, ""), { mode: 0o600 }); process.env.GSHEETS_SA_B64 = b64;
     const out = await GS.run(true); res.json({ ok: true, email: k.client_email, out });
   }));
-  app.post("/api/g-gsheets/run", auth, ownerOnly, wrap(async (req, res) => res.json(await GS.run(true))));
+  app.post("/api/g-gsheets/run", auth, ownerOnly, wrap(async (req, res) => {
+    if (GS.sa()) return res.json(await GS.run(true));
+    const c = await GS.cfg(); Object.values(c.files || {}).forEach(e => { e.resend = true; }); await putBig("_msources", "cfg", c);
+    res.json({ files: 0, errors: [], queued: true });
+  }));
   app.put("/api/g-gsheets/file/:id", auth, ownerOnly, wrap(async (req, res) => {
     const id = String(req.params.id); if (!/^[\w-]{10,80}$/.test(id)) return res.status(400).json({ error: "Demande invalide." });
     const c = await GS.cfg(), e = c.files[id]; if (!e) return res.status(404).json({ error: "Fichier inconnu." });
-    const b = req.body || {}; if (b.client != null) e.client = String(b.client).trim().slice(0, 120); if (b.off != null) e.off = !!b.off; e.modified = "";
+    const b = req.body || {}; if (b.client != null) e.client = String(b.client).trim().slice(0, 120); if (b.off != null) e.off = !!b.off; e.modified = ""; e.resend = true;
     if (e.off || !e.client) { for (const r of await db.all("SELECT id FROM docs WHERE col = 'msheets' AND deleted = 0 AND id LIKE ?", ["gs_" + id + "%"])) await db.run("UPDATE docs SET deleted = 1, data = '{}', updated_at = ? WHERE col = 'msheets' AND id = ?", [stamp(), r.id]); bump(); }
-    await putBig("_msources", "cfg", c); res.json({ ok: true, out: e.off || !e.client ? null : await GS.run(false) });
+    await putBig("_msources", "cfg", c); res.json({ ok: true, out: e.off || !e.client || !GS.sa() ? null : await GS.run(false) });
   }));
 
   // Tâche avec une date de publication (postDate) : le post apparaît tout seul dans le calendrier éditorial du client
