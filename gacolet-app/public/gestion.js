@@ -1370,7 +1370,7 @@ function vMeta(root){
       box.onmouseenter = () => lock(true); box.onmouseleave = () => lock(false); fr.onmouseleave = () => lock(false);
       const st = el("p","status","Le vrai tableau Google Sheets, modifiable ici. Il faut être connecté au compte Google de l’agence dans ce navigateur. "); const a = el("a",null,"Ouvrir dans Google Sheets"); a.href = "https://docs.google.com/spreadsheets/d/" + id + "/edit"; a.target = "_blank"; a.rel = "noopener"; st.appendChild(a); root.appendChild(st); return; } }
   if (msSection(root, cur)) return;
-  if (!c){ root.appendChild(el("p","empty","Ce client n’a pas le module Meta dans l’espace client : le suivi passe par le lien de la campagne.")); return; }
+  if (!c){ root.appendChild(el("p","empty","Pas encore de tableau de suivi pour ce client. Pour qu’il arrive ici tout seul, range son tableau Google Sheets dans le dossier des tableaux de suivi Meta du Drive de l’agence.")); return; }
   root.appendChild(el("p","status", c.qualifiedDef ? "Contact qualifié : " + c.qualifiedDef : "Pas encore de définition écrite du contact qualifié : à fixer avec le client avant d’annoncer un chiffre."));
   if (!ls.length){ root.appendChild(el("p","empty","Aucun contact enregistré.")); return; }
   const {w, tb} = table(["Date","Contact","~Détail","Qualifié"]);
@@ -1734,6 +1734,36 @@ function lrow(i){
   r.onclick = () => openItem(i); return r;
 }
 function newOnDay(k){ if (!writable()) return; editEvent({date:k, client:S.ui.agClient||"", type: S.ui.agTypes.length === 1 ? S.ui.agTypes[0] : "Tournage", who: S.ui.agWho ? [S.ui.agWho] : [], status:"Prévu"}); }
+/* Calendrier éditorial d'un client en PDF : une page A4 paysage par mois, aux couleurs de l'agence (impression du navigateur > Enregistrer en PDF) */
+function edPdf(y, m){
+  const client = S.ui.agClient && S.ui.agClient !== AGENCE ? S.ui.agClient : "";
+  if (!client){ openForm({ key:"edp", title:"Calendrier éditorial en PDF", intro:"Choisis le client.", values:{ c: "" }, fields:[{k:"c",label:"Client",type:"select",options:[["","À choisir"]].concat(clientNames().filter(n => n !== AGENCE).map(n => [n, n])),req:"Choisis le client."}], okLabel:"Créer le PDF",
+    onSave: o => { setTimeout(() => edPdfDo(o.c, y, m), 50); return Promise.resolve(); }, done:"Préparation du PDF…" }); return; }
+  edPdfDo(client, y, m);
+}
+function edPdfDo(client, y, m){
+  const esc = t => String(t == null ? "" : t).replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" })[c]);
+  const mk = y + "-" + String(m + 1).padStart(2, "0");
+  const items = S.d.events.filter(e => e.type === "Éditorial" && e.client === client && (e.date || "").slice(0, 7) === mk && e.status !== "Annulé").sort((a, b) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || "")));
+  const first = new Date(y, m, 1), start = (first.getDay() + 6) % 7, days = new Date(y, m + 1, 0).getDate();
+  let cells = ""; for (let i = 0; i < start; i++) cells += '<div class="c out"></div>';
+  for (let d = 1; d <= days; d++){ const iso = mk + "-" + String(d).padStart(2, "0"), its = items.filter(e => e.date === iso);
+    cells += '<div class="c"><b>' + d + '</b>' + its.map(e => '<div class="p"><span>' + (e.time ? esc(e.time.slice(0, 5).replace(":", " h ")) + " · " : "") + '</span>' + esc(e.title || "Publication") + '</div>').join("") + '</div>'; }
+  const n = items.length, html = '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Calendrier éditorial ' + esc(client) + ' ' + esc(MONTHS[m]) + ' ' + y + '</title><style>'
+    + '@page{size:A4 landscape;margin:12mm}*{box-sizing:border-box}body{margin:0;font:12px/1.35 -apple-system,"Helvetica Neue",Arial,sans-serif;color:#1D1D1B;-webkit-print-color-adjust:exact;print-color-adjust:exact}'
+    + 'header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #C6FF33;padding-bottom:8px;margin-bottom:10px}h1{margin:0;font:italic 800 26px/1 "Helvetica Neue",Arial,sans-serif;text-transform:uppercase;letter-spacing:.5px}'
+    + 'h1 small{display:block;font-size:13px;font-weight:600;font-style:normal;text-transform:none;color:#6b6b66;margin-top:4px}.ag{font-weight:800;letter-spacing:.2em;font-size:11px}'
+    + '.g{display:grid;grid-template-columns:repeat(7,1fr);border-left:1px solid #ddd;border-top:1px solid #ddd}.h{background:#1D1D1B;color:#fff;font-weight:700;text-align:center;padding:5px 0;font-size:11px;border-right:1px solid #1D1D1B}'
+    + '.c{min-height:86px;border-right:1px solid #ddd;border-bottom:1px solid #ddd;padding:4px 5px}.c.out{background:#f6f6f4}.c b{display:block;font-size:12px;margin-bottom:3px}'
+    + '.p{background:#F2FFD1;border-left:3px solid #9BCB1C;border-radius:3px;padding:3px 5px;margin-bottom:3px;font-size:10.5px}.p span{color:#5a6b1e;font-weight:700}footer{margin-top:8px;font-size:10px;color:#6b6b66;display:flex;justify-content:space-between}'
+    + '</style></head><body><header><h1>Calendrier éditorial<small>' + esc(client) + ', ' + esc(MONTHS[m].toLowerCase()) + ' ' + y + ' : ' + n + ' publication' + (n > 1 ? 's' : '') + ' prévue' + (n > 1 ? 's' : '') + '</small></h1><span class="ag">AGENCE GACOLET</span></header>'
+    + '<div class="g">' + ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"].map(x => '<div class="h">' + x + '</div>').join("") + cells + '</div>'
+    + '<footer><span>Dates et heures prévues, susceptibles d’ajustement après validation des contenus.</span><span>Édité le ' + esc(fmtFR(today())) + '</span></footer></body></html>';
+  const fr = document.createElement("iframe"); fr.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0"; document.body.appendChild(fr);
+  fr.contentDocument.open(); fr.contentDocument.write(html); fr.contentDocument.close();
+  setTimeout(() => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch(e){ toast("Impression impossible : " + e.message); } setTimeout(() => fr.remove(), 60000); }, 300);
+  toast(n ? "Choisis « Enregistrer en PDF » dans la fenêtre d’impression." : "Aucune publication éditoriale ce mois-ci pour " + client + " : le PDF sera vide.");
+}
 function vAgenda(root){
   const cur = agCursor(), y = cur.getFullYear(), m = cur.getMonth(), t0 = today(), v = S.ui.agView;
   let title = [MONTHS[m], String(y)];
@@ -1744,7 +1774,7 @@ function vAgenda(root){
   const prev = btn("‹","icon", () => step(-1)); prev.setAttribute("aria-label","Période précédente");
   const next = btn("›","icon", () => step(1)); next.setAttribute("aria-label","Période suivante");
   root.appendChild(head(title, "Agenda de l’agence", [prev, btn("Aujourd’hui","", () => { S.ui.agSel = t0; S.ui.agCursor = null; render(); }), next,
-    segm([["month","Mois"],["week","Semaine"],["list","Liste"]], v, x => { S.ui.agView = x; remember(); render(); }), btn("En tâches","", itemsToTasks), addBtn("Ajouter", () => newOnDay(S.ui.agSel))]));
+    segm([["month","Mois"],["week","Semaine"],["list","Liste"]], v, x => { S.ui.agView = x; remember(); render(); }), btn("En tâches","", itemsToTasks), btn("PDF","", () => edPdf(y, m)), addBtn("Ajouter", () => newOnDay(S.ui.agSel))]));
   root.lastChild.classList.add("ag-head");
   /* Filtres : quatre menus déroulants */
   const f = el("div","filters ag-f");
