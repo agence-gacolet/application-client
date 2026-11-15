@@ -202,7 +202,7 @@ function filesField(initial, id){
       const picked = Array.from(inp.files || []); if (!picked.length) return;
       w.dataset.busy = "1"; inp.disabled = true;
       for (const file of picked){
-        if (file.size > 20*1024*1024){ msg.textContent = file.name+" : trop lourd (20 Mo au plus)."; continue; }
+        if (file.size > 280*1024*1024){ msg.textContent = file.name+" : trop lourd (280 Mo au plus)."; continue; }
         msg.textContent = "Envoi de "+file.name+"…";
         try { const r = await S.assets.upload(file); list.push({id:r.id, url:r.url, name:file.name, type:r.contentType||file.type||"", size:r.sizeBytes||file.size}); draw(); msg.textContent = ""; }
         catch(e){ const c = e && e.code; msg.textContent = file.name+" : "+(c === "unsupported_type" ? "type de fichier refusé (images, vidéos, PDF, texte, CSV)." : c === "quota_exceeded" ? "espace de stockage plein." : c === "not_granted" ? "envoi non autorisé pour ton accès." : "envoi impossible, réessaie."); }
@@ -2924,7 +2924,10 @@ function tgEdit(s0){
     // Vidéos et photos
     const lists = { videos: el("div","tg-list"), photos: el("div","tg-list") };
     const draw = key => {
-      const box = lists[key]; box.textContent = "";
+      const box = lists[key];
+      // Avant de redessiner : on garde les fichiers d'exemple déjà envoyés (sinon ils disparaissaient en ajoutant ou déplaçant un élément)
+      ["videos","photos"].forEach(k => s[k].forEach(x => { if (x._ff) x.files = x._ff._get(); }));
+      box.textContent = "";
       const arr = s[key];
       if (!arr.length) box.appendChild(el("p","muted", key === "photos" ? "Aucune photo prévue." : "Aucune vidéo pour l’instant."));
       arr.forEach((v, i) => {
@@ -2941,9 +2944,9 @@ function tgEdit(s0){
         const it = input(v.title, "text", key === "photos" ? "Ex. Portrait de l’équipe devant la façade" : v.kind === "muet" ? "Ex. ÉDIT chantier" : "Ex. Présentation de l’entreprise");
         it.oninput = () => v.title = it.value; c.appendChild(field("Titre", it));
         const il = input(v.line, "text", "Une ligne courte (facultatif)"); il.oninput = () => v.line = il.value; c.appendChild(field("Précision", il));
-        if (key === "videos"){
-          const ta = el("textarea"); ta.rows = 2; ta.value = v.links || ""; ta.placeholder = "Liens d’exemple ou de référence, un par ligne"; ta.oninput = () => v.links = ta.value; c.appendChild(field("Liens", ta));
-          const ff = filesField(v.files || [], "tg-f-" + v.id); v._ff = ff; const fl = el("div","form-who"); fl.append(el("div","flabel","Vidéos ou images de référence"), ff); c.appendChild(fl);
+        {
+          const ta = el("textarea"); ta.rows = 2; ta.value = v.links || ""; ta.placeholder = "Liens d’exemple (Instagram, TikTok, YouTube…), un par ligne"; ta.oninput = () => v.links = ta.value; c.appendChild(field("Liens d’exemple", ta));
+          const ff = filesField(v.files || [], "tg-f-" + v.id); v._ff = ff; const fl = el("div","form-who"); fl.append(el("div","flabel", key === "photos" ? "Photos d’exemple" : "Vidéos ou images d’exemple"), ff); c.appendChild(fl);
         }
         box.appendChild(c);
       });
@@ -2969,7 +2972,7 @@ function tgEdit(s0){
       const client = iClient.value.trim(); if (!client){ err.textContent = "Indique le client."; iClient.focus(); return; }
       if ([...f.querySelectorAll(".files")].some(x => x.dataset.busy)){ err.textContent = "Un fichier est encore en cours d’envoi."; return; }
       const clean = v => { const o = { id: v.id, kind: v.kind, title: (v.title || "").trim(), line: (v.line || "").trim(), status: v.status || "" };
-        if (v.doneAt) o.doneAt = v.doneAt; if (v.kind !== "photo"){ o.links = (v.links || "").trim(); o.files = v._ff ? v._ff._get() : (v.files || []); } return o; };
+        if (v.doneAt) o.doneAt = v.doneAt; o.links = (v.links || "").trim(); o.files = v._ff ? v._ff._get() : (v.files || []); return o; };
       const body = Object.assign({}, s0 && s0.id ? strip(s0) : {}, {
         client, date: iDate.value, num: iNum.value.trim(), time: iTime.value, duration: iDur.value.trim(), place: iPlace.value.trim(), onCamera: iImg.value.trim(),
         team: [...team].concat(iTeamX.value.split(",").map(x => x.trim()).filter(Boolean)),
@@ -3066,7 +3069,9 @@ function tgLive(s0){
       if (embeds.length || (v.files || []).length){ const rw = el("div","tg-refs"); embeds.forEach(src => { const f = document.createElement("iframe"); f.src = src; f.className = "tg-emb"; f.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen"; f.allowFullscreen = true; f.loading = "lazy"; rw.appendChild(f); });
         (v.files || []).forEach(fl => { const u = fileUrl(fl), ty = fl.type || "", nm = (fl.name || "").toLowerCase();
           if (/^image\//.test(ty) || /\.(jpe?g|png|webp|gif|heic)$/.test(nm)){ const im = el("img","tg-emb"); im.src = u; im.alt = fl.name || ""; rw.appendChild(im); }
-          else if (/^video\//.test(ty) || /\.(mp4|mov|m4v|webm)$/.test(nm)){ const vd = el("video","tg-emb"); vd.src = u; vd.controls = true; vd.playsInline = true; vd.loop = true; vd.muted = true; vd.autoplay = true; vd.preload = "auto"; rw.appendChild(vd); }
+          else if (/^video\//.test(ty) || /\.(mp4|mov|m4v|webm)$/.test(nm)){ const vd = el("video","tg-emb"); vd.src = u; vd.controls = true; vd.playsInline = true; vd.loop = true; vd.muted = true; vd.autoplay = true; vd.preload = "auto";
+            // Vidéo d'iPhone (HEVC) que Chrome ne lit pas : carte « Ouvrir la vidéo » à la place d'un cadre noir
+            vd.onerror = () => { const a3 = el("a","tg-emb tg-nov"); a3.href = u; a3.target = "_blank"; a3.rel = "noopener"; a3.append(el("b", null, "▶︎"), el("span", null, (fl.name || "Vidéo") + " : ouvrir la vidéo")); vd.replaceWith(a3); }; rw.appendChild(vd); }
           else { const a2 = el("a","tg-file", fl.name || "Fichier"); a2.href = u; a2.target = "_blank"; a2.rel = "noopener"; rw.appendChild(a2); } });
         card.appendChild(rw); }
       const plain = links.filter(u => !tgEmbed(tgHref(u) || u)); if (plain.length){ const ul = el("div","tg-links"); plain.forEach(u => { const h = tgHref(u); const a = el(h ? "a" : "span", null, u.replace(/^https?:\/\/(www\.)?/, "")); if (h){ a.href = h; a.target = "_blank"; a.rel = "noopener"; } ul.appendChild(a); }); card.appendChild(ul); }
