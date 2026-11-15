@@ -22,9 +22,9 @@ const DAYS = ["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"]
 const DEFAULT_COLORS = {"Agence Gacolet":"#1D1D1B","AR Climatisation":"#E8833A","Bonobo":"#2E9E5B","Delta Sud Formation":"#D6334A","Domaine Pagezi":"#7A1F3D","Flora Design":"#C25CC9","France Étanchéité":"#2F6FE4","Gaufrement Bon":"#E3B505","Hugo Maître Nageur":"#1BA6C9","Insolent":"#5C5C57","KR Thermolaquage":"#8C6239","La Vie La Construction":"#F06A1D","Le Petit Mas":"#6E8B3D","Locamex":"#E2559C","Meyer-Pic":"#3D4FB5","Only Clean":"#17A398","Paillotte Bassamoise":"#F2A93B","SOS Pare-Brise Codognan":"#9B2226","SOS Pare-Brise Vendargues":"#4A6C8C","Sport Défense":"#8E44AD","The New Me Montpellier":"#D98BA5","Total Habitat 360":"#6C7A2E"};
 const VIEWS = [
   ["accueil","Accueil"],["agenda","Agenda"],["taches","Tâches"],["messagerie","Messagerie"],["vocal","Vocal"],["commercial","Commercial"],["clients","Calendrier clients"],
-  ["montage","Rushs"],["tournage","Feuilles de tournage"],["publications","Publications"],["campagnes","Campagnes"],["formation","Formation"],["parametres","Paramètres"],["fiches","Tableau clients"],["strategie","Stratégie"],["idees","Idées"],["focus","Focus"],["finance","Finance"],["chalet","Chalet"]
+  ["montage","Rushs"],["tournage","Feuilles de tournage"],["publications","Publications"],["depot","Dépôt"],["campagnes","Campagnes"],["formation","Formation"],["parametres","Paramètres"],["fiches","Tableau clients"],["strategie","Stratégie"],["idees","Idées"],["focus","Focus"],["finance","Finance"],["chalet","Chalet"]
 ];
-const NAV_GROUPS = [["",["accueil"]],["Au quotidien",["agenda","taches","messagerie","vocal"]],["Production",["idees","strategie","tournage","montage","publications"]],["Clients",["commercial","fiches"]],["Publicité",["campagnes"]],["Ressources",["formation"]],["Compte",["parametres"]]];
+const NAV_GROUPS = [["",["accueil"]],["Au quotidien",["agenda","taches","messagerie","vocal"]],["Production",["idees","strategie","tournage","montage","depot","publications"]],["Clients",["commercial","fiches"]],["Publicité",["campagnes"]],["Ressources",["formation"]],["Compte",["parametres"]]];
 /* Onglets fusionnés : le calendrier clients vit dans l’agenda, le montage dans les tâches. */
 const MERGED = { clients: ["agenda","agHub"] };
 /* Pages par défaut d’un compte sans réglage par prénom. Le serveur applique les mêmes limites aux données. */
@@ -39,7 +39,8 @@ const ROLE_VIEWS = {
   commercial: ["accueil","agenda","taches","messagerie","vocal","focus","commercial","clients","montage","publications","idees","campagnes","formation","parametres"]
 };
 const HIDDEN = ["finance","chalet","focus"]; // pages supprimées le 14/11/2026 (Matis)
-const canSee = k => HIDDEN.includes(k) ? false : !S.role || S.role === "owner" || (Array.isArray(S.views) ? S.views : ["accueil","parametres"].concat(ROLE_VIEWS[S.role] || [])).includes(k);
+const canSee = k0 => { const k = k0 === "depot" ? "publications" : k0; return canSee0(k); };
+const canSee0 = k => HIDDEN.includes(k) ? false : !S.role || S.role === "owner" || (Array.isArray(S.views) ? S.views : ["accueil","parametres"].concat(ROLE_VIEWS[S.role] || [])).includes(k);
 const COLLS = ["events","tasks","commercial","campaigns","rushes","publications","clients","cevents","keydates","posts","edtodo","meta","messages","formations","msheets","idees","pilotage","ca","finance","strategies","shoots","vrooms"];
 const DUO = ["Matis","Gabriel"];
 
@@ -1203,7 +1204,7 @@ function callImport(){
 function metaNote(c){ const m = c.meta; if (!m) return null; const d = el("div","mt-meta");
   d.textContent = "Meta : " + (m.live && m.live.length ? plural(m.live.length, "active", "actives") : "rien d’actif") + (m.spend ? ", " + Math.round(m.spend) + " € ce mois" : "") + (m.leads ? ", " + plural(m.leads, "contact") : "");
   d.title = (m.account || "") + (m.live && m.live.length ? " : " + m.live.join(", ") : "") + "\nLu le " + (m.at ? new Date(m.at).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""); return d; }
-(function(){ const st = document.createElement("style"); st.textContent = ".pb-drop{margin:22px 0 8px;padding:20px 22px;border:1.5px dashed rgba(198,255,51,.45);border-radius:18px;background:var(--card)}.pb-dh{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px}.pb-dh h2{margin:0;font:400 var(--fs-3xl)/1 var(--display);font-style:italic;text-transform:uppercase}.pb-dh .note{flex:1 1 320px;margin:0}.pb-open{margin-top:16px;display:grid;gap:8px}.pb-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:8px 0;border-top:1px solid var(--line-2)}.pb-row .note{flex:1 1 200px}.pb-bh{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px;margin-top:34px}.pb-bh .fin-h{margin:0}.pb-nav{display:flex;gap:6px;flex-wrap:wrap}"; document.head.appendChild(st); })();
+(function(){ const st = document.createElement("style"); st.textContent = ".pb-drop{margin:22px 0 8px;padding:20px 22px;border:1.5px dashed rgba(198,255,51,.45);border-radius:18px;background:var(--card)}.pb-dh{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px}.pb-dh h2{margin:0;font:400 var(--fs-3xl)/1 var(--display);font-style:italic;text-transform:uppercase}.pb-dh .note{flex:1 1 320px;margin:0}.pb-open{margin-top:18px;display:grid;gap:8px}.pd-page{margin-top:18px}.pd-page .pd-body{max-height:none}.pd-st.run{color:#C6FF33}.pd-st.ok{color:var(--ok,#9BD85C)}.pd-tr{border:1px solid var(--line-2);border-radius:10px;padding:8px 12px;font-size:13px}.pd-tr summary{cursor:pointer;color:var(--muted)}.pd-tr p{margin:8px 0 2px;line-height:1.5;white-space:pre-wrap}.pb-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:8px 0;border-top:1px solid var(--line-2)}.pb-row .note{flex:1 1 200px}.pb-bh{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px;margin-top:34px}.pb-bh .fin-h{margin:0}.pb-nav{display:flex;gap:6px;flex-wrap:wrap}"; document.head.appendChild(st); })();
 (function(){ const st = document.createElement("style"); st.textContent = ".mt-meta{margin-top:4px;min-width:150px;font-size:var(--fs-xs,12px);line-height:1.35;color:var(--muted);white-space:normal}"; document.head.appendChild(st); })();
 function metaSyncBtn(){ const b = btn("Actualiser depuis Meta","", async () => { b.disabled = true; b.textContent = "Lecture de Meta…";
     try { const r = await GC.api("POST","/api/g-metaads/sync"); toast("État des campagnes lu sur Meta (" + plural(r.accounts, "compte") + ")."); } catch(e){ toast(e.message); } b.disabled = false; b.textContent = "Actualiser depuis Meta"; }); return b; }
@@ -1596,13 +1597,13 @@ const PD = { all: (() => { const a = store.get("pdDrafts") || {}; const old = st
   save(){ const o = {}; Object.keys(PD.all).forEach(k => { const l = PD.all[k].filter(x => x.url).map(x => { const y = Object.assign({}, x); delete y.busy; return y; }); if (l.length) o[k] = l; }); store.set("pdDrafts", o); store.set("pdItems", null); } };
 function pdPoll(){ if (PD.t) return; const tick = async () => { PD.t = 0; const w = Object.values(PD.all).flat().filter(x => x.wait); if (!w.length) return;
     for (const it of w){ try { const q = await GC.api("GET","/api/g-prod/describe/" + it.wait); if (q.status !== "done") continue;
-      it.wait = ""; it.props = q.propositions; if (!it.text && it.props[0]) it.text = it.props[0]; PD.save();
-      if (!(PD.redraw && PD.redraw())) { toast("Descriptions prêtes pour « " + it.name + " » : rouvre « Déposer des productions »."); if (S.view === "publications") render(); } } catch(e){} }
+      it.wait = ""; it.props = q.propositions; it.transcript = q.transcript || ""; if (!it.text && it.props[0]) it.text = it.props[0]; PD.save();
+      if (!(PD.redraw && PD.redraw())) { toast("Descriptions prêtes pour « " + it.name + " » : rouvre « Déposer des productions »."); if (S.view === "publications" || S.view === "depot") render(); } } catch(e){} }
     PD.t = setTimeout(tick, 15000); };
   PD.t = setTimeout(tick, 2000); }
 setTimeout(pdPoll, 8000);
-function prodDrop(clients){
-  if (!clients.length){ toast("Liste des clients Metricool en cours de chargement, réessaie dans un instant."); return; }
+function prodDrop(clients, host){
+  if (!clients.length){ if (host){ host.appendChild(el("p","empty","Lecture de la liste des clients…")); return; } toast("Liste des clients Metricool en cours de chargement, réessaie dans un instant."); return; }
   let next = {}, showNext = () => {};
   const loadNext = async () => { try { const r = await GC.api("GET","/api/g-prod/slots?client=" + encodeURIComponent(client) + "&n=1"); const s0 = r.slots[0] || {}; next = { date: s0.date || "", time: s0.time || "", why: s0.why || "" }; showNext(); } catch(e){} };
   let client = clients.includes(S.ui.prodC) ? S.ui.prodC : clients.find(c => PD.count(c)) || clients[0], items = PD.list(client), status = null, mode = ["draft","review","publish"].includes(S.ui.prodMode) ? S.ui.prodMode : "review";
@@ -1613,7 +1614,7 @@ function prodDrop(clients){
     if (!items.length) body.appendChild(el("p","empty","Dépose une ou plusieurs vidéos ou visuels ci-dessus. Pour chacun : la date conseillée (modifiable) ; Claude écoute la vidéo (ou regarde le visuel) et propose trois descriptions."));
     items.forEach((it, i) => { const c = el("div","pd-it");
       const top = el("div","pd-top"); const th = it.kind === "video" ? el("video","pd-th") : el("img","pd-th"); if (it.url){ th.src = it.url; if (it.kind === "video"){ th.muted = true; th.preload = "metadata"; } } top.appendChild(th);
-      const meta = el("div","pd-meta"); meta.appendChild(el("b", null, it.name)); meta.appendChild(el("span","note", it.busy ? "Envoi du fichier…" : it.kind === "video" ? "Réel" : "Publication"));
+      const meta = el("div","pd-meta"); meta.appendChild(el("b", null, it.name)); meta.appendChild(el("span","note pd-st" + (it.props ? " ok" : it.wait ? " run" : ""), it.busy ? "Envoi du fichier…" : it.wait ? (it.kind === "video" ? "Claude transcrit la vidéo et écrit…" : "Claude regarde le visuel et écrit…") : it.props ? "Descriptions prêtes" : it.kind === "video" ? "Réel" : "Publication"));
       const dr = el("div","pd-dt"); if (it.reco) dr.appendChild(el("span","note pd-reco","Date conseillée")); const di = el("input"); di.type = "date"; di.value = it.date || ""; di.onchange = () => { it.date = di.value; PD.save(); }; const ti = el("input"); ti.type = "time"; ti.value = it.time || ""; ti.onchange = () => { it.time = ti.value; PD.save(); }; dr.append(di, ti); meta.appendChild(dr);
       const rm = btn("Retirer","sm", () => { items.splice(i, 1); draw(); }); meta.appendChild(rm); top.appendChild(meta); c.appendChild(top);
       const gb = btn(it.props ? "Autres propositions" : "Proposer des descriptions","sm lemon", async () => { if (!it.url){ toast("Attends la fin de l’envoi du fichier."); return; } gb.disabled = true; gb.textContent = "Claude regarde la vidéo…";
@@ -1623,6 +1624,7 @@ function prodDrop(clients){
       if (it.wait){ gb.disabled = true; gb.textContent = it.kind === "video" ? "Claude écoute la vidéo et écrit les descriptions (2 à 4 min)…" : "Claude regarde le visuel et écrit les descriptions (2 à 4 min)…"; }
       c.appendChild(gb);
       if (it.url && !it.props && !it.wait && !it.asked){ it.asked = true; setTimeout(() => gb.click(), 0); }   // dès que le fichier est envoyé, Claude s'en occupe sans qu'on lui explique
+      if (it.transcript){ const d = el("details","pd-tr"); d.appendChild(el("summary", null, "Ce que Claude a entendu")); d.appendChild(el("p", null, it.transcript)); c.appendChild(d); }
       if (it.props) { const pp = el("div","pd-props"); it.props.forEach((p, k) => { const o = el("button","pd-prop" + (it.text === p ? " on" : ""), p); o.type = "button"; o.onclick = () => { it.text = p; draw(); }; pp.appendChild(o); }); c.appendChild(pp); }
       const ta = el("textarea"); ta.rows = 5; ta.placeholder = "Description qui sera publiée"; ta.value = it.text || ""; ta.oninput = () => { it.text = ta.value; PD.save(); }; c.appendChild(ta);
       body.appendChild(c); });
@@ -1631,9 +1633,9 @@ function prodDrop(clients){
     if (next.date && !items.some(x => x.date === next.date)){ const x0 = need.shift(); x0.date = next.date; x0.time = next.time; x0.reco = next.edited ? "date choisie" : next.why || true; draw(); if (!need.length) return; }
     try { const r = await GC.api("GET","/api/g-prod/slots?client=" + encodeURIComponent(client) + "&n=" + items.length);
     const used = new Set(items.filter(x => x.date).map(x => x.date)); const free = r.slots.filter(s => !used.has(s.date)); need.forEach(x => { const s = free.shift(); if (s){ x.date = s.date; x.time = s.time; x.reco = s.why || true; } }); draw(); } catch(e){ toast(e.message); } };
-  openModal(m => { m0 = m; m.classList.add("pd-modal");
-    const t = el("h3", null, "Déposer des productions"); t.id = "mtitle"; m.appendChild(t);
-    m.appendChild(el("p","muted","Les dates suivent le rythme de la formule du client, après ce qui est déjà programmé. Tout est modifiable avant l’envoi. Tu peux fermer cette fenêtre et faire autre chose : Claude continue, et tu retrouves tout ici en la rouvrant."));
+  const build = m => { m0 = m; m.classList.add(host ? "pd-page" : "pd-modal");
+    if (!host){ const t = el("h3", null, "Déposer des productions"); t.id = "mtitle"; m.appendChild(t); }
+    m.appendChild(el("p","muted","Les dates suivent le rythme de la formule du client, après ce qui est déjà programmé. Tout est modifiable avant l’envoi." + (host ? "" : " Tu peux fermer cette fenêtre et faire autre chose : Claude continue, et tu retrouves tout ici en la rouvrant.")));
     const f = el("div","form"); const l = el("label", null, "Client"); const sel = el("select"); clients.forEach(n => { const o = el("option", null, n + (PD.count(n) ? " (" + plural(PD.count(n), "fichier") + " en cours)" : "")); o.value = n; sel.appendChild(o); }); sel.value = client;
     sel.onchange = () => { client = sel.value; S.ui.prodC = client; remember(); items = PD.list(client); next = {}; loadNext(); slots(); draw(); }; l.appendChild(sel); f.appendChild(l);
     const dz = el("label","pd-drop"); dz.innerHTML = "<b>Choisir ou glisser les vidéos et visuels</b><span>MP4, MOV, JPG, PNG</span>"; const fi = el("input"); fi.type = "file"; fi.multiple = true; fi.accept = "video/*,image/*"; fi.hidden = true; dz.appendChild(fi);
@@ -1659,11 +1661,12 @@ function prodDrop(clients){
       go.disabled = true; go.textContent = "Envoi à Metricool…";
       try { const r = await GC.api("POST","/api/g-prod/schedule", { client, mode, items: items.map(x => ({ url: x.url, kind: x.kind, text: x.text, date: x.date, time: x.time })) });
         const ok = r.results.filter(x => x.ok).length, ko = r.results.filter(x => !x.ok);
-        if (ko.length) toast(ok + " programmée(s), " + ko.length + " refusée(s) : " + ko[0].error); else { toast(ok + " publication" + (ok > 1 ? "s" : "") + (mode === "draft" ? " en brouillon dans Metricool" : mode === "review" ? " envoyée" + (ok > 1 ? "s" : "") + " en validation à " + client : " programmée" + (ok > 1 ? "s" : "") + " dans Metricool") + "."); PD.all[client] = []; items = PD.list(client); PD.save(); closeModal(); }
+        if (ko.length) toast(ok + " programmée(s), " + ko.length + " refusée(s) : " + ko[0].error); else { toast(ok + " publication" + (ok > 1 ? "s" : "") + (mode === "draft" ? " en brouillon dans Metricool" : mode === "review" ? " envoyée" + (ok > 1 ? "s" : "") + " en validation à " + client : " programmée" + (ok > 1 ? "s" : "") + " dans Metricool") + "."); PD.all[client] = []; items = PD.list(client); PD.save(); (host ? render() : closeModal()); }
         if (typeof loadPubs === "function") loadPubs(S.ui.pubM || monthKey(), true);
       } catch(e){ toast(e.message); } go.disabled = false; draw(); });
-    act.append(btn("Fermer","", closeModal), go); m.appendChild(act); draw();
-  });
+    if (!host) act.appendChild(btn("Fermer","", closeModal)); act.appendChild(go); m.appendChild(act); draw();
+  };
+  if (host){ const m = el("div"); host.appendChild(m); build(m); } else openModal(build);
 }
 (function(){ const st = document.createElement("style"); st.textContent = ".pd-modal{max-width:820px}.pd-drop{display:flex;flex-direction:column;align-items:center;gap:4px;padding:22px;border:1.5px dashed var(--line-2);border-radius:14px;cursor:pointer;text-align:center}.pd-drop.on{border-color:#C6FF33}.pd-drop span{font-size:12px;color:var(--muted)}"
   + ".pd-body{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;margin:14px 0;min-width:0}.pd-it{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;min-width:0;padding:12px;border:1px solid var(--line-2);border-radius:14px;background:var(--card)}.pd-top{display:flex;gap:12px}.pd-th{width:64px;height:110px;object-fit:cover;border-radius:8px;background:#000;flex:none}"
@@ -1703,24 +1706,26 @@ function pubRecap(r, mk, ok){
 /* Publications : chaque client face à ce qui est prévu au mois (statiques et vidéos Paul Audio), lu en direct dans Metricool */
 let pubAt = {}; function loadPubs(mk, force){ if (!force && Date.now() - (pubAt[mk] || 0) < 3 * 60000) return; pubAt[mk] = Date.now();
   GC.api("GET", "/api/g-pubs?month=" + mk + (force ? "&fresh=1" : "")).then(r => { S.pubs = Object.assign({}, S.pubs, { [mk]: r }); renderSoon(); }).catch(() => {}); }
+/* Dépôt : on dépose les vidéos et visuels d'un client, Claude les transcrit (ou les regarde), propose dates et descriptions, puis tout part dans Metricool */
+function vDepot(root){
+  const mk = monthKey(); loadPubs(mk); const R = (S.pubs || {})[mk];
+  root.appendChild(head("Dépôt", "Dépose les vidéos et visuels d’un client. Claude transcrit la vidéo (ou regarde le visuel), propose la date et trois descriptions, puis tout part dans Metricool. Tu peux quitter la page : le travail continue."));
+  const open = Object.keys(PD.all).filter(c => PD.all[c].length);
+  if (open.length){ const box = el("section","pb-open"); box.appendChild(el("div","flabel","En cours chez Claude"));
+    open.forEach(c => { const l = PD.all[c], w = l.filter(x => x.wait).length, ready = l.filter(x => x.props).length; const r = el("div","pb-row");
+      r.append(clientTag(c), el("span","note", plural(l.length, "fichier") + (w ? ", " + w + " en transcription" : "") + (ready ? ", " + plural(ready, "prêt", "prêts") : "")), btn("Voir","sm", () => { S.ui.prodC = c; remember(); render(); })); box.appendChild(r); });
+    root.appendChild(box); }
+  const host = el("section","pd-host"); root.appendChild(host);
+  prodDrop(R && (R.rows || R.plan) ? ["Agence Gacolet","Gabriel"].concat((R.rows || R.plan).filter(r => r.blogId).map(r => r.client)) : [], host);
+}
 function vPublications(root){
   const mk = S.ui.pubM || monthKey(), R = (S.pubs || {})[mk]; loadPubs(mk);
-  const openDrop = () => { const R2 = (S.pubs || {})[mk]; prodDrop(R2 && (R2.rows || R2.plan) ? ["Agence Gacolet","Gabriel"].concat((R2.rows || R2.plan).filter(r => r.blogId).map(r => r.client)) : []); };
   const mnav = [btn("‹","icon", () => { S.ui.pubM = addMonths(mk + "-01", -1).slice(0, 7); render(); }), btn("Ce mois","", () => { S.ui.pubM = ""; render(); }), btn("›","icon", () => { S.ui.pubM = addMonths(mk + "-01", 1).slice(0, 7); render(); }), btn("Actualiser","", () => { loadPubs(mk, true); toast("Lecture de Metricool…"); })];
   const rows = R ? (R.rows || R.plan || []) : [], tot = k => rows.reduce((a, r) => a + (Number(r[k]) || 0), 0);
   const plan = r => (Number(r.stat) || 0) + (Number(r.video) || 0), done = r => (r.statDone || 0) + (r.vidDone || 0), sched = r => (r.statSched || 0) + (r.vidSched || 0), totP = rows.reduce((a, r) => a + plan(r), 0);
-  root.appendChild(head("Publications", "En haut, tu déposes les vidéos et visuels à publier : Claude les écoute et prépare dates et descriptions. En bas, le bilan du mois lu sur Metricool."));
-  // 1. Espace de dépôt et de production
-  { const box = el("section","pb-drop"); const t1 = el("div","pb-dh"); t1.append(el("h2", null, "Déposer et produire"), el("p","note","Vidéos et visuels d’un client : Claude écoute la vidéo (ou regarde le visuel), propose la date et trois descriptions, puis tout part dans Metricool."));
-    const go = btn("Déposer des productions","lemon", openDrop); t1.appendChild(go); box.appendChild(t1);
-    const open = Object.keys(PD.all).filter(c => PD.all[c].length);
-    if (open.length){ const ul = el("div","pb-open"); ul.appendChild(el("div","flabel","En cours"));
-      open.forEach(c => { const l = PD.all[c], w = l.filter(x => x.wait).length, ready = l.filter(x => x.props).length; const r = el("div","pb-row");
-        r.append(clientTag(c), el("span","note", plural(l.length, "fichier") + (w ? ", " + w + " en cours d’écriture" : "") + (ready ? ", " + plural(ready, "description prête", "descriptions prêtes") : "")), btn("Reprendre","sm", () => { S.ui.prodC = c; remember(); openDrop(); })); ul.appendChild(r); });
-      box.appendChild(ul); }
-    root.appendChild(box); }
+  root.appendChild(head(["Publications", monthLabel(mk)], "Le bilan du mois lu sur Metricool. Pour déposer des vidéos et visuels à publier : onglet Dépôt.", [addBtn("Aller au Dépôt", () => go("depot"))]));
   // 2. Bilan du mois
-  { const h = el("div","pb-bh"); h.appendChild(el("h2","fin-h",(/^[aeiouéèêh]/i.test(monthLabel(mk)) ? "Bilan d’" : "Bilan de ") + monthLabel(mk).toLowerCase())); const tl = el("div","pb-nav"); mnav.forEach(b => tl.appendChild(b)); h.appendChild(tl); root.appendChild(h);
+  { const h = el("div","pb-bh"); h.appendChild(el("h2","fin-h","Bilan du mois")); const tl = el("div","pb-nav"); mnav.forEach(b => tl.appendChild(b)); h.appendChild(tl); root.appendChild(h);
     root.appendChild(el("p","note", totP + " posts prévus au mois, face à ce qui est réellement posté sur Metricool (un post compté une fois, sur Instagram, ou Facebook à défaut ; stories exclues). Clique sur un client pour le détail.")); }
   if (!R){ root.appendChild(el("p","empty","Lecture de Metricool…")); return; }
   if (!R.ok) root.appendChild(el("p","status", R.reason === "no-token" ? "Metricool n’est pas encore relié au serveur : il manque la clé API Metricool (METRICOOL_USER_TOKEN) dans les variables d’environnement Infomaniak. Le prévu s’affiche, les compteurs se rempliront dès que la clé sera ajoutée." : "Metricool ne répond pas pour l’instant."));
@@ -3215,7 +3220,7 @@ function vAgendaHub(root){
 function vTachesHub(root){
   vTaches(root);
 }
-const RENDER = {strategie:vStrategie, fiches:vFiches, parametres:vParametres, accueil:vAccueil, agenda:vAgendaHub, taches:vTachesHub, commercial:vCommercial, campagnes:vMeta, montage:vMontage, tournage:vTournage, publications:vPublications, clients:vClients, messagerie:vMessagerie, vocal:vVocal, formation:vFormation, idees:vIdees};
+const RENDER = {strategie:vStrategie, fiches:vFiches, parametres:vParametres, accueil:vAccueil, agenda:vAgendaHub, taches:vTachesHub, commercial:vCommercial, campagnes:vMeta, montage:vMontage, tournage:vTournage, publications:vPublications, depot:vDepot, clients:vClients, messagerie:vMessagerie, vocal:vVocal, formation:vFormation, idees:vIdees};
 /* Chargement progressif : des blocs gris qui respirent à la place de « Chargement… » */
 function skeleton(n){ const w = el("div","sk-wrap"); w.setAttribute("aria-busy","true"); w.setAttribute("aria-label","Chargement");
   if (!n){ const t = el("div","sk sk-bar"); w.appendChild(t); n = 7; }
@@ -3274,6 +3279,7 @@ const ICONS = {
   campagnes:'<path d="M4 10v4l3 .4L15 19V5L7 9.6z"/><path d="M18.2 9.4a3.6 3.6 0 0 1 0 5.2"/>',
   tournage:'<rect x="3" y="7" width="13" height="11" rx="2"/><path d="M16 11l5-3v9l-5-3"/><circle cx="9.5" cy="12.5" r="2.3"/>',
   montage:'<rect x="3.5" y="6" width="17" height="12" rx="1.5"/><path d="M8 6v12M16 6v12M3.5 10h4.5M3.5 14h4.5M16 10h4.5M16 14h4.5"/>',
+  depot:'<path d="M12 15V4M7.5 8.5 12 4l4.5 4.5"/><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/>',
   publications:'<rect x="4" y="4" width="16" height="16" rx="4"/><circle cx="12" cy="12" r="3.6"/><path d="M16.7 7.3h.01"/>',
   clients:'<circle cx="9" cy="9" r="3.2"/><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5M15.5 6.2a3 3 0 0 1 0 5.6M17 14.3c1.9.6 3.1 2.2 3.5 4.7"/>',
   messagerie:'<path d="M4.5 6.5A2 2 0 0 1 6.5 4.5h11a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H10l-4.5 3.5v-3.5h0a2 2 0 0 1-1-1.7z"/>',
@@ -3284,7 +3290,7 @@ const ICONS = {
   idees:'<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>',
   focus:'<path d="M12 21c-3.6 0-6.5-2.6-6.5-6.2 0-3.4 2.6-5.2 3.6-8.3.9 1.4 1.4 2.7 1.4 4 1.3-1.1 2.3-3.2 2.1-6 3 2.4 5.9 6 5.9 10.3 0 3.6-2.9 6.2-6.5 6.2z"/><path d="M12 21c-1.6 0-2.8-1.2-2.8-2.8 0-1.7 1.6-2.6 2.8-4.2 1.2 1.6 2.8 2.5 2.8 4.2 0 1.6-1.2 2.8-2.8 2.8z"/>'
 };
-const SHORT = {finance:"Finance", strategie:"Stratégie", chalet:"Chalet", fiches:"Tableau clients", parametres:"Paramètres", accueil:"Accueil", agenda:"Agenda", taches:"Tâches", commercial:"Commercial", campagnes:"Campagnes", montage:"Rushs", tournage:"Tournage", publications:"Publications", clients:"Calendrier clients", messagerie:"Messagerie", vocal:"Vocal", formation:"Formation", idees:"Idées", focus:"Focus"};
+const SHORT = {finance:"Finance", strategie:"Stratégie", chalet:"Chalet", fiches:"Tableau clients", parametres:"Paramètres", accueil:"Accueil", agenda:"Agenda", taches:"Tâches", commercial:"Commercial", campagnes:"Campagnes", depot:"Dépôt", montage:"Rushs", tournage:"Tournage", publications:"Publications", clients:"Calendrier clients", messagerie:"Messagerie", vocal:"Vocal", formation:"Formation", idees:"Idées", focus:"Focus"};
 const MOBILE_MAIN = ["accueil","agenda","taches","messagerie"];
 const ico = k => { const s = document.createElementNS("http://www.w3.org/2000/svg","svg"); s.setAttribute("viewBox","0 0 24 24"); s.setAttribute("aria-hidden","true"); s.classList.add("ico"); s.innerHTML = ICONS[k] || ""; return s; };
 function renderTabs(){
