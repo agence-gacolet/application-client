@@ -606,7 +606,7 @@ function biLoadTodo(){ BI.todo = 0; GC.api("GET","/api/g-bilans?m=" + biPrev()).
 function biLoadList(m){ BI.m = m; BI.list = null; GC.api("GET","/api/g-bilans?m=" + m).then(r => { BI.list = r.bilans || []; renderSoon(); }).catch(e => { BI.list = []; toast(e.message); }); }
 function biLoad(cid, m){ const k = cid + "|" + m; if (BI.loading[k]) return; BI.loading[k] = 1; GC.api("GET","/api/g-bilan/" + cid + "?m=" + m).then(r => { BI.data[k] = r; }).catch(e => { BI.data[k] = { error: e.message }; }).finally(() => { delete BI.loading[k]; renderSoon(); }); }
 /* Le bilan en diapositives 16:9, sur le modèle des bilans faits à la main (Paillote Bassamoise, Locamex) :
-   couverture, chiffres du mois, demandes Meta, ce qui a été livré, ce qui a fonctionné / moins fonctionné,
+   couverture, chiffres du mois, demandes Meta, ce qui a fonctionné / moins fonctionné,
    le mois prochain, ce dont on a besoin, en résumé. L'appli remplit ce qu'elle sait ; l'agence complète le reste. */
 const biNum = v => { const n = Number(String(v == null ? "" : v).replace(/\s/g, "").replace(",", ".")); return isFinite(n) && String(v).trim() !== "" ? n : null; };
 const biFmt = n => n == null ? "—" : Math.round(n).toLocaleString("fr-FR");
@@ -620,7 +620,7 @@ function bilanSlides(d, x){
   // 1. Couverture
   { const s = slide(true); const top = el("div","bs-top"); top.append(el("span","bs-brand","AGENCE GACOLET"), el("span","bs-cli", name)); s.appendChild(top);
     const h = el("h2","bs-cover"); h.append(document.createTextNode("Le bilan"), el("br")); if (P.isMonth) h.appendChild(document.createTextNode((/^[aeiouyéè]/i.test(moName) ? "d’" : "de "))); h.appendChild(el("em", null, moName)); s.appendChild(h);
-    s.appendChild(el("p","bs-lead","Les chiffres du mois, ce qui a été livré, ce qui a fonctionné, et ce que l’on propose pour le mois prochain."));
+    s.appendChild(el("p","bs-lead","Les chiffres du mois, ce qui a fonctionné, et ce que l’on propose pour le mois prochain."));
     s.appendChild(el("p","bs-small","Période du " + P.range + (pv ? ", comparée à " + pvLabel + "." : "."))); }
   // 2. Les chiffres du mois
   { const rows = [];
@@ -646,19 +646,6 @@ function bilanSlides(d, x){
     s.insertBefore(wk, s.querySelector(".bs-foot"));
     if (m.def) s.insertBefore(el("p","bs-quote","Demande qualifiée : " + m.def), s.querySelector(".bs-foot"));
     s.insertBefore(el("p","bs-src","Source : demandes saisies par l’agence dans l’appli, du " + P.range + (bud != null ? " ; budget relevé dans le gestionnaire de publicités Meta" : "") + "."), s.querySelector(".bs-foot")); }
-  // 4. Ce qui a été livré
-  if (d.client.modules.includes("com")){ const s = slide(false, "", "Ce qui a été livré"); const g = el("div","bs-flow");
-    const pr = el("div","bs-box light"); pr.append(el("p","bs-kick","Prévu"), el("b","bs-mid", x.prevu ? x.prevu.split("\n")[0] : d.fiche && d.fiche.perMonth ? d.fiche.perMonth + " publications" : "À préciser"), el("p", null, x.prevu ? biLines(x.prevu).slice(1).join(" ") : d.fiche && d.fiche.formula ? d.fiche.formula : "Le rythme prévu se renseigne dans la fiche du client."));
-    const ar = el("div","bs-arrow"); ar.append(el("span","bs-pill","Sur la période"), el("i"));
-    const lv = el("div","bs-box lemon"); const ty = Object.entries(d.posts.types).map(([k, v]) => v + " " + (k === "Réel test" ? "réel" + (v > 1 ? "s" : "") + " test" : k.toLowerCase() + (v > 1 ? "s" : ""))).join(", ");
-    lv.append(el("p","bs-kick","Livré"), el("b","bs-mid", d.posts.count + " publication" + (d.posts.count > 1 ? "s" : "")), el("p", null, ty || "Aucune publication sur la période"));
-    g.append(pr, ar, lv); s.insertBefore(g, s.querySelector(".bs-foot"));
-    const nDays = P.days, vids = (d.posts.types["Réel"] || 0) + (d.posts.types["Réel test"] || 0);
-    const f3 = el("div","bs-facts"); const fact = (b, t) => { const p = el("p"); p.append(el("b", null, b + " : "), document.createTextNode(t)); f3.appendChild(p); };
-    fact("Rythme", d.posts.count + " publications en " + nDays + " jours, soit " + (d.posts.count * 7 / nDays).toFixed(1).replace(".", ",") + " par semaine.");
-    if (d.posts.count) fact("Vidéo", vids + " réel" + (vids > 1 ? "s" : "") + " sur " + d.posts.count + " publications, soit " + Math.round(100 * vids / d.posts.count) + " %.");
-    if (x.remarques) fact("À noter", x.remarques); else if (d.shoots.count) fact("Tournage", d.shoots.videos + " vidéo" + (d.shoots.videos > 1 ? "s" : "") + " tournée" + (d.shoots.videos > 1 ? "s" : "") + " sur " + d.shoots.count + " visite" + (d.shoots.count > 1 ? "s" : "") + ".");
-    s.insertBefore(f3, s.querySelector(".bs-foot")); }
   // 5 et 6. Ce qui a fonctionné / moins fonctionné
   [["okPhrase","okList","Ce qui a marché","Ce qui a fonctionné"],["koPhrase","koList","À corriger","Ce qui a moins fonctionné"]].forEach(([p, l, k, t]) => { if (!x[p] && !x[l]) return;
     const s = slide(false, k, t); const g = el("div","bs-grid2 wide"); const b = el("div","bs-box dark"); b.append(el("p","bs-sub","En une phrase"), el("p","bs-txt", x[p] || "")); const ul = el("ul","bs-ul"); biLines(x[l]).forEach(i => ul.appendChild(el("li", null, i.replace(/^[-•]\s*/, "")))); g.append(b, ul); s.insertBefore(g, s.querySelector(".bs-foot")); });
