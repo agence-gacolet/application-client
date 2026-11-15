@@ -2028,3 +2028,26 @@ html.tg-lock,html.tg-lock body{overflow:hidden}
 .wa-line:not(.mine):hover .wa-time{right:auto!important;left:calc(100% + 40px)}
 .wa-line.mine:hover .wa-time{left:auto!important;right:calc(100% + 40px)}
 .wa-dots{color:#8E8E93}
+
+/* ===== Couleurs de Messages sur Mac (15/11/2026, Matis : « garde la même couleur que l'iPhone, colonne comprise, avec les traits ») ===== */
+.wa,.wa-top{--im-bg:#1C1C1C;--im-side:#1C1C1C;--im-in:#353537;--im-sep:#2E2E2E}
+.wa{background:#1C1C1C}
+.wa-list{background:#1C1C1C!important;border-right:1px solid #2E2E2E!important}
+.wa-conv,.wa-msgs{background:#1C1C1C!important}
+.wa-head{background:rgba(28,28,28,.86)!important;border-bottom:1px solid #2E2E2E!important}
+.wa-row{position:relative}
+.wa-row::after{content:"";position:absolute;left:62px;right:10px;bottom:-1px;height:1px;background:#383838;pointer-events:none}
+.wa-row[aria-pressed="true"]::after,.wa-row:has(+ .wa-row[aria-pressed="true"])::after,.wa-row:has(+ .wa-lab)::after,.wa-row:last-child::after{content:none}
+.wa-row:hover{background:rgba(255,255,255,.04)}
+.wa-re button{border-color:#1C1C1C!important}
+.wa-form{background:rgba(28,28,28,.9)!important;border-top:1px solid #2E2E2E!important}
+.wa-bar textarea{background:transparent;border:1px solid #3A3A3C!important}
+.wa-bar textarea:focus{border-color:#545456!important}
+.wa-ic{width:32px;height:32px;border-radius:50%;background:#2C2C2E;color:#D1D1D6}
+.wa-ic:hover{background:#3A3A3C;color:#fff}
+.wa-gif{width:auto;padding:0 10px;border:0!important;border-radius:16px;font-size:11px;font-weight:700}
+.wa-list,.wa-msgs{scrollbar-width:thin;scrollbar-color:#4A4A4C transparent}
+.wa-list::-webkit-scrollbar,.wa-msgs::-webkit-scrollbar{width:8px}
+.wa-list::-webkit-scrollbar-thumb,.wa-msgs::-webkit-scrollbar-thumb{background:#4A4A4C;border-radius:8px;border:2px solid #1C1C1C}
+.wa-list::-webkit-scrollbar-track,.wa-msgs::-webkit-scrollbar-track{background:transparent}
+@media (max-width:900px){ .wa-list{background:#1C1C1C!important} .wa-row::after{left:66px} }
