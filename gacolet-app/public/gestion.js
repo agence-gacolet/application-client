@@ -2855,6 +2855,7 @@ function vTournage(root){
       const prog = el("p","tg-meta", c.done || c.ko ? c.done + " fait" + (c.done > 1 ? "s" : "") + (c.ko ? ", " + c.ko + " pas possible" + (c.ko > 1 ? "s" : "") : "") + " sur " + c.all : "Pas encore tourné");
       const act = el("div","tg-act");
       act.append(btn("Lancer le tournage", "sm lemon", () => tgLive(s)), btn("PDF", "sm", () => tgPdf(s)), btn("Modifier", "sm", () => tgEdit(s)));
+      { let armed = false; const db = btn("Supprimer", "sm danger", async () => { if (!armed){ armed = true; db.textContent = "Confirmer la suppression"; setTimeout(() => { armed = false; db.textContent = "Supprimer"; }, 4000); return; } db.disabled = true; try { await remove("shoots", s.id); toast("Feuille supprimée (récupérable 30 jours dans la corbeille)."); } catch(e){ db.disabled = false; } }); db.disabled = !writable(); act.appendChild(db); }
       const sb = btn(s.sentAt ? "Renvoyer au client" : "Envoyer au client", "sm", () => tgSend(s)); sb.disabled = !writable(); act.appendChild(sb);
       card.append(top, h, meta, cnt, bar, prog);
       if (s.sentAt){ const st = s.clientStatus || "wait", cs = el("div","tg-cs " + st);
@@ -2995,6 +2996,11 @@ async function tgSyncRush(s, v){
 }
 
 /* Mode tournage : une slide par vidéo puis par photo, swipe, Fait / Pas possible, retour en arrière */
+/* Lien de référence lisible dans la diapositive : Instagram, TikTok, YouTube, Vimeo, Google Drive */
+function tgEmbed(u){ u = String(u || ""); let m;
+  if ((m = u.match(/instagram\.com\/(?:[\w.]+\/)?(?:p|reel|reels|tv)\/([\w-]+)/))) return "https://www.instagram.com/p/" + m[1] + "/embed";
+  if ((m = u.match(/tiktok\.com\/@[\w.-]+\/video\/(\d+)/)) || (m = u.match(/tiktok\.com\/(?:embed\/v2\/|v\/)(\d+)/))) return "https://www.tiktok.com/embed/v2/" + m[1];
+  return embedUrl(u) || ""; }
 function tgLive(s0){
   const s = JSON.parse(JSON.stringify(s0)); const items = tgItems(s);
   if (!items.length) return toast("Ajoute d’abord des vidéos ou des photos à la feuille.");
@@ -3033,11 +3039,15 @@ function tgLive(s0){
       card.appendChild(el("div","tg-kind k-" + v.kind, TG_KINDS[v.kind] + (v.kind === "photo" ? "" : " · vidéo " + (tgVideos(s).indexOf(v) + 1))));
       card.appendChild(el("h2", null, v.title || "Sans titre"));
       if (v.line) card.appendChild(el("p","tg-line", v.line));
-      const links = tgLinks(v.links); if (links.length){ const ul = el("div","tg-links"); links.forEach(u => { const h = tgHref(u); const a = el(h ? "a" : "span", null, u.replace(/^https?:\/\/(www\.)?/, "")); if (h){ a.href = h; a.target = "_blank"; a.rel = "noopener"; } ul.appendChild(a); }); card.appendChild(ul); }
-      const media = (v.files || []); if (media.length){ const mw = el("div","tg-media"); media.forEach(fl => { const u = fileUrl(fl), ty = fl.type || "";
-        if (/^image\//.test(ty)){ const im = el("img"); im.src = u; im.alt = fl.name || ""; im.loading = "lazy"; mw.appendChild(im); }
-        else if (/^video\//.test(ty)){ const vd = el("video"); vd.src = u; vd.controls = true; vd.playsInline = true; vd.preload = "metadata"; mw.appendChild(vd); }
-        else { const a = el("a","tg-file", fl.name || "Fichier"); a.href = u; a.target = "_blank"; a.rel = "noopener"; mw.appendChild(a); } }); card.appendChild(mw); }
+      const links = tgLinks(v.links); const embeds = links.map(u => tgEmbed(tgHref(u) || u)).filter(Boolean);
+      if (embeds.length || (v.files || []).length){ const rw = el("div","tg-refs"); embeds.forEach(src => { const f = document.createElement("iframe"); f.src = src; f.className = "tg-emb"; f.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen"; f.allowFullscreen = true; f.loading = "lazy"; rw.appendChild(f); });
+        (v.files || []).forEach(fl => { const u = fileUrl(fl), ty = fl.type || "", nm = (fl.name || "").toLowerCase();
+          if (/^image\//.test(ty) || /\.(jpe?g|png|webp|gif|heic)$/.test(nm)){ const im = el("img","tg-emb"); im.src = u; im.alt = fl.name || ""; rw.appendChild(im); }
+          else if (/^video\//.test(ty) || /\.(mp4|mov|m4v|webm)$/.test(nm)){ const vd = el("video","tg-emb"); vd.src = u; vd.controls = true; vd.playsInline = true; vd.loop = true; vd.muted = true; vd.autoplay = true; vd.preload = "auto"; rw.appendChild(vd); }
+          else { const a2 = el("a","tg-file", fl.name || "Fichier"); a2.href = u; a2.target = "_blank"; a2.rel = "noopener"; rw.appendChild(a2); } });
+        card.appendChild(rw); }
+      const plain = links.filter(u => !tgEmbed(tgHref(u) || u)); if (plain.length){ const ul = el("div","tg-links"); plain.forEach(u => { const h = tgHref(u); const a = el(h ? "a" : "span", null, u.replace(/^https?:\/\/(www\.)?/, "")); if (h){ a.href = h; a.target = "_blank"; a.rel = "noopener"; } ul.appendChild(a); }); card.appendChild(ul); }
+      /* fichiers de référence : affichés plus haut avec les liens */
       if (v.status) card.appendChild(el("div","tg-state " + v.status, v.status === "fait" ? "Fait" : "Pas possible"));
     }
     stage.appendChild(card); ov.appendChild(stage);
