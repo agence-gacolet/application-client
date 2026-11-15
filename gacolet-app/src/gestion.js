@@ -815,7 +815,8 @@ module.exports = function (app, { db, wrap, root }) {
   // ---------- Bilan mensuel d'un client : calculé à partir de ce que l'appli sait déjà, complété par l'agence. INTERNE : sert à Gabriel pour faire le point avec le client, jamais affiché dans l'espace client ----------
   const { fetchMonth } = require("./metricool");
   const okMonth = m => /^\d{4}-(0[1-9]|1[0-2])$/.test(String(m || ""));
-  async function bilanData(cid, month) {
+  const prevMonth = m => { const [y, mo] = m.split("-").map(Number), d = new Date(y, mo - 2, 1); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); };
+  async function bilanData(cid, month, noPrev) {
     const c = await db.one("SELECT * FROM clients WHERE id = ?", [cid]); if (!c) return null;
     const mods = String(c.modules || "com").split(",");
     let posts = [], postsError = "";
@@ -835,7 +836,11 @@ module.exports = function (app, { db, wrap, root }) {
     const shoots = (await docsLike("shoots", '"date":"' + month)).filter(s => sameName(s.client, c.name));
     const vids = shoots.flatMap(s => (s.videos || []).filter(v => v.status === "fait"));
     const stats = (await db.all("SELECT module, data, source FROM stats WHERE client_id = ? AND period = ?", [cid, month])).map(s => { let d = {}; try { d = JSON.parse(s.data || "{}"); } catch (e) {} return { module: s.module, data: d, source: s.source }; });
-    return { client: { id: c.id, name: c.name, modules: mods }, month,
+    let prev = null, fiche = {};
+    if (!noPrev) { const pv = await bilanData(cid, prevMonth(month), true); prev = { month: pv.month, posts: pv.posts.count, types: pv.posts.types, meta: pv.meta ? { total: pv.meta.total, qualified: pv.meta.qualified } : null, videos: pv.shoots.videos };
+      const f = (await db.all("SELECT data FROM docs WHERE col = 'clients' AND deleted = 0")).map(r => { try { return JSON.parse(r.data || "{}"); } catch (e) { return {}; } }).find(x => sameName(x.name, c.name)) || {};
+      fiche = { formula: f.formula || c.formula || "", perMonth: f.perMonth || "" }; }
+    return { client: { id: c.id, name: c.name, modules: mods }, month, prev, fiche,
       posts: { count: posts.length, published: posts.filter(p => p.published || p.date < new Date().toISOString().slice(0, 10)).length, nets, types, list: posts.slice(0, 40).map(p => ({ date: p.date, type: p.type, net: p.net, title: p.title, url: p.url })), error: postsError },
       validations: { ok: vals.filter(v => v === "ok").length, mod: vals.filter(v => v === "mod").length },
       meta, shoots: { count: shoots.length, videos: vids.length, dates: shoots.map(s => s.date).sort() }, stats };
@@ -855,7 +860,9 @@ module.exports = function (app, { db, wrap, root }) {
     const cid = Number(req.params.cid), b = req.body || {}, m = String(b.m || ""); if (!cid || !okMonth(m)) return res.status(400).json({ error: "Demande invalide." });
     const data = await bilanData(cid, m); if (!data) return res.status(404).json({ error: "Client introuvable." });
     const s = (v, n) => String(v == null ? "" : v).trim().slice(0, n), num = v => { const x = Number(String(v == null ? "" : v).replace(",", ".")); return isFinite(x) && x >= 0 ? Math.round(x) : null; };
-    const extra = { avis: num(b.extra && b.extra.avis), note: s(b.extra && b.extra.note, 10), appels: num(b.extra && b.extra.appels), mot: s(b.extra && b.extra.mot, 2000), next: s(b.extra && b.extra.next, 2000) };
+    // Ce que l'agence ajoute au bilan : uniquement des champs texte connus, longueur bornée
+    const KEYS = ["chiffres", "topLabel", "topNum", "topTxt", "prevu", "remarques", "budget", "okPhrase", "okList", "koPhrase", "koList", "decisions", "besoins", "resumeTitre", "resumeTxt", "strategie"];
+    const extra = {}; KEYS.forEach(k => { extra[k] = s(b.extra && b.extra[k], 4000); });
     const doc = { cid, month: m, data, extra, savedAt: new Date().toISOString(), savedBy: req.user.name, };
     await put("_bilans", bilanId(cid, m), doc);
     res.json({ ok: true, saved: doc });
