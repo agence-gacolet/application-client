@@ -548,8 +548,10 @@ function comStats(root, sample){
   const s = st[st.length - 1];
   if (!s){ root.appendChild(el("p","empty","Vos premiers chiffres arrivent avec le bilan du mois.")); return; }
   const d = s.data, p = st[st.length - 2], dv = p && p.data.vues ? Math.round(((d.vues || 0) - p.data.vues) / p.data.vues * 100) : null;
-  const hero = el("div","st-hero"); hero.append(el("span",null,"Demandes reçues grâce à vos réseaux"), el("b",null,fmtN(d.demandes)), el("em",null,"messages et appels, " + perL(s.period))); root.appendChild(hero);
-  root.appendChild(kpis([[d.vues != null ? fmtN(d.vues) : "", "vues des vidéos", dv != null ? (dv >= 0 ? "+" : "") + dv + " % sur un mois" : ""],[d.abonnes != null ? "+" + fmtN(d.abonnes) : "", "nouveaux abonnés"],[d.publications != null ? d.publications : "", "publications", d.prevues ? "sur " + d.prevues + " prévues" : ""]]));
+  // Demandes : chiffre saisi par l’agence ; tant qu’il n’y en a pas, le grand chiffre est celui des vues (jamais un « 0 » inventé)
+  const hero = el("div","st-hero"); if (d.demandes != null) hero.append(el("span",null,"Demandes reçues grâce à vos réseaux"), el("b",null,fmtN(d.demandes)), el("em",null,"messages et appels, " + perL(s.period)));
+  else hero.append(el("span",null,"Vues de vos contenus"), el("b",null,fmtN(d.vues)), el("em",null,"Instagram et Facebook, " + perL(s.period) + (dv != null ? ", " + (dv >= 0 ? "+" : "") + dv + " % sur un mois" : ""))); root.appendChild(hero);
+  root.appendChild(kpis([[d.vues != null && d.demandes != null ? fmtN(d.vues) : "", "vues des vidéos", dv != null ? (dv >= 0 ? "+" : "") + dv + " % sur un mois" : ""],[d.abonnes != null ? "+" + fmtN(d.abonnes) : "", "nouveaux abonnés"],[d.publications != null ? d.publications : "", "publications", d.prevues ? "sur " + d.prevues + " prévues" : ""]]));
   root.appendChild(barChart(st.slice(-6).map(x => [perS(x.period), x.data.vues || 0]), "Vues des vidéos par mois"));
   if (!sample) root.appendChild(el("p","st-src","Source : " + (s.source || "Metricool") + ", " + perL(s.period) + "."));
 }
@@ -753,7 +755,9 @@ function start(){
   load(); startPoll();
 }
 const TEST = (() => { try { return new URLSearchParams(location.search).get("test") === "1"; } catch(e){ return false; } })();
-if (APERCU){ const b = el("div","cl-apercu", TEST ? "Mode test : tout fonctionne vraiment, les actions sont signées Test Agence." : "Aperçu de l’agence : vous voyez l’espace de ce client, en lecture seule."); document.body.appendChild(b); document.body.classList.add("has-apercu"); }
+if (APERCU){ const b = el("div","cl-apercu", TEST ? "Mode test : tout fonctionne vraiment, les actions sont signées Test Agence. " : "Aperçu de l’agence : vous voyez l’espace de ce client, en lecture seule. ");
+  const back = el("a", null, "Retour à l’espace équipe"); back.href = "/gestion#parametres"; back.style.cssText = "color:inherit;text-decoration:underline;white-space:nowrap"; b.appendChild(back);
+  document.body.appendChild(b); document.body.classList.add("has-apercu"); }
 if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
 start();
 })();
