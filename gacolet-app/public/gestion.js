@@ -3289,18 +3289,23 @@ ${rules.length ? `<div class="box"><b>À respecter</b>${rules.slice(0, 3).map(r 
   if (preview){
     /* Aperçu à l'écran : la page A4 telle qu'elle sortira, sans passer par l'impression */
     const ov = el("div"); ov.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.82);display:flex;flex-direction:column;align-items:center;padding:14px 12px;gap:10px";
-    const tb = el("div"); tb.style.cssText = "display:flex;gap:8px;align-items:center;width:min(820px,100%);justify-content:space-between";
+    const tb = el("div"); tb.style.cssText = "display:flex;gap:8px;align-items:center;width:min(1000px,100%);justify-content:space-between;flex:none";
     const tt = el("span", null, (s.client || "") + " · aperçu de la feuille de tournage"); tt.style.cssText = "color:#F4F4F2;font-size:14px";
     const bx = el("div"); bx.style.cssText = "display:flex;gap:8px";
-    const close = () => { ov.remove(); document.removeEventListener("keydown", esc); };
+    const close = () => { ov.remove(); document.removeEventListener("keydown", esc); window.removeEventListener("resize", fit); };
     const esc = e => { if (e.key === "Escape") close(); };
     bx.append(btn("Télécharger en PDF", "sm lemon", () => { close(); tgPdf(s); }), btn("Fermer", "sm", close));
     tb.append(tt, bx);
-    const wrap = el("div"); wrap.style.cssText = "flex:1;width:min(820px,100%);overflow:auto;background:#555;border-radius:6px";
-    const pf = el("iframe"); pf.style.cssText = "display:block;width:210mm;max-width:100%;min-height:297mm;border:0;margin:0 auto;background:#fff"; pf.srcdoc = html;
-    pf.onload = () => { try { pf.style.height = pf.contentWindow.document.documentElement.scrollHeight + "px"; } catch(e){} };
-    wrap.appendChild(pf); ov.append(tb, wrap);
-    ov.addEventListener("click", e => { if (e.target === ov) close(); });
+    /* La feuille A4 entière, à l'échelle de l'écran, comme une page posée sur la table */
+    const wrap = el("div"); wrap.style.cssText = "flex:1;min-height:0;width:100%;overflow:auto;display:flex;justify-content:center;align-items:flex-start";
+    const W = 794, H = 1123, hold = el("div"); hold.style.cssText = "position:relative;flex:none;box-shadow:0 10px 40px rgba(0,0,0,.55)";
+    const pf = el("iframe"); pf.style.cssText = "position:absolute;left:0;top:0;width:" + W + "px;height:" + H + "px;border:0;background:#fff;transform-origin:0 0"; pf.srcdoc = html;
+    let ph = H;
+    const fit = () => { const k = Math.min((wrap.clientWidth - 8) / W, (wrap.clientHeight - 8) / H, 1.4); pf.style.height = ph + "px"; pf.style.transform = "scale(" + k + ")"; hold.style.width = W * k + "px"; hold.style.height = ph * k + "px"; };
+    pf.onload = () => { try { const d = pf.contentWindow.document; d.documentElement.style.overflow = "hidden"; ph = Math.max(H, Math.ceil(d.documentElement.scrollHeight / H) * H); } catch(e){} fit(); };
+    hold.appendChild(pf); wrap.appendChild(hold); ov.append(tb, wrap);
+    window.addEventListener("resize", fit);
+    ov.addEventListener("click", e => { if (e.target === ov || e.target === wrap) close(); });
     document.addEventListener("keydown", esc); document.body.appendChild(ov);
     return;
   }
