@@ -239,6 +239,11 @@ function openFacts(o){
     o.facts.forEach(([k,v]) => { if (v == null || v === "") return; dl.append(el("dt",null,k)); const dd = el("dd"); if (v instanceof Node) dd.appendChild(v); else dd.textContent = v; dl.append(dd); });
     m.appendChild(dl);
     const act = el("div","actions");
+    // Supprimer directement depuis la fiche (deux clics : Supprimer puis Confirmer)
+    if (o.onDelete && writable()){ const del = el("button","btn danger left","Supprimer"); del.type = "button"; let armed = false;
+      del.onclick = async () => { if (!armed){ armed = true; del.textContent = "Confirmer la suppression"; del.classList.add("armed"); setTimeout(() => { armed = false; del.textContent = "Supprimer"; del.classList.remove("armed"); }, 4000); return; }
+        del.disabled = true; try { await o.onDelete(); closeModal(); } catch(x){ del.disabled = false; } };
+      act.appendChild(del); }
     const close = el("button","btn","Fermer"); close.onclick = closeModal; act.appendChild(close);
     if (o.onEdit && writable()){ const e = el("button","btn solid","Modifier"); e.onclick = o.onEdit; act.appendChild(e); }
     m.appendChild(act);
@@ -374,6 +379,7 @@ function openTask(t){
       [["C’est fait", () => patch("tasks", t.id, {done:true, doneAt:today()}).then(() => { closeModal(); toast("Tâche faite."); })],
        ["Décaler à demain", () => patch("tasks", t.id, {date:addDays(today(),1)}).then(closeModal)],
        ["Décaler d’une semaine", () => patch("tasks", t.id, {date:addDays(isISO(t.date) && t.date > today() ? t.date : today(),7)}).then(closeModal)]],
+    onDelete: () => remove("tasks", t.id),
     onEdit: () => editTask(t) });
 }
 function editTask(t){
