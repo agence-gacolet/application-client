@@ -625,7 +625,11 @@ module.exports = function (app, { db, wrap, root }) {
       if (!canRead(u, r.col) || r.col === "game" || r.col === "gmail") continue;
       if (Number(r.deleted)) { docs.push({ col: r.col, id: r.id, deleted: true, data: null }); continue; }
       const d = JSON.parse(r.data || "{}");
-      if (r.col === "clients" && u.role !== "owner") { const keep = {}; ["name", "color", "title", "calendar", "leadWeeks", "recap", "logo", "archived"].forEach(k => { if (d[k] != null) keep[k] = d[k]; }); docs.push({ col: r.col, id: r.id, deleted: false, data: keep }); continue; }
+      // Fiche client lisible par toute l'équipe (services, contacts, réseaux, formule, notes) ; seuls les prix et les documents restent aux comptes complets
+      if (r.col === "clients" && u.role !== "owner") { const keep = Object.assign({}, d); delete keep.files;
+        const np = t => String(t || "").replace(/\s*\([^)]*€[^)]*\)/g, "").replace(/(?:[,;:]|\s+à)?\s*\d[\d \u202f.]*\s*€(?:\s*HT)?(?:\s*\/\s*mois)?(?:\s*\([^)]*\))?/gi, "").replace(/^[\s,;:+]+|[\s,;:+]+$/g, "").replace(/\s{2,}/g, " ").trim();
+        ["formula", "remember", "note", "ask"].forEach(k => { if (typeof keep[k] === "string") keep[k] = np(keep[k]); });
+        docs.push({ col: r.col, id: r.id, deleted: false, data: keep }); continue; }
       if (visible(u, r.col, d)) docs.push({ col: r.col, id: r.id, deleted: false, data: d });
       else if (since) docs.push({ col: r.col, id: r.id, deleted: true, data: null }); // n'est plus visible (réattribué...)
     }
@@ -757,6 +761,25 @@ module.exports = function (app, { db, wrap, root }) {
     }
     return out;
   }
+  // Moyens de contact lus sur le site de l'entreprise (accueil + page contact) : mail, numéro, compte Instagram
+  async function siteContacts(url) {
+    const out = { email: "", insta: "", phone: "" }; if (!/^https?:\/\//i.test(url || "")) return out;
+    const get = async u => { try { const r = await fetch(u, { redirect: "follow", signal: AbortSignal.timeout(6000), headers: { "User-Agent": "Mozilla/5.0 (Macintosh) AppleWebKit/605 Safari/605", "Accept-Language": "fr" } });
+      if (!r.ok || !/html/i.test(r.headers.get("content-type") || "")) return ""; return (await r.text()).slice(0, 600000); } catch (e) { return ""; } };
+    const read = h => { h = h.replace(/&#64;|&#x40;|\[at\]|\(at\)/gi, "@");
+      if (!out.email) { const m = (h.match(/mailto:([^"'?>\s]+)/i) || [])[1] || (h.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi) || []).find(x => !/\.(png|jpe?g|gif|webp|svg)$|sentry|wixpress|example|domain\.|@2x/i.test(x)); if (m) out.email = decodeURIComponent(m).toLowerCase(); }
+      if (!out.insta) { const m = h.match(/instagram\.com\/([a-z0-9._]{2,30})/i); if (m && !/^(p|reel|explore|accounts|stories|share|sharer)$/i.test(m[1])) out.insta = "@" + m[1].replace(/\.$/, ""); }
+      if (!out.phone) { const m = (h.match(/tel:([+\d][\d .()-]{8,})/i) || [])[1] || (h.replace(/<[^>]+>/g, " ").match(/(?:\+33\s?|0)[1-9](?:[\s.-]?\d{2}){4}/) || [])[0]; if (m) out.phone = m.replace(/[^\d+]/g, "").replace(/^\+33/, "0").replace(/(\d{2})(?=\d)/g, "$1 ").trim(); } };
+    const home = await get(url); read(home);
+    if (!out.email || !out.insta) { const c = (home.match(/href=["']([^"']*contact[^"']*)["']/i) || [])[1]; if (c) { try { read(await get(new URL(c, url).href)); } catch (e) {} } }
+    return out;
+  }
+  // Complète les lignes (8 sites à la fois) puis ne garde que celles joignables par un des moyens cochés
+  async function withContacts(rows, via, want) {
+    for (let i = 0; i < rows.length; i += 8) await Promise.all(rows.slice(i, i + 8).map(async r => { const c = await siteContacts(r.web); r.email = r.email || c.email; r.insta = r.insta || c.insta; r.phone = r.phone || c.phone; }));
+    const ok = r => (via.includes("mail") && r.email) || (via.includes("tel") && r.phone) || (via.includes("insta") && r.insta);
+    return rows.filter(ok).slice(0, want);
+  }
   app.get("/api/g-callsearch", auth, wrap(async (req, res) => {
     const no = allowed(req.user, "commercial", null, { kind: "Appel", owner: req.user.name }, null); if (no) return refuse(res, no);
     // Recherche unique « au mieux » : Google Maps si la clé est là (téléphones, sites, avis), sinon l'annuaire de l'État.
@@ -764,37 +787,43 @@ module.exports = function (app, { db, wrap, root }) {
     if (req.query.where != null && !req.query.src) {
       const parts = String(req.query.where || "").split(/[,;]+/).map(x => x.trim()).filter(Boolean).slice(0, 6);
       if (!parts.length) return res.status(400).json({ error: "Indique où chercher : une ville ou un département." });
-      const geo = async u => { try { const r = await fetch("https://geo.api.gouv.fr/" + u); return r.ok ? r.json() : null; } catch (e) { return null; } };
+      const geo = async u => { try { const r = await fetch("https://geo.api.gouv.fr/" + u, { signal: AbortSignal.timeout(5000) }); return r.ok ? r.json() : null; } catch (e) { return null; } };
+      // Commune -> code INSEE, département, codes postaux : géocodeur de l'IGN d'abord (geo.api.gouv.fr tombe parfois), puis geo.api.gouv.fr
+      const commune = async x => { try { const r = await fetch("https://data.geopf.fr/geocodage/search?type=municipality&limit=1&q=" + encodeURIComponent(x), { signal: AbortSignal.timeout(6000) });
+          const j = r.ok ? await r.json() : null, f = j && j.features && j.features[0] && j.features[0].properties; if (f && f.citycode) return { code: f.citycode, nom: f.name || x, cps: [f.postcode].filter(Boolean) }; } catch (e) {}
+        const c = await geo("communes?nom=" + encodeURIComponent(x) + "&fields=code,nom,codesPostaux&boost=population&limit=1"); return c && c[0] ? { code: c[0].code, nom: c[0].nom, cps: c[0].codesPostaux || [] } : null; };
       if (process.env.GOOGLE_PLACES_KEY) {
         const names = []; for (const x of parts) { if (/^(\d{2}|2[AB])$/i.test(x)) { const d = await geo("departements/" + x.toUpperCase()); names.push(d && d.nom ? d.nom : x); } else if (/^\d{5}$/.test(x)) { const c = await geo("communes?codePostal=" + x + "&fields=nom&limit=1"); names.push(c && c[0] ? c[0].nom : x); } else names.push(x); }
         req.query.src = "google"; req.query.where = names.join(","); req.query.what = String(req.query.what || req.query.label || "").trim();
       } else {
-        const zone = []; for (const x of parts) { if (/^(\d{2}|2[AB]|\d{5})$/i.test(x)) zone.push(x); else { const c = await geo("communes?nom=" + encodeURIComponent(x) + "&fields=codesPostaux&boost=population&limit=1"); if (c && c[0]) zone.push(...(c[0].codesPostaux || []).slice(0, 6)); } }
-        if (!zone.length) return res.status(400).json({ error: "Je ne trouve pas « " + parts.join(", ") + " »." });
-        req.query.zone = zone.join(","); req.query.size = req.query.size || "1";
+        const zone = [], coms = [], miss = []; for (const x of parts) { if (/^(\d{2}|2[AB]|\d{5})$/i.test(x)) zone.push(x); else { const c = await commune(x); if (c) coms.push(c.code); else miss.push(x); } }
+        if (!zone.length && !coms.length) return res.status(400).json({ error: "Je ne trouve pas « " + miss.join(", ") + " ». Essaie le département (30) ou le code postal." });
+        req.query.zone = zone.join(","); req.query.coms = coms.join(","); req.query.size = req.query.size || "1";
       }
     }
     if (req.query.src === "google") {
       const what = String(req.query.what || "").trim().slice(0, 80), where = String(req.query.where || "").split(/[,;]+/).map(x => x.trim()).filter(Boolean).slice(0, 5);
       if (!what || !where.length) return res.status(400).json({ error: "Indique quoi chercher et où (une ou plusieurs villes)." });
-      const want = Math.max(1, Math.min(150, Number(req.query.n) || 30));
+      const via = String(req.query.via || "").split(",").filter(v => ["mail", "tel", "insta"].includes(v)), want0 = Math.max(1, Math.min(150, Number(req.query.n) || 30)), want = via.length ? Math.min(150, want0 * 3) : want0;
       const known = new Set((await db.all("SELECT data FROM docs WHERE col IN ('commercial','clients') AND deleted = 0")).map(r => { try { const d = JSON.parse(r.data); return nk(d.company || d.name); } catch (e) { return ""; } }).filter(Boolean));
       try { let rows = []; for (const w of where) { if (rows.length >= want) break; const got = await placesSearch(what + " " + w, want - rows.length, known); got.forEach(x => known.add(nk(x.company))); rows = rows.concat(got); }
-        return res.json({ total: rows.length, rows, src: "google" }); }
+        if (via.length) rows = await withContacts(rows, via, want0);
+        return res.json({ total: rows.length, rows, src: "google", via }); }
       catch (e) { return res.status(e.status || 500).json({ error: e.message }); }
     }
+    if (String(req.query.via || "").trim()) return res.status(400).json({ error: "L’annuaire public ne donne ni mail, ni numéro, ni Insta. Ajoute la clé Google Maps (Paramètres > Liaisons) : l’appli trouve alors le site de chaque entreprise et y lit ses contacts. Sinon, décoche les moyens de contact." });
     const naf = String(req.query.naf || "").split(",").map(x => x.trim()).filter(x => /^\d{2}\.\d{2}[A-Z]$/.test(x)).slice(0, 12).join(",");
     const q = String(req.query.q || "").trim().slice(0, 60), zone = String(req.query.zone || "").split(/[\s,;]+/).filter(Boolean).slice(0, 10);
-    const deps = zone.filter(z => /^(\d{2}|2[AB]|97\d)$/i.test(z)), cps = zone.filter(z => /^\d{5}$/.test(z));
+    const deps = zone.filter(z => /^(\d{2}|2[AB]|97\d)$/i.test(z)), cps = zone.filter(z => /^\d{5}$/.test(z)), coms = String(req.query.coms || "").split(",").filter(z => /^\d[\dAB]\d{3}$/.test(z)).slice(0, 10);
     const want = Math.max(1, Math.min(150, Number(req.query.n) || 30)), size = String(req.query.size || "");
     if (!naf && !q) return res.status(400).json({ error: "Choisis un domaine ou un mot-clé." });
-    if (!deps.length && !cps.length) return res.status(400).json({ error: "Indique la zone : un département (30) ou des codes postaux (30000, 30900)." });
+    if (!deps.length && !cps.length && !coms.length) return res.status(400).json({ error: "Indique la zone : un département (30) ou des codes postaux (30000, 30900)." });
     const sizes = { "1": "01,02,03,11,12,21,22,31,32", "3": "02,03,11,12,21,22,31,32", "10": "11,12,21,22,31,32", "0": "" }[size] || "";
     const known = new Set((await db.all("SELECT data FROM docs WHERE col IN ('commercial','clients') AND deleted = 0")).map(r => { try { const d = JSON.parse(r.data); return nk(d.company || d.name); } catch (e) { return ""; } }).filter(Boolean));
     const out = [], seen = new Set(); let page = 1, pages = 1, total = 0;
     while (out.length < want && page <= pages && page <= 12) {
       const p = new URLSearchParams({ per_page: "25", page: String(page), etat_administratif: "A" });
-      if (naf) p.set("activite_principale", naf); if (q) p.set("q", q); if (deps.length) p.set("departement", deps.join(",")); if (cps.length) p.set("code_postal", cps.join(","));
+      if (naf) p.set("activite_principale", naf); if (q) p.set("q", q); if (deps.length) p.set("departement", deps.join(",")); if (cps.length) p.set("code_postal", cps.join(",")); if (coms.length) p.set("code_commune", coms.join(","));
       if (sizes) { p.set("tranche_effectif_salarie", sizes); p.set("caractere_employeur", "O"); }
       const r = await fetch("https://recherche-entreprises.api.gouv.fr/search?" + p, { headers: { Accept: "application/json" } });
       if (r.status === 429) { await new Promise(ok => setTimeout(ok, 1200)); continue; }
@@ -802,7 +831,7 @@ module.exports = function (app, { db, wrap, root }) {
       const j = await r.json(); pages = j.total_pages || 1; total = j.total_results || 0; page++;
       for (const e of j.results || []) {
         const nafs = naf ? naf.split(",") : null;
-        const et = (e.matching_etablissements || []).find(x => x.etat_administratif === "A" && (!nafs || nafs.includes(x.activite_principale)) && (!deps.length || deps.some(d => String(x.code_postal || "").startsWith(d))) && (!cps.length || cps.includes(String(x.code_postal || "")))) || null;
+        const et = (e.matching_etablissements || []).find(x => x.etat_administratif === "A" && (!nafs || nafs.includes(x.activite_principale)) && (!deps.length || deps.some(d => String(x.code_postal || "").startsWith(d))) && (!cps.length || cps.includes(String(x.code_postal || ""))) && (!coms.length || coms.includes(String(x.commune || "")))) || null;
         if (!et) continue;
         if ((e.nombre_etablissements_ouverts || 1) > 5) continue; // les chaînes et grands groupes ne sont pas la cible
         const ens = (et.liste_enseignes || []).find(x => x && !/code interne|^\W*\d+\W*$/i.test(x));
@@ -833,7 +862,7 @@ module.exports = function (app, { db, wrap, root }) {
       for (const r of rows) { const company = S2(r.company, 120); if (!company) continue;
         // Numéro manquant (liste de l'annuaire) : cherché sur Google Maps quand la clé est là
         if (!r.phone && process.env.GOOGLE_PLACES_KEY) { try { const g = await placesSearch(company + " " + (r.address || r.city || ""), 1, new Set()); if (g[0] && g[0].phone) { r.phone = g[0].phone; r.web = r.web || g[0].web; r.rating = r.rating || g[0].rating; } } catch (e) {} }
-        await put("commercial", newId(), { kind: "Appel", list: name, owner, company, phone: S2(r.phone, 40), web: S2(r.web, 200), rating: S2(r.rating, 40), city: S2(r.city, 80), address: S2(r.address, 200), contact: S2(r.contact, 120), activity: S2(r.activity, 20), siren: S2(r.siren, 12), notes: S2(r.notes, 1000), target: S2(b.target, 300), callStatus: "", createdAt: stamp(), createdBy: req.user.name, order: 999 }); n++; }
+        await put("commercial", newId(), { kind: "Appel", list: name, owner, company, phone: S2(r.phone, 40), email: S2(r.email, 120), insta: S2(r.insta, 60), web: S2(r.web, 200), rating: S2(r.rating, 40), city: S2(r.city, 80), address: S2(r.address, 200), contact: S2(r.contact, 120), activity: S2(r.activity, 20), siren: S2(r.siren, 12), notes: S2(r.notes, 1000), target: S2(b.target, 300), callStatus: "", createdAt: stamp(), createdBy: req.user.name, order: 999 }); n++; }
       bump(); return res.json({ ok: true, n });
     }
     const list = await mine(); if (!list.length) return res.status(404).json({ error: "Liste vide ou introuvable." });

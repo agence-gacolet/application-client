@@ -757,7 +757,7 @@ function vOffres(root){
 }
 function vFiches(root){
   const fiTab = ["offres","bilans","archives"].includes(S.ui.fiTab) ? S.ui.fiTab : "clients";
-  root.appendChild(head("Tableau clients", fiTab === "archives" ? "Les clients partis : services, motif et notes. Ils n’apparaissent plus dans les listes." : fiTab === "bilans" ? "" : fiTab === "offres" ? "Les offres de l’agence et ce que chaque pack comprend. Prix hors taxes." : "Réservé à " + fullNames() + " : services, formule et notes de chaque client.", [segm([["clients","Clients"],["offres","Offres"],["bilans","Bilans"],["archives","Archives"]], fiTab, v => { S.ui.fiTab = v; remember(); render(); }), fiTab === "clients" ? addBtn("Nouveau client", () => editClient({})) : null]));
+  root.appendChild(head("Tableau clients", fiTab === "archives" ? "Les clients partis : services, motif et notes. Ils n’apparaissent plus dans les listes." : fiTab === "bilans" ? "" : fiTab === "offres" ? "Les offres de l’agence et ce que chaque pack comprend. Prix hors taxes." : "Services, formule, contacts et notes de chaque client." + (S.role === "owner" ? "" : " Seuls " + fullNames() + " peuvent les modifier."), [segm([["clients","Clients"],["offres","Offres"],["bilans","Bilans"],["archives","Archives"]], fiTab, v => { S.ui.fiTab = v; remember(); render(); }), fiTab === "clients" ? addBtn("Nouveau client", () => editClient({})) : null]));
   if (fiTab === "offres") return vOffres(root);
   if (fiTab === "bilans") return vBilans(root);
   if (fiTab === "archives") return vArchives(root);
@@ -1171,6 +1171,8 @@ function vCalls(root, rows, who, full){
   const {w, tb} = table(["Entreprise","Ville","Téléphone","Résultat","Note"].concat(full ? ["Commercial"] : []).concat([""]));
   show.forEach(c => { const tr = el("tr","row");
     const c0 = el("div"); c0.append(el("div","ttl", c.company)); const sub = el("div","note"); [c.contact, c.rating ? "★ " + c.rating : ""].filter(Boolean).forEach((t, i) => sub.append((i ? " · " : "") + t));
+    if (c.email){ const a = el("a","cl-web", c.email); a.href = "mailto:" + c.email; a.onclick = e => e.stopPropagation(); sub.append(sub.childNodes.length ? " · " : "", a); }
+    if (c.insta){ const a = el("a","cl-web", c.insta); a.href = "https://www.instagram.com/" + c.insta.replace(/^@/, "") + "/"; a.target = "_blank"; a.rel = "noopener"; a.onclick = e => e.stopPropagation(); sub.append(sub.childNodes.length ? " · " : "", a); }
     if (c.web){ const a = el("a","cl-web","site"); a.href = c.web; a.target = "_blank"; a.rel = "noopener"; a.onclick = e => e.stopPropagation(); sub.append(sub.childNodes.length ? " · " : "", a); } else if (c.rating) sub.append(" · sans site"); c0.appendChild(sub); td(tr, c0, "w"); td(tr, c.city || "", "nw");
     const ph = el("div","cl-ph"); if (c.phone){ const a = el("a","cl-tel", c.phone); a.href = "tel:" + c.phone.replace(/[^\d+]/g, ""); ph.appendChild(a); }
     const pi = el("input","inl cl-pin"); pi.type = "tel"; pi.placeholder = c.phone ? "Changer" : "Numéro"; pi.value = ""; pi.onchange = () => { const v = pi.value.trim(); if (v) patch("commercial", c.id, { phone: v }); }; if (!c.phone) ph.appendChild(pi);
@@ -1193,6 +1195,10 @@ function callGen(){
     const dom = el("select"); CALL_DOMAINS.forEach(([l, v], i) => { const o = el("option", null, l); o.value = String(i); dom.appendChild(o); }); lab("Domaine", dom);
     const r1 = row(); const kw = lab("Mot-clé en plus (facultatif)", Object.assign(el("input"), { placeholder: "Ex. piscine, pizza" }), r1); const zone = lab("Où (villes ou départements)", Object.assign(el("input"), { value: "Nîmes", placeholder: "Nîmes, Alès ou 30" }), r1);
     const r3 = row(); const n = lab("Nombre", Object.assign(el("input"), { type: "number", value: "30", min: "5", max: "150" }), r3); const own = el("select"); (full ? SALES : [me]).forEach(p => { const o = el("option", null, p); o.value = p; own.appendChild(o); }); own.value = SALES.includes(S.ui.coWho) ? S.ui.coWho : SALES.includes(me) ? me : SALES[0]; lab("Commercial qui appelle", own, r3);
+    const vw = el("div","cl-via"); vw.appendChild(el("span","flabel","Moyen de contact (garde celles qui en ont au moins un)")); const via = {};
+    [["tel","Numéro"],["mail","Mail"],["insta","Insta"]].forEach(([k, l]) => { const lb = el("label","cl-ck"); const ck = el("input"); ck.type = "checkbox"; ck.checked = S.ui["clVia" + k] !== false; ck.onchange = () => { S.ui["clVia" + k] = ck.checked; remember(); }; via[k] = ck; lb.append(ck, document.createTextNode(" " + l)); vw.appendChild(lb); });
+    const vnote = el("p","muted cl-vnote",""); vw.appendChild(vnote); f.appendChild(vw);
+    GC.api("GET","/api/g-places").then(r => { if (!r.ok) vnote.textContent = "Sans la clé Google Maps (Paramètres > Liaisons), l’appli ne trouve pas les sites, donc ni mail, ni numéro, ni Insta : décoche tout pour une liste de l’annuaire seul."; }).catch(() => {});
     const name = lab("Nom de la liste", Object.assign(el("input"), { placeholder: "Rempli tout seul" }));
     const tg = lab("Ciblage (pourquoi cette cible, angle d’appel)", Object.assign(el("textarea"), { rows: 2, placeholder: "Ex. artisans sans réseaux sociaux à jour, proposer le Pack Gestion" }));
     m.appendChild(f);
@@ -1200,13 +1206,13 @@ function callGen(){
     const act = el("div","actions"); const go = btn("Chercher","lemon"); const mk = btn("Créer la liste",""); mk.disabled = true; act.append(btn("Annuler","", closeModal), go, mk); m.appendChild(act);
     let found = [];
     const autoName = () => (CALL_DOMAINS[dom.value][1] ? CALL_DOMAINS[dom.value][0].split(",")[0] : (kw.value.trim() || "Liste")) + " " + zone.value.trim().split(/\s*[,;]\s*/).join("-") + " " + fmtD(today());
-    go.onclick = async () => { err.textContent = ""; go.disabled = true; go.textContent = "Recherche…"; res.textContent = "";
+    go.onclick = async () => { err.textContent = ""; go.disabled = true; go.textContent = Object.values(via).some(c => c.checked) ? "Recherche des contacts… (jusqu’à 1 min)" : "Recherche…"; res.textContent = "";
       try { const what = [CALL_DOMAINS[dom.value][1] ? CALL_DOMAINS[dom.value][0].split(",")[0] : "", kw.value.trim()].filter(Boolean).join(" ");
-        const q = new URLSearchParams({ what, where: zone.value.trim(), naf: CALL_DOMAINS[dom.value][1], q: kw.value.trim(), n: n.value });
+        const q = new URLSearchParams({ what, where: zone.value.trim(), naf: CALL_DOMAINS[dom.value][1], q: kw.value.trim(), n: n.value, via: Object.keys(via).filter(k => via[k].checked).join(",") });
         const r = await GC.api("GET","/api/g-callsearch?" + q), g = r.src === "google"; found = r.rows.map(x => Object.assign(x, { on: true }));
         res.appendChild(el("p","muted", found.length + " entreprise" + (found.length > 1 ? "s" : "") + " trouvée" + (found.length > 1 ? "s" : "") + ", sans celles déjà dans l’appli. Décoche celles à écarter."));
         const ul = el("ul","cl-list"); found.forEach(x => { const li = el("li"); const ck = el("input"); ck.type = "checkbox"; ck.checked = true; ck.onchange = () => { x.on = ck.checked; mk.textContent = "Créer la liste (" + found.filter(y => y.on).length + ")"; };
-          const tx = el("div"); tx.append(el("b", null, x.company), el("span","note", " " + [x.city, x.contact, x.phone, x.rating ? "★ " + x.rating : "", x.web || !g ? "" : "sans site"].filter(Boolean).join(", "))); li.append(ck, tx); ul.appendChild(li); }); res.appendChild(ul);
+          const tx = el("div"); tx.append(el("b", null, x.company), el("span","note", " " + [x.city, x.contact, x.phone, x.email, x.insta, x.rating ? "★ " + x.rating : "", x.web || !g ? "" : "sans site"].filter(Boolean).join(", "))); li.append(ck, tx); ul.appendChild(li); }); res.appendChild(ul);
         if (!name.value.trim()) name.value = autoName(); mk.disabled = !found.length; mk.className = "btn solid"; mk.textContent = "Créer la liste (" + found.length + ")";
       } catch(e){ err.textContent = e.message; } go.disabled = false; go.textContent = "Chercher à nouveau"; };
     mk.onclick = async () => { const rows = found.filter(x => x.on); if (!rows.length) return; mk.disabled = true;
@@ -1214,12 +1220,40 @@ function callGen(){
         S.ui.coKind = "Appels"; S.ui.clList = nm; S.ui.clSt = ""; remember(); closeModal(); toast("Liste « " + nm + " » créée : " + r.n + " entreprises pour " + own.value + "."); render(); } catch(e){ err.textContent = e.message; mk.disabled = false; } };
   });
 }
+// Fichier glissé dans « Coller une liste » : colonnes reconnues par leur titre (entreprise, téléphone, ville, contact, mail, Insta), le reste en note
+async function callDrop(m){
+  const ta = m && m.querySelector("textarea"); if (!ta) return; ta.placeholder = "Glisse ici un fichier Excel ou CSV, ou colle la liste.";
+  const box = m; let xl = null;
+  const loadXL = () => xl || (xl = new Promise((ok, ko) => { if (window.XLSX) return ok(window.XLSX); const sc = document.createElement("script"); sc.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"; sc.onload = () => ok(window.XLSX); sc.onerror = () => ko(new Error("Lecture Excel indisponible : exporte en CSV.")); document.head.appendChild(sc); }));
+  const toRows = async file => { const name = file.name.toLowerCase();
+    if (/\.(xlsx|xls|ods|numbers)$/.test(name)) { if (/\.numbers$/.test(name)) throw new Error("Numbers : Fichier > Exporter vers > CSV, puis glisse le CSV."); const X = await loadXL(); const wb = X.read(await file.arrayBuffer(), { type: "array" }); return X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: "" }); }
+    const t = (await file.text()).replace(/^\ufeff/, ""), first = t.split("\n")[0], sep = first.includes("\t") ? "\t" : (first.split(";").length >= first.split(",").length ? ";" : ",");
+    const rows = []; let row = [], cur = "", q = false;
+    for (let i = 0; i < t.length; i++) { const ch = t[i]; if (q) { if (ch === '"' && t[i + 1] === '"') { cur += '"'; i++; } else if (ch === '"') q = false; else cur += ch; }
+      else if (ch === '"') q = true; else if (ch === sep) { row.push(cur); cur = ""; } else if (ch === "\n" || ch === "\r") { if (ch === "\r" && t[i + 1] === "\n") i++; row.push(cur); rows.push(row); row = []; cur = ""; } else cur += ch; }
+    if (cur || row.length) { row.push(cur); rows.push(row); } return rows; };
+  const fold = s => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const KEYS = [["company",/entreprise|societe|raison|enseigne|^nom$|nom de l|commerce|etablissement|company|business/],["phone",/tel|phone|portable|mobile|numero/],["city",/ville|commune|city|localite/],["contact",/contact|dirigeant|gerant|prenom|interlocuteur|responsable/],["email",/mail|courriel/],["insta",/insta/]];
+  const fill = rows => { rows = rows.map(r => r.map(x => String(x == null ? "" : x).replace(/[\t\n\r;|]+/g, " ").trim())).filter(r => r.some(Boolean)); if (!rows.length) throw new Error("Fichier vide.");
+    const h = rows[0].map(fold), col = {}; KEYS.forEach(([k, re]) => { const i = h.findIndex((x, j) => re.test(x) && !Object.values(col).includes(j)); if (i >= 0) col[k] = i; });
+    const body = "company" in col ? rows.slice(1) : rows; if (!("company" in col)) col.company = 0;
+    const order = ["company","phone","city","contact","email","insta"], used = new Set(Object.values(col));
+    const lines = body.filter(r => r[col.company]).map(r => order.map(k => k in col ? r[col[k]] : "").concat(r.filter((x, j) => !used.has(j) && x).join(" ")).join(" ; ").replace(/( ; )+$/, ""));
+    ta.value = (ta.value.trim() ? ta.value.trim() + "\n" : "") + lines.join("\n"); ta.dispatchEvent(new Event("input", { bubbles: true })); toast(lines.length + " entreprises lues dans le fichier. Vérifie, puis enregistre."); };
+  box.addEventListener("dragover", e => { e.preventDefault(); ta.classList.add("cl-drop"); });
+  box.addEventListener("dragleave", e => { if (!box.contains(e.relatedTarget)) ta.classList.remove("cl-drop"); });
+  box.addEventListener("drop", async e => { e.preventDefault(); ta.classList.remove("cl-drop"); const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (!f) return; try { fill(await toRows(f)); } catch(er){ toast(er.message); } });
+  const pick = el("button","btn sm","Choisir un fichier…"); pick.type = "button"; const inp = el("input"); inp.type = "file"; inp.accept = ".csv,.tsv,.txt,.xlsx,.xls,.ods"; inp.hidden = true;
+  inp.onchange = async () => { const f = inp.files[0]; if (f) try { fill(await toRows(f)); } catch(er){ toast(er.message); } inp.value = ""; }; pick.onclick = () => inp.click(); ta.insertAdjacentElement("afterend", pick); pick.after(inp);
+}
 function callImport(){
   const me = S.me || "Gabriel", full = S.role === "owner";
-  openForm({ key:"cli", title:"Coller une liste d’appels", intro:"Une entreprise par ligne : Entreprise ; téléphone ; ville ; contact ; note (le séparateur peut être « ; », une tabulation depuis Google Sheets, ou « | »). Seule l’entreprise est obligatoire. Pratique pour une liste préparée par Claude.",
+  setTimeout(() => callDrop($("#modal")), 0);
+  openForm({ key:"cli", title:"Coller une liste d’appels", intro:"Glisse un fichier (Excel, CSV, Numbers exporté en CSV) dans la case, ou colle la liste : une entreprise par ligne, Entreprise ; téléphone ; ville ; contact ; mail ; Insta ; note. Seule l’entreprise est obligatoire.",
     values:{ owner: SALES.includes(S.ui.coWho) ? S.ui.coWho : SALES.includes(me) ? me : SALES[0], name: "Liste du " + fmtD(today()) },
     fields:[{k:"name",label:"Nom de la liste",half:true,req:"Donne un nom."},{k:"owner",label:"Commercial qui appelle",type:"select",options:full ? SALES : [me],half:true},{k:"target",label:"Ciblage (facultatif)"},{k:"txt",label:"La liste",type:"textarea",rows:10,req:"Colle la liste."}],
-    onSave: async o => { const rows = o.txt.split("\n").map(l => l.trim()).filter(Boolean).map(l => l.split(/\t|\s*[;|]\s*/)).filter(c => c[0] && !/^entreprise$/i.test(c[0])).map(c => ({ company: c[0], phone: c[1] || "", city: c[2] || "", contact: c[3] || "", notes: c.slice(4).join(" ") }));
+    onSave: async o => { const rows = o.txt.split("\n").map(l => l.trim()).filter(Boolean).map(l => l.split(/\t|\s*[;|]\s*/)).filter(c => c[0] && !/^entreprise$/i.test(c[0])).map(c => { const r = { company: c[0], phone: c[1] || "", city: c[2] || "", contact: c[3] || "", email: "", insta: "", notes: "" }; const rest = c.slice(4).filter(Boolean);
+        rest.forEach(x => { if (!r.email && /^\S+@\S+\.\w+$/.test(x)) r.email = x; else if (!r.insta && /^@[\w.]+$|instagram\.com\//i.test(x)) r.insta = "@" + x.replace(/^.*instagram\.com\/|^@|\/.*$/gi, ""); else r.notes += (r.notes ? " " : "") + x; }); return r; });
       if (!rows.length){ toast("Aucune ligne lisible."); throw new Error("vide"); }
       const r = await GC.api("POST","/api/g-calllist", { name: o.name, owner: o.owner, target: o.target, rows }); S.ui.coKind = "Appels"; S.ui.clList = o.name; S.ui.clSt = ""; remember(); toast(r.n + " entreprises ajoutées à « " + o.name + " »."); },
     done: "Liste créée." });

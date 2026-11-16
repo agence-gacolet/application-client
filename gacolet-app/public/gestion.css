@@ -2091,3 +2091,9 @@ html.tg-lock,html.tg-lock body{overflow:hidden}
 .wa-htx small.typing{color:#0A84FF!important}
 .wa ::selection,.wa-top ::selection{background:rgba(10,132,255,.5);color:#fff}
 .wa-line.mine .wa-bub ::selection{background:rgba(255,255,255,.35);color:#fff}
+
+.cl-via{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;margin:4px 0 8px}
+.cl-via .flabel{width:100%}
+.cl-ck{display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:600}
+.cl-vnote{width:100%;margin:0;font-size:12px}
+.modal textarea.cl-drop{outline:2px dashed #D4FF3A;outline-offset:2px;background:rgba(212,255,58,.06)}
