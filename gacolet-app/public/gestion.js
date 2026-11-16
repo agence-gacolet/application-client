@@ -3023,7 +3023,7 @@ function vTournage(root){
       const bar = el("div","tg-bar"); const fill = el("span"); fill.style.width = (c.all ? Math.round(100 * (c.done + c.ko) / c.all) : 0) + "%"; bar.appendChild(fill);
       const prog = el("p","tg-meta", c.done || c.ko ? c.done + " fait" + (c.done > 1 ? "s" : "") + (c.ko ? ", " + c.ko + " pas possible" + (c.ko > 1 ? "s" : "") : "") + " sur " + c.all : "Pas encore tourné");
       const act = el("div","tg-act");
-      act.append(btn("Lancer le tournage", "sm lemon", () => tgLive(s)), btn("PDF", "sm", () => tgPdf(s)), btn("Modifier", "sm", () => tgEdit(s)));
+      act.append(btn("Lancer le tournage", "sm lemon", () => tgLive(s)), btn("Aperçu", "sm", () => tgPdf(s, true)), btn("PDF", "sm", () => tgPdf(s)), btn("Modifier", "sm", () => tgEdit(s)));
       { let armed = false; const db = btn("Supprimer", "sm danger", async () => { if (!armed){ armed = true; db.textContent = "Confirmer la suppression"; setTimeout(() => { armed = false; db.textContent = "Supprimer"; }, 4000); return; } db.disabled = true; try { await remove("shoots", s.id); toast("Feuille supprimée (récupérable 30 jours dans la corbeille)."); } catch(e){ db.disabled = false; } }); db.disabled = !writable(); act.appendChild(db); }
       const sb = btn(s.sentAt ? "Renvoyer au client" : "Envoyer au client", "sm", () => tgSend(s)); sb.disabled = !writable(); act.appendChild(sb);
       card.append(top, h, meta, cnt, bar, prog);
@@ -3248,7 +3248,7 @@ function tgLive(s0){
 }
 
 /* Export PDF : une page A4 à la charte, imprimée depuis un cadre caché (Enregistrer en PDF) */
-function tgPdf(s){
+function tgPdf(s, preview){
   const E = t => String(t == null ? "" : t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const O = location.origin;
   const vids = tgVideos(s), parle = vids.filter(v => v.kind !== "muet"), muet = vids.filter(v => v.kind === "muet");
@@ -3286,6 +3286,24 @@ ${photos.length ? `<h2>Photos</h2>${photos.map(p => `<div class="it"><span class
 ${s.broll ? `<h2>À ramener</h2><div class="it"><div class="ti">${E(s.broll).replace(/\n/g, "<br>")}</div></div>` : ""}
 ${rules.length ? `<div class="box"><b>À respecter</b>${rules.slice(0, 3).map(r => `<div>${E(r)}</div>`).join("")}</div>` : ""}</div>
 <div class="ft"><span>${E(s.client)} · Feuille de tournage</span><span>Agence Gacolet</span></div></div></body></html>`;
+  if (preview){
+    /* Aperçu à l'écran : la page A4 telle qu'elle sortira, sans passer par l'impression */
+    const ov = el("div"); ov.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.82);display:flex;flex-direction:column;align-items:center;padding:14px 12px;gap:10px";
+    const tb = el("div"); tb.style.cssText = "display:flex;gap:8px;align-items:center;width:min(820px,100%);justify-content:space-between";
+    const tt = el("span", null, (s.client || "") + " · aperçu de la feuille de tournage"); tt.style.cssText = "color:#F4F4F2;font-size:14px";
+    const bx = el("div"); bx.style.cssText = "display:flex;gap:8px";
+    const close = () => { ov.remove(); document.removeEventListener("keydown", esc); };
+    const esc = e => { if (e.key === "Escape") close(); };
+    bx.append(btn("Télécharger en PDF", "sm lemon", () => { close(); tgPdf(s); }), btn("Fermer", "sm", close));
+    tb.append(tt, bx);
+    const wrap = el("div"); wrap.style.cssText = "flex:1;width:min(820px,100%);overflow:auto;background:#555;border-radius:6px";
+    const pf = el("iframe"); pf.style.cssText = "display:block;width:210mm;max-width:100%;min-height:297mm;border:0;margin:0 auto;background:#fff"; pf.srcdoc = html;
+    pf.onload = () => { try { pf.style.height = pf.contentWindow.document.documentElement.scrollHeight + "px"; } catch(e){} };
+    wrap.appendChild(pf); ov.append(tb, wrap);
+    ov.addEventListener("click", e => { if (e.target === ov) close(); });
+    document.addEventListener("keydown", esc); document.body.appendChild(ov);
+    return;
+  }
   const fr = el("iframe"); fr.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0"; fr.setAttribute("aria-hidden", "true"); document.body.appendChild(fr);
   const d = fr.contentWindow.document; d.open(); d.write(html); d.close();
   const pr = () => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch(e){ toast("Impression impossible ici."); } setTimeout(() => fr.remove(), 60000); };
