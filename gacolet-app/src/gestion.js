@@ -321,6 +321,7 @@ module.exports = function (app, { db, wrap, root }) {
         [c.id, "équipe", "Gacolet", c.name, PREVIEW_MAIL, token, stamp()]);
       u = await db.one("SELECT * FROM users WHERE client_id = ? AND email = ?", [c.id, PREVIEW_MAIL]);
     }
+    PREVIEW_PACK.delete(u.token);
     res.json({ url: "/?apercu=" + u.token });
   }));
 
@@ -342,7 +343,7 @@ module.exports = function (app, { db, wrap, root }) {
   // ---------- Meta : suivi des contacts par client (tables de l’espace client) ----------
   const metaRole = (req, res, next) => req.user && (req.user.role === "owner" || (req.user.views || []).includes("campagnes")) ? next() : res.status(403).json({ error: "Accès non ouvert pour ton prénom." });
   app.get("/api/g-meta", auth, metaRole, wrap(async (req, res) => {
-    const cl = (await db.all("SELECT id, name, modules, contacts_goal, qualified_definition, active FROM clients ORDER BY name")).filter(c => c.active && String(c.modules || "").split(",").includes("meta"));
+    const cl = []; for (const c of await db.all("SELECT id, name, modules, contacts_goal, qualified_definition, active FROM clients ORDER BY name")) if (c.active && (await pagesOf(c)).pages.meta === "on") cl.push(c);
     const ids = cl.map(c => c.id);
     const leads = ids.length ? await db.all("SELECT id, client_id, date, title, detail, qualified, created_at FROM leads WHERE client_id IN (" + ids.map(() => "?").join(",") + ") ORDER BY date DESC, id DESC LIMIT 2000", ids) : [];
     res.json({ clients: cl.map(c => ({ id: c.id, name: c.name, goal: Number(c.contacts_goal) || 0, qualifiedDef: c.qualified_definition || "" })), leads });
@@ -399,6 +400,90 @@ module.exports = function (app, { db, wrap, root }) {
     // On coupe l’accès sans effacer l’historique (validations, demandes) : le jeton est remplacé.
     await db.run("UPDATE users SET token = ? WHERE id = ?", ["retire-" + crypto.randomBytes(20).toString("hex"), Number(req.params.id)]);
     res.json({ ok: true });
+  }));
+
+  // ---------- Espace client : pages ouvertes selon le pack (Paramètres > Espace client) ----------
+  // Même principe que l’accès par prénom de l’équipe : un tableau pages × packs, plus des exceptions client par client.
+  // Le pack vient de la fiche du Tableau clients (services cochés). Sans pack dans la fiche : ancien réglage (réseaux / Meta).
+  // États : "on" = ouvert, "discover" = « À découvrir » (aperçu flouté + « J’en parle à Gabriel »), "off" = caché.
+  // Document cfg/espace : { packs: { gestion: { meta: "discover", ... }, ... }, clients: { "<id>": { meta: "on", ... } } }
+  const CPAGES = ["valider", "tournages", "stats", "bilans", "meta", "messagerie", "visio", "idees", "prel"];
+  const CP_DISCOVER = ["valider", "stats", "meta"]; // seules pages qui ont un aperçu « À découvrir »
+  const CPACKS = ["gestion", "perf", "perfplus", "meta", "sur"];
+  const CRANK = { off: 0, discover: 1, on: 2 }, CSTATE = ["off", "discover", "on"];
+  const allOn = () => Object.fromEntries(CPAGES.map(k => [k, "on"]));
+  const CP_DEFAULT = {
+    gestion: Object.assign(allOn(), { meta: "discover" }),
+    perf: allOn(),
+    perfplus: Object.assign(allOn(), { meta: "discover" }),
+    meta: Object.assign(allOn(), { stats: "discover" }),
+    sur: Object.assign(allOn(), { meta: "discover" }),
+  };
+  let ESP = null;
+  const espCfg = async () => { if (!ESP) ESP = (await current("cfg", "espace")) || {}; return ESP; };
+  const packTable = cfg => Object.fromEntries(CPACKS.map(p => [p, Object.fromEntries(CPAGES.map(k => { const v = ((cfg.packs || {})[p] || {})[k]; return [k, v in CRANK ? v : CP_DEFAULT[p][k]]; }))]));
+  const okState = (k, v) => v in CRANK && (v !== "discover" || CP_DISCOVER.includes(k));
+  // Packs d’un client : fiche du Tableau clients (même nom), sinon ancien réglage du code
+  async function packsOf(c, fiches) {
+    fiches = fiches || (await db.all("SELECT data FROM docs WHERE col = 'clients' AND deleted = 0")).map(r => { try { return JSON.parse(r.data || "{}"); } catch (e) { return {}; } });
+    const f = fiches.find(d => sameName(d.name, c.name));
+    const ks = Object.keys((f && f.services) || {}).map(k => k === "50" ? "meta" : k);
+    const p = CPACKS.filter(x => ks.includes(x));
+    if (p.length) return { packs: p, from: "fiche" };
+    const m = String(c.modules || "com").split(",");
+    return { packs: [m.includes("com") && m.includes("meta") ? "perf" : m.includes("meta") ? "meta" : "gestion"], from: "ancien" };
+  }
+  async function pagesOf(c, opt) {
+    opt = opt || {};
+    const cfg = await espCfg(), T = packTable(cfg), P = opt.packs ? { packs: opt.packs, from: "apercu" } : await packsOf(c, opt.fiches);
+    const fromPack = {}, pages = {};
+    CPAGES.forEach(k => { fromPack[k] = CSTATE[Math.max(0, ...P.packs.map(p => CRANK[T[p][k]]))]; });
+    const ov = opt.packs ? {} : ((cfg.clients || {})[c.id] || {});
+    CPAGES.forEach(k => { pages[k] = okState(k, ov[k]) ? ov[k] : fromPack[k]; if (pages[k] === "discover" && !CP_DISCOVER.includes(k)) pages[k] = "on"; });
+    return { pages, fromPack, overrides: ov, packs: P.packs, from: P.from };
+  }
+  // Aperçu par pack : le jeton d’aperçu d’un client affiche l’espace d’un pack donné (mémoire du serveur, le temps de l’aperçu)
+  const PREVIEW_PACK = new Map();
+  app.locals.clientPages = async c => pagesOf(c);
+  app.locals.clientPagesFor = async (c, u) => u && u.email === PREVIEW_MAIL && PREVIEW_PACK.has(u.token) ? pagesOf(c, { packs: PREVIEW_PACK.get(u.token) }) : pagesOf(c);
+
+  app.get("/api/g-espace", auth, ownerOnly, wrap(async (req, res) => {
+    const cfg = await espCfg();
+    const fiches = (await db.all("SELECT data FROM docs WHERE col = 'clients' AND deleted = 0")).map(r => { try { return JSON.parse(r.data || "{}"); } catch (e) { return {}; } });
+    const cl = await db.all("SELECT id, code, name, modules, active FROM clients ORDER BY name");
+    const clients = [];
+    for (const c of cl) { const p = await pagesOf(c, { fiches }); clients.push({ id: c.id, code: c.code, name: c.name, active: c.active, packs: p.packs, from: p.from, pages: p.pages, fromPack: p.fromPack, overrides: p.overrides }); }
+    res.json({ pages: CPAGES, discover: CP_DISCOVER, packs: CPACKS, table: packTable(cfg), defaults: CP_DEFAULT, clients });
+  }));
+  app.put("/api/g-espace/packs", auth, ownerOnly, wrap(async (req, res) => {
+    const b = (req.body && req.body.table) || {}, cfg = Object.assign({}, await espCfg()), t = {};
+    CPACKS.forEach(p => { t[p] = {}; CPAGES.forEach(k => { const v = (b[p] || {})[k]; t[p][k] = okState(k, v) ? v : packTable(cfg)[p][k]; }); });
+    cfg.packs = t; await put("cfg", "espace", cfg); ESP = cfg;
+    res.json({ ok: true, table: packTable(cfg) });
+  }));
+  app.put("/api/g-espace/client/:id", auth, ownerOnly, wrap(async (req, res) => {
+    const c = await db.one("SELECT id, name, modules FROM clients WHERE id = ?", [Number(req.params.id)]);
+    if (!c) return res.status(404).json({ error: "Client introuvable." });
+    const b = (req.body && req.body.overrides) || {}, ov = {};
+    CPAGES.forEach(k => { if (okState(k, b[k])) ov[k] = b[k]; });
+    const cfg = Object.assign({}, await espCfg()); cfg.clients = Object.assign({}, cfg.clients);
+    if (Object.keys(ov).length) cfg.clients[c.id] = ov; else delete cfg.clients[c.id];
+    await put("cfg", "espace", cfg); ESP = cfg;
+    res.json(Object.assign({ ok: true }, await pagesOf(c)));
+  }));
+  app.post("/api/g-espace/apercu", auth, ownerOnly, wrap(async (req, res) => {
+    const b = req.body || {}, packs = (Array.isArray(b.packs) ? b.packs : []).filter(p => CPACKS.includes(p));
+    const c = await db.one("SELECT * FROM clients WHERE id = ? AND active = 1", [Number(b.clientId)]);
+    if (!c) return res.status(404).json({ error: "Choisis un client qui a un code actif pour les données de l’aperçu." });
+    let u = await db.one("SELECT * FROM users WHERE client_id = ? AND email = ?", [c.id, PREVIEW_MAIL]);
+    if (!u) {
+      const token = crypto.randomBytes(24).toString("hex");
+      await db.run("INSERT INTO users (client_id, prenom, nom, entreprise, email, tel, activite, zone, reseaux, objectif, clientele, dispo, token, created_at) VALUES (?,?,?,?,?,'','','','','','','',?,?)",
+        [c.id, "équipe", "Gacolet", c.name, PREVIEW_MAIL, token, stamp()]);
+      u = await db.one("SELECT * FROM users WHERE client_id = ? AND email = ?", [c.id, PREVIEW_MAIL]);
+    }
+    if (packs.length) PREVIEW_PACK.set(u.token, packs); else PREVIEW_PACK.delete(u.token);
+    res.json({ url: "/?apercu=" + u.token });
   }));
 
   // ---------- Copie des tableaux de suivi Meta (Google Sheets), envoyée par Make ----------
@@ -998,7 +1083,9 @@ module.exports = function (app, { db, wrap, root }) {
     const bill = await current("billing", "c" + c.id), billing = bill ? { plan: bill.plan || null, docs: bill.docs || [] } : { plan: null, docs: [] };
     const shoots = (await docsLike("shoots", '"sentAt":"')).filter(s => s.sentAt && sameName(s.client, c.name)).map(shootForClient).sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
     const bilans = (await db.all("SELECT data FROM docs WHERE col = '_bilans' AND deleted = 0 AND id LIKE ?", ["c" + c.id + "-%"])).map(r => { try { const d = JSON.parse(r.data || "{}"); return d.sent && Number(d.cid) === c.id ? { m: d.month, at: d.sent.at } : null; } catch (e) { return null; } }).filter(Boolean).sort((a, b) => b.m.localeCompare(a.m));
-    res.json({ bilans, visio: { room: vr, here }, me: { name: req.cname, prenom: req.cname.split(" ")[0], entreprise: req.cu.entreprise }, client: { name: c.name, id: c.id }, preview: req.cu.email === PREVIEW_MAIL, messages, idees, team, billing, shoots });
+    // Pages fermées à ce client (Paramètres > Espace client) : leurs données ne partent pas
+    const pg = (await app.locals.clientPagesFor(c, req.cu)).pages, op = k => pg[k] === "on";
+    res.json({ bilans: op("bilans") ? bilans : [], visio: { room: vr, here }, me: { name: req.cname, prenom: req.cname.split(" ")[0], entreprise: req.cu.entreprise }, client: { name: c.name, id: c.id }, preview: req.cu.email === PREVIEW_MAIL, messages, idees: op("idees") ? idees : [], team, billing: op("prel") ? billing : { plan: null, docs: [] }, shoots: op("tournages") ? shoots : [] });
   }));
   app.get("/api/c/bilan/:m", cauth, wrap(async (req, res) => { const m = String(req.params.m); if (!okMonth(m)) return res.status(400).json({ error: "Demande invalide." });
     const d = await current("_bilans", bilanId(req.cl.id, m)); if (!d || !d.sent || Number(d.cid) !== req.cl.id) return res.status(404).json({ error: "Bilan introuvable." });

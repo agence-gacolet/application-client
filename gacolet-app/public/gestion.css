@@ -1117,6 +1117,18 @@ html{scrollbar-gutter:stable}
 .ax-row div{display:flex;flex-direction:column}
 .ax-row b{font-size:var(--fs-base);font-weight:600}
 .ax-row small{font-size:var(--fs-s);color:var(--muted)}
+/* Espace client : pages par pack */
+.esp-how{margin:6px 0 10px;padding-left:20px;display:flex;flex-direction:column;gap:8px}
+.esp-how li{line-height:1.5}
+.esp-tw td:first-child b{display:block;font-weight:600}
+.esp-what{display:block;color:var(--muted);font-size:var(--fs-s);white-space:normal;max-width:260px}
+.esp-st{min-width:96px;border:1px solid var(--line-2);border-radius:999px;padding:4px 10px;font:600 var(--fs-s)/1.4 var(--text);background:transparent;color:var(--muted);cursor:pointer}
+.esp-st.esp-on{background:var(--lemon);border-color:var(--lemon);color:var(--on-lemon)}
+.esp-st.esp-discover{border-style:dashed;border-color:var(--w1);color:var(--w1);background:var(--w1-bg)}
+.esp-st.esp-off{color:var(--faint)}
+.esp-st:disabled{cursor:default;opacity:.85}
+.esp-pvrow td{border-bottom:0}
+.esp-pv select{margin-left:6px}
 .focus-full .in{max-width:none;padding:0}
 .focus-full .fo{height:100vh}
 @media (max-width:900px){ .focus-full .fo{height:auto;margin:0} .focus-full .fo-ov{min-height:calc(100dvh - 84px - env(safe-area-inset-bottom,0px))} }

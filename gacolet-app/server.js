@@ -76,10 +76,13 @@ app.post("/api/register", wrap(async (req, res) => {
 // Tout ce que l'application affiche, en un appel
 app.get("/api/me", mw(auth), wrap(async (req, res) => {
   const c = req.client, u = req.user, m = mods(c);
+  // Pages ouvertes à ce client (Paramètres > Espace client de /gestion) : seules leurs données partent
+  const sp = app.locals.clientPagesFor ? await app.locals.clientPagesFor(c, u) : null;
+  const open = k => sp ? sp.pages[k] === "on" : (k === "meta" ? m.includes("meta") : m.includes("com"));
   const today = now().slice(0, 10), month = today.slice(0, 7);
 
   let posts = [], postsError = null;
-  if (m.includes("com") && c.metricool_blog_id) {
+  if ((open("valider") || open("stats")) && c.metricool_blog_id) {
     try { posts = await fetchScheduled(c.metricool_blog_id); }
     catch (e) { console.error(e); postsError = "Le planning est momentanément indisponible."; }
   }
@@ -90,11 +93,11 @@ app.get("/api/me", mw(auth), wrap(async (req, res) => {
     return { ...p, status: d ? d.status : p.published ? "ok" : "wait", note: d ? d.note || "" : "", decidedBy: d ? d.prenom + " " + d.nom : "", decidedAt: d ? d.created_at : "" };
   });
 
-  const leads = m.includes("meta") ? await db.all("SELECT * FROM leads WHERE client_id = ? ORDER BY date DESC, id DESC LIMIT 100", [c.id]) : [];
-  const stats = await db.all("SELECT * FROM stats WHERE client_id = ? ORDER BY period", [c.id]);
+  const leads = open("meta") ? await db.all("SELECT * FROM leads WHERE client_id = ? ORDER BY date DESC, id DESC LIMIT 100", [c.id]) : [];
+  const stats = (await db.all("SELECT * FROM stats WHERE client_id = ? ORDER BY period", [c.id])).filter(s => s.module === "meta" ? open("meta") : open("stats"));
   res.json({
     me: { prenom: u.prenom, nom: u.nom, entreprise: u.entreprise },
-    client: publicClient(c),
+    client: Object.assign(publicClient(c), sp ? { pages: sp.pages, packs: sp.packs } : {}),
     today,
     posts, postsError,
     events: await db.all("SELECT * FROM events WHERE client_id = ? AND date >= ? ORDER BY date", [c.id, today]),

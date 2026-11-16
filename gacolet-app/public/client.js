@@ -96,6 +96,10 @@ const waiting = () => posts().filter(p => p.status === "wait").length;
 const shoots = () => (S.f && S.f.shoots) || [];
 const shootsWaiting = () => shoots().filter(s => s.status === "wait").length;
 const has = m => S.d && S.d.client && (S.d.client.modules || []).includes(m);
+/* Pages ouvertes par l’agence selon le pack (réglage /gestion > Paramètres > Espace client) : "on", "discover" (À découvrir) ou "off" (cachée) */
+const pg = k => { const p = S.d && S.d.client && S.d.client.pages; if (p) return p[k] || "on";
+  return k === "meta" ? (has("meta") ? "on" : "discover") : (k === "valider" || k === "stats") ? (has("com") ? "on" : "discover") : "on"; };
+const shown = v => v[0] === "accueil" || pg(v[0]) !== "off";
 const myName = () => (S.f && S.f.me.name) || "";
 const unread = () => S.f ? [...new Set(S.f.messages.map(m => m.ch))].reduce((n, k) => n + unreadIn(k), 0) : 0;
 
@@ -120,9 +124,9 @@ function renderTabs(){
   const badge = { valider: waiting(), tournages: shootsWaiting(), messagerie: S.view === "messagerie" ? 0 : unread(), prel: billDue().length };
   const link = ([k, l]) => { const a = el("a"); a.href = "#"+k; a.appendChild(ico(k)); a.appendChild(el("span","lb",l)); if (k === S.view) a.setAttribute("aria-current","page"); if (badge[k]) a.appendChild(el("span","n",String(badge[k]))); return a; };
   const lockMark = a => { a.appendChild(el("span","lk-dot","Découvrir")); return a; };
-  const link2 = v => { const a = link(v); if ((v[0] === "meta" && !has("meta")) || ((v[0] === "stats" || v[0] === "valider") && !has("com"))) { a.classList.add("lk-nav"); lockMark(a); } return a; };
-  const n = $("#tabs"); n.textContent = ""; n.appendChild(el("span","navlab","Mon espace")); VIEWS.forEach(v => n.appendChild(link2(v)));
-  const m = $("#mtabs"); m.textContent = ""; VIEWS.filter(v => MOBILE.includes(v[0])).forEach(v => m.appendChild(link2(v)));
+  const link2 = v => { const a = link(v); if (pg(v[0]) === "discover") { a.classList.add("lk-nav"); lockMark(a); } return a; };
+  const n = $("#tabs"); n.textContent = ""; n.appendChild(el("span","navlab","Mon espace")); VIEWS.filter(shown).forEach(v => n.appendChild(link2(v)));
+  const m = $("#mtabs"); m.textContent = ""; VIEWS.filter(v => MOBILE.includes(v[0]) && shown(v)).forEach(v => m.appendChild(link2(v)));
   const more = el("button","morebtn"); more.type = "button"; more.appendChild(ico("plus")); more.appendChild(el("span","lb","Plus")); if (!MOBILE.includes(S.view)) more.setAttribute("aria-current","page");
   more.onclick = () => openDrawer(link2, badge);
   m.appendChild(more);
@@ -152,7 +156,7 @@ function vAccueil(root){
   const tiles = [[w, w > 1 ? "publications à valider" : "publication à valider", "valider", "Tout est validé"], [u, u > 1 ? "nouveaux messages" : "nouveau message", "messagerie", "Rien de nouveau"]];
   W.appendChild(el("h2","w2-lab","En bref"));
   const s = el("div","w2-tiles");
-  tiles.forEach(([n, l, v, z], i) => { const t = el("button","w2-tile" + (n ? "" : " zero")); t.type = "button"; t.style.animationDelay = (0.45 + i*0.08) + "s"; t.append(el("b",null,String(n)), el("span",null,l)); if (!n) t.appendChild(el("i",null,z)); t.onclick = () => go(v); s.appendChild(t); });
+  tiles.filter(t => t[2] === "messagerie" || pg(t[2]) === "on").forEach(([n, l, v, z], i) => { const t = el("button","w2-tile" + (n ? "" : " zero")); t.type = "button"; t.style.animationDelay = (0.45 + i*0.08) + "s"; t.append(el("b",null,String(n)), el("span",null,l)); if (!n) t.appendChild(el("i",null,z)); t.onclick = () => go(v); s.appendChild(t); });
   W.appendChild(s);
   const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone;
   if (!standalone){ const ios = /iphone|ipad|ipod/i.test(navigator.userAgent); W.appendChild(el("p","cl-install", ios ? "Astuce : dans Safari, bouton Partager puis « Sur l’écran d’accueil » pour garder l’application à portée de main." : "Astuce : installez l’application depuis le menu du navigateur pour la garder à portée de main.")); }
@@ -277,7 +281,7 @@ function vValider(root){
   const n = { wait: waiting(), mod: cnt("mod") + cnt("no") };
   root.appendChild(head(["À", "valider"], "Faites défiler chaque contenu, puis validez ou expliquez ce qu’il faut changer. Rien n’est publié sans votre accord.",
     [segm([["wait","À valider" + (n.wait ? " " + n.wait : "")],["mod","Modifications" + (n.mod ? " " + n.mod : "")],["ok","Validées"]], S.pf, v => { S.pf = v; render(); })]));
-  if (!has("com")){ locked(root, "com", valPreview); return; }
+  if (pg("valider") !== "on"){ locked(root, "com", valPreview); return; }
   if (S.d.postsError) root.appendChild(el("p","status",S.d.postsError));
   if (S.pf === "no") S.pf = "mod";
   const list = posts().filter(p => p.status === S.pf || (S.pf === "mod" && p.status === "no"));
@@ -551,7 +555,7 @@ function comStats(root, sample){
 }
 function vStats(root){
   root.appendChild(head("Statistiques", "Ce que vos réseaux vous rapportent, mois après mois."));
-  if (!has("com")){ locked(root, "com", pv => comStats(pv, true)); return; }
+  if (pg("stats") !== "on"){ locked(root, "com", pv => comStats(pv, true)); return; }
   comStats(root, false);
 }
 const SAMPLE_LEADS = [["2026-10-28","Demande de devis rénovation","Maison 120 m², Nîmes"],["2026-10-27","Rappel souhaité","Disponible après 18 h"],["2026-10-25","Devis salle de bain","Budget 8 000 €"],["2026-10-24","Question tarif","Uzès"]];
@@ -566,7 +570,7 @@ function metaBody(root, sample){
 }
 function vMeta(root){
   root.appendChild(head(["Publicité", "Meta"], "Vos contacts reçus grâce à la publicité Facebook et Instagram."));
-  if (!has("meta")){ locked(root, "meta", pv => metaBody(pv, true)); return; }
+  if (pg("meta") !== "on"){ locked(root, "meta", pv => metaBody(pv, true)); return; }
   metaBody(root, false);
 }
 function valPreview(pv){
@@ -647,7 +651,7 @@ function openDrawer(link2, badge){
   pan.appendChild(el("b","dr-name", me.name || "")); pan.appendChild(el("span","dr-sub", (S.f && S.f.client && S.f.client.name) || me.entreprise || ""));
   const w = waiting(), u = unread(), st = el("div","dr-stats");
   [[w, w > 1 ? "à valider" : "à valider"], [u, u > 1 ? "messages non lus" : "message non lu"]].forEach(([n, l]) => { const x = el("span"); x.append(el("b", null, String(n)), document.createTextNode(" " + l)); st.appendChild(x); }); pan.appendChild(st);
-  const nav = el("nav","dr-list"); VIEWS.filter(v => !MOBILE.includes(v[0])).forEach(v => { const a = link2(v); a.onclick = () => close(); nav.appendChild(a); }); pan.appendChild(nav);
+  const nav = el("nav","dr-list"); VIEWS.filter(v => !MOBILE.includes(v[0]) && shown(v)).forEach(v => { const a = link2(v); a.onclick = () => close(); nav.appendChild(a); }); pan.appendChild(nav);
   const sec = el("nav","dr-sec"), out = el("button"); out.type = "button"; out.innerHTML = '<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M14 4.5H6.5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2H14M10 12h10M16.5 8.5 20 12l-3.5 3.5"/></svg>'; out.appendChild(el("span", null, "Se déconnecter")); out.onclick = () => { close(); $("#logout").click(); };
   sec.appendChild(out); pan.appendChild(sec);
   let x0 = null; pan.addEventListener("touchstart", e => { x0 = e.touches[0].clientX; }, { passive: true });
@@ -669,7 +673,7 @@ function vBilans(root){
   else { box.appendChild(el("p","muted","Chargement du bilan…")); api("/api/c/bilan/" + cur.m).then(r => { S.biHtml[cur.m] = r.html; if (S.view === "bilans") render(); }).catch(e => { box.textContent = e.message; }); }
 }
 const R = { bilans: vBilans, accueil: vAccueil, valider: vValider, tournages: vTournages, stats: vStats, meta: vMeta, messagerie: vMessagerie, visio: vVisio, idees: vIdees, prel: vPrel };
-function fromHash(){ const h = location.hash.replace("#",""); S.view = R[h] ? h : "accueil"; }
+function fromHash(){ const h = location.hash.replace("#",""); S.view = R[h] && (!S.d || shown([h])) ? h : "accueil"; }
 function render(){
   if (!S.d || !S.f) return;
   const root = $("#app"), fid = document.activeElement && document.activeElement.id, caret = fid && document.activeElement.selectionStart;

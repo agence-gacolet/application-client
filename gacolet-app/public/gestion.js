@@ -549,7 +549,8 @@ function editClient(c){
       {k:"remember",label:"À retenir",type:"textarea"},{k:"ask",label:"À demander au client",type:"textarea"},{k:"leadWeeks",label:"Préparer combien de semaines avant",type:"number",half:true},{k:"color",label:"Couleur dans l’agenda",type:"color",half:true}]),
     onSave: out => { const services = {}; SERVICES.forEach(([k]) => { if (out["sv"+k]) services[k] = out["sd"+k] || ""; delete out["sv"+k]; delete out["sd"+k]; }); out.services = services;
       if (!c.id){ const n = String(out.name || "").trim(); if (S.d.clients.some(x => x.name.toLowerCase() === n.toLowerCase())){ toast("Ce client existe déjà."); return Promise.reject(new Error("doublon")); } out.name = n; out.calendar = true; }
-      return save("clients", c.id || null, Object.assign(c.id ? strip(c) : {}, out)); } });
+      const svChanged = c.id && Object.keys(services).sort().join() !== Object.keys(c.services || {}).sort().join();
+      return (svChanged ? espSnap(c.name) : Promise.resolve(null)).then(pre => save("clients", c.id || null, Object.assign(c.id ? strip(c) : {}, out)).then(r => { if (pre) setTimeout(() => espAfter(c.name, pre), 400); return r; })); } });
 }
 /* Fin de collaboration : le client passe dans l’onglet Archives avec ses services, le motif, une note et des pièces jointes (PDF, captures) */
 const AR_MOTIFS = ["Fin de contrat","Budget","Résultats jugés insuffisants","Arrêt ou vente de l’activité","Passage en interne ou à une autre agence","Décision de l’agence","Autre"];
@@ -3535,11 +3536,11 @@ function pmField(label, type, value, ac){ const l = el("label","pm-f"); l.append
 async function reloadUsers(){ try { const r = await GC.api("GET","/api/g-users"); S.users = r.users; } catch(e){ toast(e.message); if (!S.users) S.users = []; } render(); }
 
 function vParametres(root){
-  const tabs = [["compte","Mon compte"],["notif","Notifications"]].concat(S.role === "owner" ? [["equipe","Équipe et accès"],["codes","Codes clients"],["corbeille","Corbeille"],["liaisons","Liaisons"]] : []).concat([["cgu","Conditions"]]);
+  const tabs = [["compte","Mon compte"],["notif","Notifications"]].concat(S.role === "owner" ? [["equipe","Équipe et accès"],["codes","Codes clients"],["espace","Espace client"],["corbeille","Corbeille"],["liaisons","Liaisons"]] : []).concat([["cgu","Conditions"]]);
   const tab = tabs.some(t => t[0] === S.ui.pmTab) ? S.ui.pmTab : (S.secours ? "equipe" : "compte");
   root.appendChild(head("Paramètres", "Ton compte, tes notifications, l’équipe et les règles de l’application.", [segm(tabs, tab, v => { S.ui.pmTab = v; remember(); render(); })]));
   const w = el("div","pm"); root.appendChild(w);
-  ({compte:pmCompte, notif:pmNotif, equipe:pmEquipe, codes:pmCodes, cgu:pmCgu, liaisons:pmLiaisons, corbeille:pmCorbeille})[tab](w);
+  ({compte:pmCompte, notif:pmNotif, equipe:pmEquipe, codes:pmCodes, espace:pmEspace, cgu:pmCgu, liaisons:pmLiaisons, corbeille:pmCorbeille})[tab](w);
 }
 /* Corbeille : tout ce qui a été supprimé depuis 30 jours (tâches, prospects, fiches, tournages, idées...), restaurable en un clic */
 const COL_LABEL = { tasks:"Tâche", commercial:"Commercial", clients:"Fiche client", events:"Agenda", shoots:"Tournage", idees:"Idée", rushes:"Rush", publications:"Publication", campaigns:"Campagne", cevents:"Temps fort", keydates:"Date clé", posts:"Com de l’agence", edtodo:"Tâche éditoriale", formations:"Formation", strategies:"Stratégie", vrooms:"Salon vocal", msheets:"Meta", meta:"Meta", pilotage:"Pilotage" };
@@ -3833,6 +3834,109 @@ function pmNotif(w){
   w.appendChild(c);
 }
 
+/* Espace client : ce que chaque client voit selon son pack. Même principe que l’accès par prénom de l’équipe :
+   un tableau pages × packs, puis des exceptions client par client. Le serveur applique les mêmes règles aux données. */
+const ESP_PAGES = { valider:"À valider", tournages:"Tournages", stats:"Statistiques", bilans:"Bilans", meta:"Publicité Meta", messagerie:"Messagerie", visio:"Visio", idees:"Mes idées", prel:"Prélèvements" };
+const ESP_WHAT = { valider:"les publications à valider avant leur sortie", tournages:"les feuilles de tournage à valider", stats:"vues et abonnés, mois après mois", bilans:"les bilans mensuels envoyés par l’agence", meta:"le nombre de contacts reçus dans le mois", messagerie:"le groupe avec l’agence", visio:"la salle de visio avec l’agence", idees:"ses idées de contenus et ses médias", prel:"ses prélèvements et factures" };
+const ESP_PACKS = { gestion:"Gestion", perf:"Performance", perfplus:"Performance +", meta:"Pack Meta", sur:"Sur mesure" };
+const ESP_ST = { on:"Ouvert", discover:"À découvrir", off:"Caché" };
+const ESP_HELLO = { valider:"À valider : chaque contenu passe par vous avant sa sortie.", tournages:"Tournages : vous validez la feuille de chaque tournage avant le jour J.", stats:"Statistiques : vos vues et vos abonnés, mois après mois.", bilans:"Bilans : le point de chaque mois préparé par l’agence.", meta:"Publicité Meta : le nombre de contacts reçus chaque mois grâce à vos publicités.", messagerie:"Messagerie : vos échanges avec l’agence.", visio:"Visio : notre salle de réunion en ligne.", idees:"Mes idées : vos idées de contenus, photos et vidéos à nous envoyer.", prel:"Prélèvements : vos factures et prélèvements." };
+async function loadEsp(){ try { S.esp = await GC.api("GET","/api/g-espace"); } catch(e){ toast(e.message); if (!S.esp) S.esp = { pages: [], packs: [], discover: [], table: {}, clients: [] }; } render(); return S.esp; }
+const espOpts = k => S.esp.discover.includes(k) ? ["on","discover","off"] : ["on","off"];
+function espChip(v, onClick, title){ const b = el("button","esp-st esp-" + v, ESP_ST[v]); b.type = "button"; if (title) b.title = title; if (onClick){ b.onclick = onClick; b.disabled = !writable(); } else b.disabled = true; return b; }
+const espList = (pages, st) => Object.keys(ESP_PAGES).filter(k => pages[k] === st).map(k => ESP_PAGES[k]).join(", ");
+const espPackLabel = x => x.packs.map(p => ESP_PACKS[p]).join(" + ") + (x.from === "ancien" ? " (ancien réglage)" : "");
+async function espPreview(packs, clientId){
+  const win = window.open("about:blank","_blank");
+  try { const r = await GC.api("POST","/api/g-espace/apercu",{ clientId, packs }); win.location = r.url; } catch(e){ win.close(); toast(e.message); }
+}
+function pmEspace(w){
+  if (S.role !== "owner"){ w.appendChild(pmCard("Espace client", "Réservé à " + fullNames() + ".")); return; }
+  if (!S.esp){ w.appendChild(skeleton(4)); loadEsp(); return; }
+  const E = S.esp;
+  const how = pmCard("Comment ça marche", "Ce que le client voit dans son application dépend de trois choses, dans cet ordre.");
+  const ol = el("ol","esp-how");
+  [["Son pack.", "Il vient de sa fiche dans le Tableau clients (services cochés). Pour changer de pack, on coche le nouveau pack dans la fiche : c’est tout."],
+   ["Le tableau « Pages par pack » ci-dessous.", "Pour chaque pack, une page est Ouverte, À découvrir (aperçu flouté avec des chiffres d’exemple, sans prix, et le bouton « J’en parle à Gabriel ») ou Cachée. Un client qui a deux packs a le meilleur des deux."],
+   ["Ses exceptions.", "Dans la liste des clients plus bas, on peut ouvrir ou fermer une page pour un seul client. L’exception passe avant le pack."]
+  ].forEach(([b, t]) => { const li = el("li"); li.append(el("b",null,b + " "), document.createTextNode(t)); ol.appendChild(li); });
+  how.appendChild(ol);
+  how.appendChild(el("p","pm-note","Accueil est toujours visible. Le serveur n’envoie que les données des pages ouvertes : une page cachée ou « À découvrir » ne montre jamais les vrais chiffres du client. Le client voit le changement à sa prochaine ouverture de l’application. Prestations ponctuelles, print et site seuls : pas d’application."));
+  w.appendChild(how);
+
+  // Pages par pack
+  const pk = pmCard("Pages par pack", "Clique sur une case pour passer de Ouvert à À découvrir puis Caché. « À découvrir » existe seulement pour À valider, Statistiques et Publicité Meta.");
+  const withCode = E.clients.filter(c => c.active);
+  if (!S.ui.espPv || !withCode.some(c => c.id === S.ui.espPv)) S.ui.espPv = (withCode[0] || {}).id;
+  const top = el("div","pm-actions esp-pv"); const lab = el("label"); lab.appendChild(el("span","muted","Données des aperçus : "));
+  const sel = el("select"); withCode.forEach(c => { const o = el("option",null,c.name); o.value = c.id; sel.appendChild(o); }); sel.value = S.ui.espPv || ""; sel.onchange = () => { S.ui.espPv = Number(sel.value); remember(); };
+  lab.appendChild(sel); top.appendChild(lab); if (withCode.length) pk.appendChild(top);
+  const { w: tw, tb } = table(["Page"].concat(E.packs.map(p => ESP_PACKS[p]))); tw.classList.add("ax-tw","esp-tw");
+  E.pages.forEach(k => { const tr = el("tr","row"); const c0 = td(tr, null, "nw"); c0.append(el("b",null,ESP_PAGES[k]), el("small","esp-what", ESP_WHAT[k]));
+    E.packs.forEach(p => { const v = E.table[p][k];
+      td(tr, espChip(v, async () => { const o = espOpts(k), nx = o[(o.indexOf(v) + 1) % o.length]; E.table[p][k] = nx; render();
+        try { const r = await GC.api("PUT","/api/g-espace/packs",{ table: E.table }); E.table = r.table; toast(ESP_PAGES[k] + " : " + ESP_ST[nx].toLowerCase() + " pour le pack " + ESP_PACKS[p] + "."); loadEsp(); } catch(e){ toast(e.message); loadEsp(); } }, ESP_PAGES[k] + ", " + ESP_PACKS[p]), "nw"); });
+    tb.appendChild(tr); });
+  const trp = el("tr","esp-pvrow"); td(trp, el("span","muted","Voir comme le client"), "nw");
+  E.packs.forEach(p => td(trp, btn("Aperçu","sm", () => { if (!S.ui.espPv){ toast("Il faut au moins un client avec un code actif pour les données de l’aperçu."); return; } espPreview([p], S.ui.espPv); }), "nw"));
+  tb.appendChild(trp);
+  pk.appendChild(tw);
+  pk.appendChild(el("p","pm-note","L’aperçu ouvre l’espace tel qu’un client de ce pack le voit, avec les données du client choisi au-dessus, en lecture seule. Rien n’est envoyé au client."));
+  w.appendChild(pk);
+
+  // Client par client
+  const cc = pmCard("Clients", "Ce que voit chaque client qui a un code. Clique sur un client pour ajouter une exception ou voir son espace.");
+  if (!E.clients.length) cc.appendChild(el("p","empty","Aucun client n’a encore de code (Codes clients)."));
+  else {
+    const { w: t2, tb: b2 } = table(["Client","Pack","Ouvert","~À découvrir","Exceptions",""]);
+    E.clients.forEach(x => { const tr = el("tr","row" + (x.active ? "" : " done")); tr.onclick = () => espClient(x);
+      td(tr, x.name, "ttl"); td(tr, espPackLabel(x), "nw"); td(tr, espList(x.pages, "on") || "Accueil seul", "w"); td(tr, espList(x.pages, "discover"), "hm");
+      const n = Object.keys(x.overrides || {}).length; td(tr, n ? n + " exception" + (n > 1 ? "s" : "") : el("span","muted","Aucune"), "nw");
+      td(tr, x.active ? btn("Aperçu","sm", e => { e.stopPropagation(); espPreview([], x.id); }) : el("span","muted","Désactivé"), "nw");
+      b2.appendChild(tr); });
+    cc.appendChild(t2);
+  }
+  w.appendChild(cc);
+}
+/* Exceptions d’un client : chaque page suit son pack, sauf si on choisit autre chose ici */
+function espClient(x){
+  openModal(m => {
+    const h = el("h3",null,"Espace de " + x.name); h.id = "mtitle"; m.appendChild(h);
+    m.appendChild(el("p","muted", "Pack : " + espPackLabel(x) + "." + (x.from === "ancien" ? " Aucun pack n’est coché dans sa fiche du Tableau clients : son espace suit l’ancien réglage de son code. Coche son pack dans la fiche." : " Chaque page suit le pack, sauf si tu choisis autre chose.")));
+    const ov = Object.assign({}, x.overrides || {}), list = el("div","ax-list");
+    Object.keys(ESP_PAGES).forEach(k => { const row = el("div","ax-row"), tx = el("div");
+      tx.append(el("b",null,ESP_PAGES[k]), el("small",null,"Selon le pack : " + ESP_ST[x.fromPack[k] === "discover" && !S.esp.discover.includes(k) ? "on" : x.fromPack[k]].toLowerCase()));
+      const s = el("select"); [["","Selon le pack"]].concat(espOpts(k).map(v => [v, ESP_ST[v]])).forEach(([v, l]) => { const o = el("option",null,l); o.value = v; s.appendChild(o); });
+      s.value = ov[k] || ""; s.disabled = !writable(); s.onchange = () => { if (s.value) ov[k] = s.value; else delete ov[k]; };
+      row.append(tx, s); list.appendChild(row); });
+    m.appendChild(list);
+    const a = el("div","actions");
+    a.append(btn("Fermer","", closeModal));
+    if (x.active) a.append(btn("Aperçu","", () => espPreview([], x.id)));
+    a.append(btn("Enregistrer","lemon", async () => {
+      try { const r = await GC.api("PUT","/api/g-espace/client/" + x.id, { overrides: ov }); closeModal(); toast("Espace de " + x.name + " enregistré."); const before = x.pages; await loadEsp(); espWelcome(x, before, r.pages); } catch(e){ toast(e.message); } }));
+    m.appendChild(a);
+  });
+}
+/* Message de bienvenue quand une page s’ouvre pour un client : texte proposé, relu et modifiable, envoyé dans son groupe avec l’agence */
+function espWelcome(x, before, after){
+  const opened = Object.keys(ESP_PAGES).filter(k => after && after[k] === "on" && (!before || before[k] !== "on"));
+  if (!opened.length || !x.active) return;
+  const text = "Bonjour, " + (opened.length > 1 ? "de nouvelles pages sont ouvertes" : "une nouvelle page est ouverte") + " dans votre application.\n\n" + opened.map(k => ESP_HELLO[k]).join("\n") + "\n\nUne question ? Répondez ici.";
+  openModal(m => {
+    const h = el("h3",null,"Prévenir " + x.name + " ?"); h.id = "mtitle"; m.appendChild(h);
+    m.appendChild(el("p","muted", "Message proposé pour son groupe avec l’agence, envoyé à ton nom (" + (S.me || "") + "). Relis-le et modifie-le si besoin."));
+    const f = el("form","form"); const l = el("label","full"); const ta = el("textarea"); ta.rows = 7; ta.value = text; l.append(el("span",null,"Message"), ta); f.appendChild(l); m.appendChild(f);
+    const a = el("div","actions");
+    a.append(btn("Ne pas envoyer","", closeModal), btn("Envoyer","lemon", async () => { const t = ta.value.trim(); if (!t){ ta.focus(); return; }
+      try { await save("messages", null, { ch: "cg:" + x.id, text: t, who: S.me || "Gabriel", at: new Date().toISOString() }); closeModal(); toast("Message envoyé à " + x.name + "."); } catch(e){ if (e.message !== "ro") toast(e.message); } }));
+    m.appendChild(a);
+  });
+}
+/* Après un changement de pack (fiche du Tableau clients ou Codes clients) : on compare l’espace avant / après pour proposer le message */
+async function espSnap(name){ if (S.role !== "owner") return null; try { S.esp = await GC.api("GET","/api/g-espace"); return S.esp.clients.find(c => norm(c.name) === norm(name)) || null; } catch(e){ return null; } }
+async function espAfter(name, pre){ if (!pre) return; const post = await espSnap(name); if (post) espWelcome(post, pre.pages, post.pages); }
+
 /* Codes clients : un code par client, partagé par toutes les personnes de ce client */
 const MOD_LABEL = { "com":"Réseaux sociaux", "meta":"Publicité Meta", "com,meta":"Réseaux et Meta" };
 /* Espace client d'après les offres : Pack Performance = réseaux + Meta (pub au résultat comprise) ; Pack Meta = Meta ; packs réseaux et sur mesure = réseaux ; print, site, ponctuel seuls = réseaux (accueil, messagerie, tournages) */
@@ -3975,11 +4079,12 @@ function editCode(x){
     act.append(btn("Annuler","", () => closeModal()), btn(isNew ? "Créer et générer le code" : "Enregistrer","lemon", async () => {
       if (!iN.value.trim()){ iN.focus(); toast("Indique le nom du client."); return; }
       const pk = picked(); if (!pk.length){ toast("Coche au moins un service."); return; }
+      const pre = isNew ? null : await espSnap(x.name);
       const body = { name: iN.value.trim(), modules: modsFromSv(pk).split(","), formula: iF.value.trim(), goal: Number(iG.value) || 0, qualifiedDef: iQ.value.trim() };
       // Les services cochés sont repris dans la fiche du client (Tableau clients), dates « Depuis le » gardées
       if (fc && pk.join() !== Object.keys(sv0).filter(k => SV_KEYS.includes(k)).sort((a, b) => SV_KEYS.indexOf(a) - SV_KEYS.indexOf(b)).join()){
         const services = {}; pk.forEach(k => { services[k] = sv0[k] || ""; }); try { await save("clients", fc.id, { services }, { merge: true }); } catch(e){ if (e.message !== "ro") toast(e.message); } }
-      try { if (isNew){ const r = await GC.api("POST","/api/g-codes", body); toast("Code créé : " + r.code); copyCode(r.code); } else { body.active = iA.value === "1"; await GC.api("PATCH","/api/g-codes/" + x.id, body); toast("Client enregistré."); } closeModal(); reloadCodes(); loadCgroups(); S.meta = null; } catch(e){ toast(e.message); } }));
+      try { if (isNew){ const r = await GC.api("POST","/api/g-codes", body); toast("Code créé : " + r.code); copyCode(r.code); } else { body.active = iA.value === "1"; await GC.api("PATCH","/api/g-codes/" + x.id, body); toast("Client enregistré."); } closeModal(); reloadCodes(); loadCgroups(); S.meta = null; if (pre) setTimeout(() => espAfter(body.name, pre), 400); else S.esp = null; } catch(e){ toast(e.message); } }));
     m.appendChild(act);
   });
 }
