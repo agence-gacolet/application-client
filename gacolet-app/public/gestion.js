@@ -4121,3 +4121,12 @@ render();
   setTimeout(() => { if (!S.ready){ S.ready = true; renderSoon(); } }, 8000);
 })();
 })();
+// Téléphone : clavier ouvert dans la messagerie, la conversation se cale sur la zone visible au-dessus du clavier (en-tête gardé, pas de vide)
+(function(){ const vv = window.visualViewport; if (!vv) return; let raf = 0;
+  const fit = () => { raf = 0; const b = document.body, mob = matchMedia("(max-width:900px)").matches;
+    const kb = mob && b.classList.contains("chat-full") && window.innerHeight - vv.height > 120 && document.activeElement && /TEXTAREA|INPUT/.test(document.activeElement.tagName);
+    if (kb){ b.style.setProperty("--kbh", vv.height + "px"); b.style.setProperty("--kbt", vv.offsetTop + "px"); }
+    if (kb !== b.classList.contains("kb")){ b.classList.toggle("kb", kb); const ms = document.querySelector(".wa-msgs"); if (ms) ms.scrollTop = ms.scrollHeight; } };
+  const ask = () => { if (!raf) raf = requestAnimationFrame(fit); };
+  vv.addEventListener("resize", ask); vv.addEventListener("scroll", ask); document.addEventListener("focusin", () => setTimeout(ask, 50)); document.addEventListener("focusout", () => setTimeout(ask, 50));
+})();

@@ -2097,3 +2097,7 @@ html.tg-lock,html.tg-lock body{overflow:hidden}
 .cl-ck{display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:600}
 .cl-vnote{width:100%;margin:0;font-size:12px}
 .modal textarea.cl-drop{outline:2px dashed #D4FF3A;outline-offset:2px;background:rgba(212,255,58,.06)}
+/* Téléphone, clavier ouvert dans la messagerie : la conversation occupe exactement la zone visible */
+body.kb.chat-full .wa{position:fixed;left:0;right:0;top:var(--kbt,0px);height:var(--kbh,100dvh)!important;z-index:40;margin:0}
+body.kb.chat-full .wa-head{padding-top:6px}
+body.kb .mtabs{display:none}
