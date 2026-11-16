@@ -2084,3 +2084,10 @@ html.tg-lock,html.tg-lock body{overflow:hidden}
 .cd-sv label.inline{display:flex;align-items:center;gap:8px;font-weight:400}
 .cd-svn{grid-column:1/-1;margin:-4px 0 2px;font-size:12px}
 @media (max-width:640px){.cd-sv{grid-template-columns:1fr}}
+
+/* Messagerie : liens cliquables, « écrit… » et sélection en bleu */
+.wa-txt .wa-link{color:#4DA3FF;text-decoration:underline;text-underline-offset:2px;word-break:break-all}
+.wa-line.mine .wa-txt .wa-link{color:#fff}
+.wa-htx small.typing{color:#0A84FF!important}
+.wa ::selection,.wa-top ::selection{background:rgba(10,132,255,.5);color:#fff}
+.wa-line.mine .wa-bub ::selection{background:rgba(255,255,255,.35);color:#fff}

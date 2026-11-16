@@ -2521,6 +2521,12 @@ const MSG_SHOWN = new Set(); let MSG_CH = "", SEEN_SENT = "", TYPING_AT = 0;
 async function react(m, e){ const me = S.me || "Gabriel"; const re = Object.assign({}, m.re || {}); const had = (re[e] || []).includes(me);
   Object.keys(re).forEach(k => { re[k] = (re[k] || []).filter(n => n !== me); if (!re[k].length) delete re[k]; }); if (!had) re[e] = (re[e] || []).concat(me);
   m.re = re; render(); try { await GC.api("POST","/api/g-react", { id: m.id, e }); } catch(x){ toast(x.message); } }
+function linkify(node, text){ const re = /\b((?:https?:\/\/|www\.)[^\s<>"]+)/gi; let i = 0, mm; text = String(text || "");
+  while ((mm = re.exec(text))){ let u = mm[1]; const trail = (u.match(/[).,;:!?»"']+$/) || [""])[0]; if (trail) u = u.slice(0, -trail.length);
+    if (mm.index > i) node.appendChild(document.createTextNode(text.slice(i, mm.index)));
+    const a = document.createElement("a"); a.className = "wa-link"; a.href = /^www\./i.test(u) ? "https://" + u : u; a.target = "_blank"; a.rel = "noopener noreferrer"; a.textContent = u;
+    a.addEventListener("click", e => e.stopPropagation()); node.appendChild(a); i = mm.index + u.length; re.lastIndex = i; }
+  if (i < text.length) node.appendChild(document.createTextNode(text.slice(i))); return node; }
 function replyTo(m, ch){ S.ui.reply = { ch, id: m.id, who: m.who, text: (m.text || msgPreview(m)).slice(0, 140) }; render(); setTimeout(() => { const t = document.getElementById("chat-input"); if (t) t.focus(); }, 30); }
 function typingPing(ch){ const n = Date.now(); if (n - TYPING_AT < 2500) return; TYPING_AT = n; GC.api("POST","/api/g-typing", { ch }).catch(() => {}); }
 function liveFill(){
@@ -2606,7 +2612,7 @@ function vMessagerie(root){
       q.onclick = e => { e.stopPropagation(); const t = document.getElementById("m-" + m.rep.id); if (t){ t.scrollIntoView({ block: "center", behavior: "smooth" }); t.classList.remove("flash"); void t.offsetWidth; t.classList.add("flash"); } }; bub.appendChild(q); }
     (m.files || []).forEach(f => bub.appendChild(attachEl(f)));
     if (m.audio) bub.appendChild(audioFor(m));
-    if (m.text) bub.appendChild(el("div","wa-txt", m.text));
+    if (m.text) bub.appendChild(linkify(el("div","wa-txt"), m.text));
     const tm = el("span","wa-time", hhmm(md));
     if (mine){ const tk = el("span","wa-tk"); tk.dataset.at = m.at || ""; tk.innerHTML = '<svg viewBox="0 0 18 12" aria-hidden="true"><path d="M1 6.5 4.5 10 11 2.5M7 9.5l.5.5L14 2.5"/></svg>'; tk.title = "Envoyé"; tm.appendChild(tk); }
     bub.appendChild(tm);
