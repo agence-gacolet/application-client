@@ -125,7 +125,20 @@ const strip = o => { const c = Object.assign({}, o); delete c.id; return c; };
 /* ---------- Fenêtres et formulaires ---------- */
 function openModal(build){ const m = $("#modal"); m.textContent = ""; m.className = "modal"; build(m); $("#overlay").classList.add("open"); const f = m.querySelector("input:not([type=checkbox]),select,textarea,button"); if (f) f.focus(); }
 function closeModal(){ $("#overlay").classList.remove("open"); }
-$("#overlay").addEventListener("click", e => { if (e.target.id === "overlay") closeModal(); });
+/* Fenêtre : se ferme seulement si le clic commence ET finit sur le fond (une sélection de texte lâchée hors de la fenêtre ne la ferme plus).
+   Entrée = bouton principal de la fenêtre (Enregistrer, Créer…) ; Maj + Entrée = retour à la ligne dans un texte long. */
+let OV_DOWN = false;
+$("#overlay").addEventListener("pointerdown", e => { OV_DOWN = e.target.id === "overlay"; });
+$("#overlay").addEventListener("click", e => { if (e.target.id === "overlay" && OV_DOWN) closeModal(); OV_DOWN = false; });
+$("#modal").addEventListener("keydown", e => {
+  if (e.key !== "Enter" || e.shiftKey || e.altKey || e.isComposing || e.defaultPrevented) return;
+  const t = e.target; if (!t || t.tagName === "BUTTON" || t.tagName === "A" || t.isContentEditable || (t.type && /^(checkbox|radio|file|submit|button)$/.test(t.type))) return;
+  if (t.closest && t.closest("[data-enter-own]")) return;
+  // Listes « un par ligne » : Entrée garde son retour à la ligne
+  if (t.tagName === "TEXTAREA"){ const lab = t.closest("label"); if (/par ligne/i.test((t.placeholder || "") + " " + (lab ? lab.textContent : ""))) return; }
+  const ok = [...$("#modal").querySelectorAll(".actions .lemon, .actions .solid, .actions button[type=submit]")].filter(b => !b.disabled && b.offsetParent).pop();
+  if (!ok) return; e.preventDefault(); ok.click();
+});
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal(); });
 
 /* fields: [{k,label,type:text|textarea|date|time|select|check|number|who|list, options, list, half, ph}] */

@@ -32,7 +32,20 @@ function head(title, sub, tools){
 }
 function openModal(build){ const m = $("#modal"); m.textContent = ""; m.className = "modal"; build(m); $("#overlay").classList.add("open"); }
 function closeModal(){ $("#overlay").classList.remove("open"); }
-$("#overlay").addEventListener("click", e => { if (e.target.id === "overlay") closeModal(); });
+/* Fenêtre : se ferme seulement si le clic commence ET finit sur le fond (une sélection de texte lâchée hors de la fenêtre ne la ferme plus).
+   Entrée = bouton principal de la fenêtre (Enregistrer, Créer…) ; Maj + Entrée = retour à la ligne dans un texte long. */
+let OV_DOWN = false;
+$("#overlay").addEventListener("pointerdown", e => { OV_DOWN = e.target.id === "overlay"; });
+$("#overlay").addEventListener("click", e => { if (e.target.id === "overlay" && OV_DOWN) closeModal(); OV_DOWN = false; });
+$("#modal").addEventListener("keydown", e => {
+  if (e.key !== "Enter" || e.shiftKey || e.altKey || e.isComposing || e.defaultPrevented) return;
+  const t = e.target; if (!t || t.tagName === "BUTTON" || t.tagName === "A" || t.isContentEditable || (t.type && /^(checkbox|radio|file|submit|button)$/.test(t.type))) return;
+  if (t.closest && t.closest("[data-enter-own]")) return;
+  // Listes « un par ligne » : Entrée garde son retour à la ligne
+  if (t.tagName === "TEXTAREA"){ const lab = t.closest("label"); if (/par ligne/i.test((t.placeholder || "") + " " + (lab ? lab.textContent : ""))) return; }
+  const ok = [...$("#modal").querySelectorAll(".actions .lemon, .actions .solid, .actions button[type=submit]")].filter(b => !b.disabled && b.offsetParent).pop();
+  if (!ok) return; e.preventDefault(); ok.click();
+});
 function confirmBox(title, text, okLabel, fn){
   openModal(m => { m.classList.add("sheet"); const t = el("h3",null,title); t.id = "mtitle"; m.appendChild(t); if (text) m.appendChild(el("p","muted",text));
     const a = el("div","actions"); a.append(btn("Annuler","", closeModal), btn(okLabel,"lemon", () => { closeModal(); fn(); })); m.appendChild(a); });
@@ -490,7 +503,7 @@ function vIdees(root){
 /* ---------- Offres : ce que le client a, et ce qu’il peut découvrir ---------- */
 const OFFERS = {
   com: { name: "Gestion des réseaux sociaux", pitch: "L’agence filme, monte et publie pour vous chaque mois. Vous validez ici chaque contenu avant sa sortie, et vous suivez vos vues, vos abonnés et les demandes reçues.", ask: "Bonjour Gabriel, je voudrais en savoir plus sur la gestion des réseaux sociaux." },
-  meta: { name: "Publicité Meta", pitch: "Des publicités Facebook et Instagram qui vous amènent des contacts. Chaque demande arrive ici, vous la triez en un clic, et vous voyez combien coûte chaque contact.", ask: "Bonjour Gabriel, je voudrais en savoir plus sur la publicité Meta." }
+  meta: { name: "Publicité Meta", pitch: "Des publicités Facebook et Instagram qui vous amènent des contacts. Chaque mois, vous voyez ici combien de demandes elles vous ont apportées.", ask: "Bonjour Gabriel, je voudrais en savoir plus sur la publicité Meta." }
 };
 const PITCH_VIDEO = ""; /* lien YouTube de la vidéo de présentation de Gabriel, à coller quand elle sera tournée */
 function askGabriel(mod){
