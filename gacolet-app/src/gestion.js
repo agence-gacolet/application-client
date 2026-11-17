@@ -150,6 +150,7 @@ module.exports = function (app, { db, wrap, root }) {
     if (col === "messages" && String(d.ch || "").startsWith("dm:")) return String(d.ch).slice(3).split("|").includes(u.name);
     if (col === "messages" && String(d.ch || "").startsWith("cdm:")) return String(d.ch).split("|")[1] === u.name;
     if (col === "vrooms") return (d.members || []).includes(u.name); // salon vocal privé : seulement ses participants, accès complet compris
+    if (col === "messages" && /^(tg:)?cg:\d+$/.test(String(d.ch || ""))) return cgInSync(u.name, d.ch); // groupe client : seulement les membres cochés, accès complet compris
     if (u.role === "owner") return true;
     if (col === "tasks") return d.who === u.name || d.createdBy === u.name; // ses tâches et celles qu’on a données
     if (col === "commercial") return (d.owner || "Gabriel") === u.name; // chaque commercial ne voit que ses lignes
@@ -162,6 +163,7 @@ module.exports = function (app, { db, wrap, root }) {
       if (before && before.who !== u.name && !(u.role === "owner" && !after)) return "Tu ne peux retirer que tes propres messages.";
       if (after && after.who !== u.name) return "Message refusé.";
       if (after && String(after.ch || "").startsWith("dm:") && !String(after.ch).slice(3).split("|").includes(u.name)) return "Conversation privée.";
+      if (after && /^(tg:)?cg:\d+$/.test(String(after.ch || "")) && !cgInSync(u.name, after.ch)) return "Tu n’es pas membre de ce groupe client.";
       if (before && !after && String(before.ch || "").startsWith("dm:") && before.who !== u.name) return "Conversation privée.";
       if (after && String(after.ch || "").startsWith("cdm:") && String(after.ch).split("|")[1] !== u.name) return "Conversation privée.";
       return "";
@@ -1101,6 +1103,11 @@ module.exports = function (app, { db, wrap, root }) {
     return { main: pick(Array.isArray(c.main) ? c.main : CGM_DEF.main), shoot: pick(Array.isArray(c.shoot) ? c.shoot : CGM_DEF.shoot) };
   }
   app.locals.cgMembers = cgMembers;
+  // Membre d'un groupe client (lecture immédiate du réglage gardé en mémoire, chargé au démarrage)
+  function cgInSync(name, ch){ const m = String(ch).match(/^(tg:)?cg:(\d+)$/); if (!m) return true; const mode = m[1] ? "shoot" : "main", c = (CGM || {})[m[2]] || {};
+    const list = Array.isArray(c[mode]) ? c[mode] : CGM_DEF[mode], first = s => normName(s).split(" ")[0];
+    return list.some(n => n === name || first(n) === first(name)); }
+  cgmCfg().catch(() => {});
   const visioRoom = id => "visio" + String(id).split("").map(x => "abcdefghij"[Number(x)]).join("");
   async function clientChOk(c, ch) {
     ch = String(ch || "");
@@ -1365,6 +1372,8 @@ module.exports = function (app, { db, wrap, root }) {
     const cl = await db.all("SELECT id, name FROM clients WHERE active = 1 ORDER BY name");
     const us = await db.all("SELECT client_id, prenom, nom FROM users WHERE token NOT LIKE 'retire-%' AND email <> ? AND email <> ?", [PREVIEW_MAIL, "test@agence.interne"]);
     const out = []; for (const c of cl) out.push({ ch: "cg:" + c.id, id: c.id, room: visioRoom(c.id), name: c.name, people: us.filter(u => u.client_id === c.id).map(u => (u.prenom + " " + u.nom).trim()), team: await cgMembers(c.id) });
+    // Les groupes dont on n'est pas membre ne sont envoyés qu'aux accès complets (pour pouvoir s'y rajouter)
+    for (let k = out.length - 1; k >= 0; k--) { const x = out[k], inn = { main: cgInSync(req.user.name, x.ch), shoot: cgInSync(req.user.name, "tg:" + x.ch) }; x.in = inn; if (!inn.main && !inn.shoot && req.user.role !== "owner") out.splice(k, 1); }
     res.json({ groups: out });
   }));
   // Ajouter ou retirer des membres de l’équipe dans le groupe principal ou tournage d’un client

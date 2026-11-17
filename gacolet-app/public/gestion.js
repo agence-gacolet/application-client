@@ -2144,7 +2144,8 @@ function cdmClient(k){ const g = (S.cgroups || []).find(x => x.id === Number(Str
 function cgOf(k){ return (S.cgroups || []).find(g => g.ch === k); }
 /* Membres de l’équipe d’un groupe client : principal = Gabriel et Clara, tournage = Gabriel et Matis, modifiable (bouton Membres) */
 function cgTeam(k, mode){ const g = cgOf(String(k).replace(/^tg:/, "")); return g && g.team ? (mode === "shoot" ? g.team.shoot : g.team.main) || [] : []; }
-function cgIn(k, mode){ return S.role === "owner" || !(cgOf(k) || {}).team || cgTeam(k, mode).includes(S.me); }
+// Membre du groupe (principal ou tournage) : seules les personnes cochées le voient, accès complet compris
+function cgIn(k, mode){ const g = cgOf(String(k).replace(/^tg:/, "")); if (!g) return false; if (g.in) return !!g.in[mode === "shoot" ? "shoot" : "main"]; return !g.team || cgTeam(k, mode).includes(S.me); }
 function cgMembersBox(k, mode){ const g = cgOf(String(k).replace(/^tg:/, "")); if (!g) return; const cur = new Set(cgTeam(k, mode));
   openModal(m => { m.classList.add("sheet"); const h = el("h3",null,(mode === "shoot" ? "Groupe tournage" : "Groupe principal") + ", " + g.name); h.id = "mtitle"; m.appendChild(h);
     m.appendChild(el("p","muted","Les personnes de l’équipe cochées voient ce groupe et reçoivent ses notifications. Le client voit leurs noms."));
@@ -2153,13 +2154,13 @@ function cgMembersBox(k, mode){ const g = cgOf(String(k).replace(/^tg:/, "")); i
       try { const r = await GC.api("POST","/api/g-cgroups/members", { id: g.id, mode, names: [...cur] }); g.team = r.team; closeModal(); toast("Membres enregistrés."); render(); } catch(e){ toast(e.message); } })); m.appendChild(a); }); }
 /* Les conversations d’un client : [type, canal, libellé] */
 function cliChans(name, mode, pre){ const n = norm(name), out = [], g = (S.cgroups || []).find(x => norm(x.name) === n);
-  if (g) out.push(["cli", pre + g.ch, "Avec le client"]);
+  if (g && cgIn(g.ch, mode)) out.push(["cli", pre + g.ch, "Avec le client"]);
   out.push(["int", pre + "c:" + (clientNames().find(x => norm(x) === n) || name), "Entre nous"]);
   if (mode !== "shoot") cdmChannels().filter(k => norm(cdmClient(k)) === n).forEach(k => out.push(["prv", k, "Privé"]));
   return out; }
 async function loadCgroups(){ try { const r = await GC.api("GET","/api/g-cgroups"); S.cgroups = r.groups || []; renderSoon(); } catch(e){} }
 const cliShown = () => { const acc = new Set((S.cgroups || []).map(g => norm(g.name))); return clientNames().filter(n => n !== AGENCE && (acc.has(norm(n)) || (S.d.messages || []).some(m => m.ch === "c:" + n || m.ch === "tg:c:" + n))); };
-function msgChannels(mode){ const pre = mode === "shoot" ? "tg:" : ""; return CHANNELS.map(c => pre + c[0]).concat(mode === "shoot" ? [] : dmChannels()).concat(mode === "shoot" ? cgChannels().map(k => "tg:" + k) : cgChannels().concat(cdmChannels())).concat(cliShown().map(n => pre + "c:" + n)); }
+function msgChannels(mode){ const pre = mode === "shoot" ? "tg:" : ""; return CHANNELS.map(c => pre + c[0]).concat(mode === "shoot" ? [] : dmChannels()).concat(mode === "shoot" ? cgChannels().filter(k => cgIn(k, "shoot")).map(k => "tg:" + k) : cgChannels().filter(k => cgIn(k, "main")).concat(cdmChannels())).concat(cliShown().map(n => pre + "c:" + n)); }
 function lastSeenAt(k){ let t = new Date().toISOString(); (S.d.messages || []).forEach(m => { if (m.ch === k && (m.at || "") > t) t = m.at; }); return t; }
 function seenKey(k){ return "seen_" + (S.me || "Gabriel") + "_" + k; }
 function unreadIn(k){ const me = S.me || "Gabriel", a = S.ui[seenKey(k)] || "", b = ((window.GC_LIVE || {}).mine || {})[k] || "", s = a > b ? a : b; return S.d.messages.filter(m => m.ch === k && m.who !== me && (m.at || "") > s).length; }
@@ -2572,7 +2573,7 @@ function vVocal(root){
     more.onclick = e => { e.stopPropagation(); VX_MENU = !VX_MENU; if (VX_MENU && (S.role === "owner" || canSee("commercial")) && !S.invites && !S.invLoading){ S.invLoading = true; GC.api("GET","/api/rtc/invites").then(r => { S.invites = r.invites; }).catch(() => { S.invites = []; }).finally(() => { S.invLoading = false; render(); }); } render(); };
     const wrapM = el("div","vx-mw"); wrapM.appendChild(more); if (VX_MENU) wrapM.appendChild(vxMenu()); a.appendChild(wrapM);
     tx.appendChild(a); h.append(orb, tx); root.appendChild(h);
-    const others = [].concat((S.d.vrooms || []).filter(r => (r.members || []).includes(S.me || "Gabriel")).map(r => [r.room, r.name])).concat((S.cgroups || []).map(x => [x.room, "Visio, " + x.name])).concat((S.invites || []).map(x => [x.room, x.label])).filter(([k]) => voiceHere(k).length && VC.room !== k);
+    const others = [].concat((S.d.vrooms || []).filter(r => (r.members || []).includes(S.me || "Gabriel")).map(r => [r.room, r.name])).concat((S.cgroups || []).filter(x => cgIn(x.ch, "main")).map(x => [x.room, "Visio, " + x.name])).concat((S.invites || []).map(x => [x.room, x.label])).filter(([k]) => voiceHere(k).length && VC.room !== k);
     if (others.length){ const lv = el("div","vx-live"); others.forEach(([k, l]) => { const c = el("button","vx-chip"); c.type = "button"; c.append(el("i"), el("span", null, l + " : " + voiceHere(k).join(", "))); c.onclick = () => vcJoin(k, l); lv.appendChild(c); }); root.appendChild(lv); }
   }
   root.appendChild(el("p","status","Le son et l’image passent directement d’un ordinateur à l’autre. On peut changer d’onglet pendant un appel : une barre reste en bas de l’écran."));
@@ -2697,6 +2698,12 @@ function vMessagerie(root){
   cliList.map(n => { const cs = cliChans(n, mode, pre), last = cs.slice().sort((a, b) => ((lastOf[b[1]] || {}).at || "").localeCompare((lastOf[a[1]] || {}).at || ""))[0]; return [n, cs, last]; })
     .sort((a, b) => ((lastOf[b[2][1]] || {}).at || "").localeCompare((lastOf[a[2][1]] || {}).at || "") || a[0].localeCompare(b[0]))
     .forEach(([n, cs, last]) => { const b = row(cs.some(c => c[1] === ch) ? ch : last[1], n); if (cs.some(c => c[1] === ch)) b.setAttribute("aria-pressed","true"); });
+  // Accès complet : groupes clients où l'on n'est pas, pour pouvoir s'y rajouter (on n'en voit pas les messages)
+  if (S.role === "owner"){ const out = (S.cgroups || []).filter(g => !cgIn(g.ch, mode)); if (out.length){ const lk = el("button","wa-more","Groupes " + (mode === "shoot" ? "tournage " : "") + "dont tu n’es pas membre (" + out.length + ")"); lk.type = "button";
+    lk.onclick = () => openModal(m => { const h = el("h3", null, "Groupes dont tu n’es pas membre"); h.id = "mtitle"; m.appendChild(h); m.appendChild(el("p","muted","Tu ne vois pas leurs messages. Ouvre un groupe pour changer ses membres."));
+      const l = el("div","cl-list"); l.style.cssText = "display:flex;flex-direction:column;gap:8px;margin:12px 0"; out.forEach(g => l.appendChild(btn(g.name, "", () => { closeModal(); setTimeout(() => cgMembersBox(pre + g.ch, mode), 50); }))); m.appendChild(l);
+      const a = el("div","actions"); a.appendChild(btn("Fermer","", closeModal)); m.appendChild(a); });
+    side.appendChild(lk); } }
 
   /* Conversation */
   const main = el("section","wa-conv");

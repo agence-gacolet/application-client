@@ -331,7 +331,12 @@ function openViewer(p, start, play){
   top.append(tt, x); ov.appendChild(top);
   const sl = slider(p, { full: true, start: start || 0 }); ov.appendChild(sl);
   const bot = el("div","cl-vbot");
-  if (p.text){ const cap = el("p","cl-vcap",p.text); bot.appendChild(cap); }
+  // Description : un bouton, puis le texte en grand sur tout l'écran (plus de petit texte à faire défiler sous la vidéo)
+  if (p.text){ const vb = el("button","cl-vdbtn","Voir la description"); vb.type = "button";
+    vb.onclick = () => { const d = el("div","cl-vdesc"); d.setAttribute("role","dialog"); d.setAttribute("aria-label","Description");
+      const h = el("div","cl-vdh"); h.appendChild(el("b",null,"Description")); const cx = el("button","cl-vx"); cx.type = "button"; cx.setAttribute("aria-label","Fermer la description"); cx.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>'; h.appendChild(cx);
+      d.append(h, el("p","cl-vdt",p.text)); const shut = () => d.remove(); cx.onclick = shut; tapClose(cx, shut); ov.appendChild(d); };
+    bot.appendChild(vb); }
   if (p.note) bot.appendChild(el("p","cl-note" + (p.status === "no" ? " no" : ""), (p.status === "no" ? "Votre raison : " : "Votre demande : ") + p.note));
   if (canDecide(p)){ const a = el("div","cl-acts");
     a.append(btn("Valider","lemon", () => { close(); decide(p, "ok"); }), btn("Demander une modification","", () => { close(); modSheet(p); }));
