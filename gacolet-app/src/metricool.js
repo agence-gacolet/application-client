@@ -67,6 +67,7 @@ function mapPost(p) {
     media: media.map(u => ({ url: u, video: /\.(mp4|mov|webm)(\?|$)/i.test(u) })),
     published,
     url: igUrl,
+    review: reviewOf(p),
   };
 }
 
@@ -92,7 +93,28 @@ async function fetchMonth(blogId, month) {
 
 // Oublie le planning gardé en mémoire d'une marque (dépôt d'une publication à valider)
 function forget(blogId) { for (const k of [...cache.keys()]) if (k.startsWith(String(blogId) + ":")) cache.delete(k); }
-module.exports = { publishDraft, fetchScheduled, fetchMonth, forget };
+module.exports = { publishDraft, fetchScheduled, fetchMonth, forget, reviewDecision };
+
+// Publication envoyée « en vérification » dans Metricool : identifiants nécessaires pour l'approuver ou la refuser
+function reviewOf(p) {
+  const a = p.postApprovalData; if (!a || a.approvalStatus !== "pending") return null;
+  const ids = (a.approvalEvents || []).filter(e => !e.deleted && e.status === "pending").map(e => e.reviewerId);
+  return ids.length ? { uuid: String(p.uuid || (a.approvalEvents[0] || {}).postUuid || ""), reviewers: ids } : null;
+}
+
+// Décision du client dans son espace, reportée dans Metricool : « ok » approuve, « mod » refuse avec la note
+async function reviewDecision(blogId, mcId, review, status, note) {
+  const tok = process.env.METRICOOL_USER_TOKEN; if (!tok || !blogId || !review || !review.uuid) return false;
+  const id = String(mcId).replace(/^mc/, ""), q = new URLSearchParams({ blogId, userId: process.env.METRICOOL_USER_ID || "" });
+  let ok = true;
+  for (const reviewerId of review.reviewers) {
+    const body = { postUuid: review.uuid, reviewerId, status: status === "ok" ? "approved" : "rejected" };
+    if (status !== "ok" && note) body.noteContent = String(note).slice(0, 2000);
+    const r = await fetch(BASE + "/v2/scheduler/posts/" + id + "/approvals?" + q, { method: "PUT", headers: { "X-Mc-Auth": tok, Accept: "application/json", "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!r.ok) { ok = false; console.error("Metricool approbation", id, r.status, (await r.text()).slice(0, 300)); }
+  }
+  forget(blogId); return ok;
+}
 
 // Brouillon soumis au client puis validé dans son espace : il passe en publication programmée (même contenu, draft à false)
 async function publishDraft(blogId, mcId, day) {

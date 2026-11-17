@@ -6,7 +6,7 @@ const crypto = require("crypto");
 const express = require("express");
 const multer = require("multer");
 const db = require("./src/db");
-const { fetchScheduled, publishDraft } = require("./src/metricool");
+const { fetchScheduled, publishDraft, reviewDecision } = require("./src/metricool");
 
 const app = express();
 app.disable("x-powered-by");
@@ -76,6 +76,7 @@ app.post("/api/register", wrap(async (req, res) => {
   res.json({ token });
 }));
 
+const syncedReview = new Set();
 // Tout ce que l'application affiche, en un appel
 app.get("/api/me", mw(auth), wrap(async (req, res) => {
   const c = req.client, u = req.user, m = mods(c);
@@ -91,7 +92,10 @@ app.get("/api/me", mw(auth), wrap(async (req, res) => {
   }
   const decs = await db.all("SELECT d.*, u.prenom, u.nom FROM decisions d JOIN users u ON u.id = d.user_id WHERE d.client_id = ? ORDER BY d.id", [c.id]);
   const last = {}; decs.forEach(d => { last[d.post_id] = d; });
-  posts = posts.map(p => {
+  // Décision prise dans l'appli mais publication encore « en vérification » dans Metricool : on la renvoie (une fois par démarrage)
+  for (const p of posts) { const d = last[p.id]; if (p.review && d && !syncedReview.has(p.id + d.status)) { syncedReview.add(p.id + d.status);
+    reviewDecision(c.metricool_blog_id, p.id, p.review, d.status, d.note).catch(e => console.error("reviewDecision", e.message)); } }
+  posts = posts.map(({ review, ...p }) => {
     const d = last[p.id];
     return { ...p, status: d ? d.status : p.published ? "ok" : "wait", note: d ? d.note || "" : "", decidedBy: d ? d.prenom + " " + d.nom : "", decidedAt: d ? d.created_at : "" };
   });
@@ -120,6 +124,9 @@ app.post("/api/decision", mw(auth), wrap(async (req, res) => {
   await db.run("INSERT INTO decisions (client_id, post_id, post_title, post_date, status, note, user_id, created_at) VALUES (?,?,?,?,?,?,?,?)",
     [req.client.id, postId, clean(title, 200), clean(date, 30), status, clean(note, 2000), req.user.id, now()]);
   // Publication déposée « en validation client » : validée ici, elle passe de brouillon à programmée dans Metricool
+  // Publication « en vérification » dans Metricool : la décision y est reportée (approuvée, ou refusée avec la note)
+  if (req.client.metricool_blog_id) { try { const p = (await fetchScheduled(req.client.metricool_blog_id)).find(x => x.id === postId);
+    if (p && p.review) { syncedReview.add(postId + status); await reviewDecision(req.client.metricool_blog_id, postId, p.review, status, clean(note, 2000)); } } catch (e) { console.error("reviewDecision", e.message); } }
   if (status === "ok") { try { const rv = await db.one("SELECT data FROM docs WHERE col = '_prodrev' AND id = ? AND deleted = 0", [postId]);
     if (rv) { const ok = await publishDraft(req.client.metricool_blog_id, postId, String(date || "").slice(0, 10)); if (ok) await db.run("UPDATE docs SET deleted = 1 WHERE col = '_prodrev' AND id = ?", [postId]); } } catch (e) { console.error("publishDraft", e.message); } }
   res.json({ ok: true });
