@@ -34,7 +34,11 @@ html,body{background:#090908}
 .sh-scroll{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 0 calc(16px + env(safe-area-inset-bottom,0px))}
 .sh-box.full{cursor:default;max-width:820px;margin:0 auto}
 
-/* Page « Bienvenue » (code client) sur téléphone : sous l'heure, jamais collée en haut, pas de saut */
+/* Page « Bienvenue » (code client) : en haut de l'écran, sous l'heure ; le clavier ne recouvre jamais la case, rien ne remonte ni ne glisse */
+.cl-onb-mark{width:64px;height:auto;margin:0 0 26px}
+.cl-onb-mark svg{display:block;width:100%;height:auto;fill:#C6FF33}
 @media (max-width:900px){
-  .login{padding:calc(24px + env(safe-area-inset-top,0px)) 20px calc(24px + env(safe-area-inset-bottom,0px));align-items:center}
+  .login{place-items:start center;align-items:start;padding:calc(36px + env(safe-area-inset-top,0px)) 20px calc(24px + env(safe-area-inset-bottom,0px));overflow:hidden}
+  .cl-onb{padding:0}
+  .cl-onb .cl-steps{margin:0 0 22px}
 }

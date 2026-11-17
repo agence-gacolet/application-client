@@ -803,19 +803,23 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
 $("#logout").onclick = () => confirmBox("Se déconnecter ?", "Il faudra saisir à nouveau votre code sur cet appareil.", "Se déconnecter", () => { TOKEN = null; ls.del("gc-token"); start(); });
 
 /* ---------- Inscription avec le code de l’agence ---------- */
+const TOUCH = navigator.maxTouchPoints > 0 || "ontouchstart" in window;
 function onboard(){
   $("#shell").hidden = true; const box = $("#login"); box.hidden = false;
   let step = 0, info = null;
   const d = Object.assign({ code:"", prenom:"", nom:"", entreprise:"", email:"", tel:"", activite:"", zone:"", reseaux:[], objectif:"", clientele:"", dispo:"" }, JSON.parse(ls.get("gc-draft") || "{}"));
   const keep = () => ls.set("gc-draft", JSON.stringify(d));
-  const field = (label, k, o = {}) => { const id = "onb-" + k; const l = el("label",null,label); l.htmlFor = id; const i = el(o.area ? "textarea" : "input"); i.id = id; if (!o.area) i.type = o.type || "text"; else i.rows = 3; i.value = d[k] || ""; if (o.ph) i.placeholder = o.ph; if (o.ac) i.autocomplete = o.ac; i.oninput = () => { d[k] = i.value; keep(); }; return [l, i]; };
+  const field = (label, k, o = {}) => { const id = "onb-" + k; const l = el("label",null,label); l.htmlFor = id; const i = el(o.area ? "textarea" : "input"); i.id = id; if (!o.area) i.type = o.type || "text"; else i.rows = 3; i.value = d[k] || ""; if (o.ph) i.placeholder = o.ph; if (o.ac) i.autocomplete = o.ac; i.oninput = () => { d[k] = i.value; keep(); };
+    /* Téléphone : la case reste verrouillée tant qu’on ne l’a pas touchée, sinon l’iPhone ouvre le clavier tout seul et fait sauter la page (Matis, 17/11) */
+    if (TOUCH){ i.readOnly = true; const open = () => { if (i.readOnly){ i.readOnly = false; i.focus(); } }; i.addEventListener("touchend", open); i.addEventListener("click", open); }
+    return [l, i]; };
   const chips = (label, k, opts, multi) => { const w = el("div","cl-chipf"); w.appendChild(el("label",null,label)); const c = el("div","cl-chips");
     opts.forEach(o => { const b = el("button",null,o); b.type = "button"; const on = () => multi ? d[k].includes(o) : d[k] === o; b.setAttribute("aria-pressed", String(on()));
       b.onclick = () => { if (multi) d[k] = on() ? d[k].filter(x => x !== o) : d[k].concat(o); else d[k] = o; keep(); c.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(multi ? d[k].includes(x.textContent) : d[k] === x.textContent))); }; c.appendChild(b); });
     w.appendChild(c); return w; };
   function draw(){
     box.textContent = ""; const f = el("form","login-card cl-onb"); f.noValidate = true;
-    const lg = el("span","logo lg"); lg.append(el("span",null,"AGENCE"), el("span",null,"GACOLET")); f.appendChild(lg);
+    const lg = el("div","cl-onb-mark"); lg.innerHTML = LOGO; lg.setAttribute("aria-label","Agence Gacolet"); f.appendChild(lg);
     const st = el("div","cl-steps"); for (let i = 0; i < 2; i++) st.appendChild(el("i", i <= step ? "on" : null)); f.appendChild(st);
     const er = el("p","err"); er.setAttribute("role","alert");
     const sb = el("button","btn solid", step === 1 ? "Ouvrir mon espace" : "Continuer"); sb.type = "submit";
@@ -837,8 +841,7 @@ function onboard(){
       try { const msg = await check(); if (msg === "stop") return; if (msg){ er.textContent = msg; return; } step++; draw(); } catch(x){ er.textContent = x.message; } finally { sb.disabled = false; } };
     box.appendChild(f); const f1 = f.querySelector("input,textarea");
     /* Téléphone : pas de clavier qui surgit tout seul (il recouvrait l’animation du logo et faisait sauter la page) ; on touche la case pour écrire */
-    const touch = navigator.maxTouchPoints > 0 || "ontouchstart" in window;
-    if (f1 && !touch) f1.focus({ preventScroll: true });
+    if (f1 && !TOUCH) f1.focus({ preventScroll: true });
     else if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
   }
   draw();
