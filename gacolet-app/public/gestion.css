@@ -2155,3 +2155,12 @@ body.kb .mtabs{display:none}
   .wa-head .wa-hbtn{flex:none;padding:5px 9px!important;min-height:0!important;font-size:12px!important;border-radius:999px}
   .wa-head .wa-htx{flex:1 1 auto;min-width:0}
 }
+/* Téléphone, messagerie : on ne fige plus toute la page (l'iPhone décalait alors la barre du bas de la hauteur de l'heure) ;
+   seule la messagerie est fixée, entre l'heure et la barre du bas, qui ne bouge plus (Matis, 17/11) */
+@media (max-width:900px){
+  html:has(body.chat-full){overflow:hidden;height:100%;overscroll-behavior:none}
+  body.chat-full{position:static!important;inset:auto!important;overflow:hidden;height:100%}
+  body.chat-full .wa{position:fixed!important;left:0;right:0;top:env(safe-area-inset-top,0px);bottom:var(--tabh,64px);height:auto!important;margin:0;z-index:20}
+  body.chat-full:has(.wa.show-conv) .wa{bottom:0}
+  body.kb.chat-full .wa,body.kb.chat-full:has(.wa.show-conv) .wa{top:var(--kbt,0px)!important;bottom:auto!important;height:var(--kbh,100dvh)!important}
+}

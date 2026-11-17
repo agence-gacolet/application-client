@@ -30,7 +30,7 @@
 <meta name="apple-mobile-web-app-title" content="Gacolet">
 <link rel="preload" href="/fonts/inter.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/bebas-neue.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/gestion.css?v=55">
+<link rel="stylesheet" href="/gestion.css?v=56">
 <link rel="stylesheet" href="/mobile.css?v=14">
 </head>
 <body>
@@ -81,6 +81,7 @@
   </header>
   <main class="main"><div class="in" id="app"></div></main>
   <nav class="mtabs" id="mtabs" aria-label="Modules"></nav>
+<script>/* Hauteur réelle de la barre du bas, pour caler la messagerie juste au-dessus (Matis, 17/11) */(function(){var m=document.getElementById("mtabs");if(!m||!window.ResizeObserver)return;new ResizeObserver(function(){if(m.offsetHeight)document.documentElement.style.setProperty("--tabh",m.offsetHeight+"px")}).observe(m)})();</script>
   <p class="offline" role="status">Hors connexion : les modifications reprendront au retour du réseau.</p>
 </div>
 

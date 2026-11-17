@@ -158,14 +158,17 @@ function vAccueil(root){
   const h1 = el("h1","w2-h"); h1.append(document.createTextNode(hello + " "), el("span", null, prenom)); W.appendChild(h1);
   W.appendChild(el("p","w2-say", say));
   const tiles = [[w, w > 1 ? "publications à valider" : "publication à valider", "valider", "Tout est validé"], [u, u > 1 ? "nouveaux messages" : "nouveau message", "messagerie", "Rien de nouveau"]];
-  W.appendChild(el("h2","w2-lab","En bref"));
   const s = el("div","w2-tiles");
   tiles.filter(t => t[2] === "messagerie" || pg(t[2]) === "on").forEach(([n, l, v, z], i) => { const t = el("button","w2-tile" + (n ? "" : " zero")); t.type = "button"; t.style.animationDelay = (0.45 + i*0.08) + "s"; t.append(el("b",null,String(n)), el("span",null,l)); if (!n) t.appendChild(el("i",null,z)); t.onclick = () => go(v); s.appendChild(t); });
   W.appendChild(s);
   const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone;
   if (!standalone){ const ios = /iphone|ipad|ipod/i.test(navigator.userAgent); W.appendChild(el("p","cl-install", ios ? "Astuce : dans Safari, bouton Partager puis « Sur l’écran d’accueil » pour garder l’application à portée de main." : "Astuce : installez l’application depuis le menu du navigateur pour la garder à portée de main.")); }
   root.appendChild(W);
+  /* Phrase d’accueil et phrase du dessous : toujours sur une seule ligne, la taille s’adapte à la largeur (Matis, 17/11) */
+  requestAnimationFrame(() => W.querySelectorAll(".w2-h,.w2-say").forEach(fitLine));
 }
+function fitLine(n){ n.style.whiteSpace = "nowrap"; n.style.fontSize = ""; let fs = parseFloat(getComputedStyle(n).fontSize), max = n.parentElement.clientWidth;
+  while (n.scrollWidth > max && fs > 12){ fs -= 1; n.style.fontSize = fs + "px"; } }
 
 /* ---------- Tournages : la feuille préparée par l’agence, à valider avant le jour J ---------- */
 const SH_LABEL = { wait: "À valider", ok: "Validée", mod: "Changements demandés", no: "Refusée" };
@@ -347,8 +350,13 @@ function vValider(root){
   if (!list.length){ root.appendChild(el("p","empty", S.pf === "wait" ? "Rien en attente. On vous prévient dès que la suite est prête." : "Rien ici pour l’instant.")); return; }
   const g = el("div","cl-posts");
   list.forEach(p => {
-    const c = el("article","cl-post");
-    if ((p.media || []).length) c.appendChild(slider(p, { onOpen: (i, play) => openViewer(p, i, play) }));
+    const c = el("article","cl-post cl-tcard");
+    /* Aperçu en petit (première image ou première image de la vidéo) : on le touche pour voir en grand (Matis, 17/11) */
+    if ((p.media || []).length){ const m0 = p.media[0], th = el("button","cl-thumb" + (isTall(p) ? " tall" : "")); th.type = "button"; th.setAttribute("aria-label","Voir en grand");
+      if (m0.video){ const v = document.createElement("video"); v.src = vsrc(m0.url); v.muted = true; v.playsInline = true; v.preload = "metadata"; th.appendChild(v); const pl = el("span","cl-tplay"); pl.innerHTML = '<svg viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg>'; th.appendChild(pl); }
+      else { const im = document.createElement("img"); im.src = m0.url; im.alt = ""; im.loading = "lazy"; th.appendChild(im); }
+      th.appendChild(el("span","cl-ttype", typeLabel(p)));
+      th.onclick = () => openViewer(p, 0, !!m0.video); c.appendChild(th); }
     const b = el("div","cl-pb");
     const meta = el("div","cl-pmeta"); meta.append(el("span","pill" + (p.status === "wait" ? " l3" : p.status === "no" ? " no" : ""), ST_LABEL[p.status] || ""), el("span",null, fmtDL(p.date) + (p.time ? ", " + fmtTime(p.time) : "")), el("span",null,p.net || ""));
     b.appendChild(meta);
@@ -762,7 +770,7 @@ function render(){
   /* Entrée dans la messagerie : remonter en haut AVANT de figer la page, sinon l’iPhone garde le décalage et la barre du bas remonte (Matis, 17/11) */
   if (enter) window.scrollTo(0, 0);
   const keepY = chat ? 0 : window.scrollY;
-  renderTabs(); root.textContent = ""; document.body.classList.toggle("chat-full", chat);
+  renderTabs(); root.textContent = ""; document.body.classList.toggle("chat-full", chat); document.body.classList.toggle("cl-home", S.view === "accueil"); /* Accueil immobile (Matis, 17/11) */
   R[S.view](root);
   window.scrollTo(0, keepY);
   if (fid){ const n = document.getElementById(fid); if (n){ n.focus({ preventScroll: true }); try { if (caret != null) n.setSelectionRange(caret, caret); } catch(e){} } }
