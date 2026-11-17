@@ -3688,10 +3688,15 @@ function envoyer() {
 }
 /* Clé Claude (API Anthropic) : descriptions proposées dans le dépôt de productions */
 function pmClaude(w){
-  const c = pmCard("Claude (descriptions des publications)", "Facultatif. Sans clé, les descriptions de l’onglet Dépôt sont écrites par Claude depuis le Mac de l’agence, avec l’abonnement, en 10 minutes au plus. Une clé (console.anthropic.com, payée à l’usage) les rend instantanées.");
+  const c = pmCard("Claude (descriptions des publications)", "Les descriptions du Dépôt sont écrites par le Mac mini de l’agence : il transcrit la vidéo puis Claude écrit, avec l’abonnement (1 à 2 minutes). La clé Claude payante ci-dessous est facultative.");
   w.appendChild(c);
-  if (S.cla == null){ S.cla = ""; GC.api("GET","/api/g-prod/status").then(r => { S.cla = r.claude ? "on" : "off"; render(); }).catch(() => {}); }
-  c.appendChild(el("p","note", S.cla === "on" ? "Relié : propositions instantanées." : "Pas de clé : les propositions passent par le Mac de l’agence (10 minutes au plus)."));
+  if (S.cla == null){ S.cla = ""; GC.api("GET","/api/g-prod/status").then(r => { S.cla = r.claude ? "on" : "off"; S.claW = r; render(); }).catch(() => {}); }
+  { const W = S.claW || {}, seen = W.workerSeen ? Date.now() - Date.parse(W.workerSeen) : Infinity;
+    c.appendChild(el("p","note", !W.worker ? "Mac mini : pas encore relié. Colle ci-dessous la clé copiée sur le Mac mini." : seen < 120000 ? "Mac mini relié et allumé : descriptions en 1 à 2 minutes." : "Mac mini relié mais pas vu depuis un moment : vérifie qu’il est allumé (sinon, l’autre Mac prend le relais toutes les 10 minutes)."));
+    const f2 = el("div","form"), l2 = el("label", null, W.worker ? "Remplacer la clé du Mac mini" : "Clé du Mac mini"), i2 = el("input"); i2.type = "password"; i2.autocomplete = "off"; l2.appendChild(i2); f2.appendChild(l2); c.appendChild(f2);
+    const a2 = el("div","pm-actions"), b2 = btn("Relier le Mac mini", W.worker ? "" : "lemon", async () => { if (!i2.value.trim()) return toast("Colle d’abord la clé."); b2.disabled = true; try { await GC.api("PUT","/api/g-keys/desc", { key: i2.value.trim() }); i2.value = ""; S.cla = null; toast("Mac mini relié."); render(); } catch(e){ toast(e.message); b2.disabled = false; } });
+    a2.appendChild(b2); c.appendChild(a2); }
+  c.appendChild(el("p","note", S.cla === "on" ? "Clé Claude payante : reliée." : "Clé Claude payante : aucune (pas nécessaire)."));
   const f = el("div","form"), l = el("label", null, S.cla === "on" ? "Remplacer la clé" : "Clé Claude"), i = el("input"); i.type = "password"; i.autocomplete = "off"; i.placeholder = "sk-ant-…"; l.appendChild(i); f.appendChild(l); c.appendChild(f);
   const a = el("div","pm-actions"), b = btn("Enregistrer la clé", S.cla === "on" ? "" : "lemon", async () => { if (!i.value.trim()) return toast("Colle d’abord la clé."); b.disabled = true; try { await GC.api("PUT","/api/g-keys/anthropic", { key: i.value.trim() }); i.value = ""; S.cla = "on"; toast("Claude relié."); render(); } catch(e){ toast(e.message); b.disabled = false; } });
   a.appendChild(b); c.appendChild(a);

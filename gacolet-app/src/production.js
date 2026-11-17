@@ -78,12 +78,22 @@ module.exports = function production({ app, auth, wrap, db, current, put, pubPla
   app.get("/api/g-prod/describe/:id", auth, wrap(async (req, res) => { const q = await current("_descq", String(req.params.id)); if (!q) return res.status(404).json({ error: "Demande introuvable." }); res.json({ status: q.status, propositions: q.propositions || [], transcript: q.transcript || "", error: q.error || "" }); }));
   app.get("/api/g-prod/queue", macAuth, wrap(async (req, res) => {
     const base = (req.get("x-forwarded-proto") || req.protocol) + "://" + req.get("host");
-    const list = (await docsOf("_descq")).filter(q => q.status === "wait").sort((a, b) => String(a.at).localeCompare(String(b.at))).slice(0, 10);
+    if (req.get("x-desc-key")) workerSeen = Date.now();
+    // Demande prise par un Mac mais sans réponse depuis 10 minutes : de nouveau disponible
+    const list = (await docsOf("_descq")).filter(q => q.status === "wait" || (q.status === "run" && Date.now() - Date.parse(q.runAt || 0) > 600000)).sort((a, b) => String(a.at).localeCompare(String(b.at))).slice(0, 10);
     const out = []; for (const q of list) { const { fiche, strat } = await clientContext(q.client); out.push({ id: q.id, client: q.client, kind: q.kind, subject: q.subject || "", media: q.url ? base + q.url : "", file: q.file || "", fiche: { formula: fiche.formula || "", networks: fiche.networks || "", remember: fiche.remember || "" }, strategie: strat.slice(0, 6000) }); }
     res.json({ rules: RULES, items: out });
   }));
+  let workerSeen = 0;
+  // Un Mac prend une demande : les autres ne la voient plus (pas de travail en double)
+  app.post("/api/g-prod/queue/:id/claim", macAuth, wrap(async (req, res) => {
+    const id = String(req.params.id), q = await current("_descq", id); if (!q) return res.status(404).json({ error: "Demande introuvable." });
+    if (q.status === "done" || (q.status === "run" && Date.now() - Date.parse(q.runAt || 0) < 600000)) return res.status(409).json({ error: "Déjà prise." });
+    await put("_descq", id, Object.assign(q, { status: "run", runAt: new Date().toISOString(), runBy: (req.user && req.user.name) || "" })); res.json({ ok: true });
+  }));
   app.post("/api/g-prod/queue/:id", macAuth, wrap(async (req, res) => {
     const id = String(req.params.id), q = await current("_descq", id); if (!q) return res.status(404).json({ error: "Demande introuvable." });
+    if ((req.body || {}).error) { await put("_descq", id, Object.assign(q, { status: "error", error: String(req.body.error).slice(0, 300) })); return res.json({ ok: true }); }
     const props = (Array.isArray((req.body || {}).propositions) ? req.body.propositions : []).map(x => String(x).trim().slice(0, 2200)).filter(Boolean).slice(0, 3);
     if (!props.length) return res.status(400).json({ error: "Aucune proposition." });
     await put("_descq", id, Object.assign(q, { status: "done", propositions: props, transcript: String((req.body || {}).transcript || "").trim().slice(0, 12000), doneAt: new Date().toISOString() })); res.json({ ok: true });
@@ -201,7 +211,7 @@ module.exports = function production({ app, auth, wrap, db, current, put, pubPla
     if (upDir) { try { fsP.unlinkSync(pathP.join(upDir, fn)); } catch (e) {} }
     res.json({ ok: true });
   }));
-  app.get("/api/g-prod/status", auth, (req, res) => res.json({ claude: !!process.env.ANTHROPIC_API_KEY, queue: true, metricool: !!process.env.METRICOOL_USER_TOKEN }));
+  app.get("/api/g-prod/status", auth, (req, res) => res.json({ claude: !!process.env.ANTHROPIC_API_KEY, queue: true, metricool: !!process.env.METRICOOL_USER_TOKEN, worker: !!process.env.DESC_KEY, workerSeen: workerSeen ? new Date(workerSeen).toISOString() : "" }));
   app.put("/api/g-keys/anthropic", auth, wrap(async (req, res) => {
     if (req.user.role !== "owner") return res.status(403).json({ error: "Réservé à l’accès complet." });
     const k = String((req.body || {}).key || "").trim(); if (!/^sk-ant-[\w-]{20,}$/.test(k)) return res.status(400).json({ error: "Une clé Claude commence par « sk-ant- »." });

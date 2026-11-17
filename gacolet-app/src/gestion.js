@@ -1403,7 +1403,7 @@ module.exports = function (app, { db, wrap, root }) {
   // Dépôt de productions (descriptions Claude + programmation Metricool)
   const persistKey = (name, val) => { const ENV = path.join(root, ".env"); let txt = ""; try { txt = fs.readFileSync(ENV, "utf8"); } catch (e) {}
     txt = txt.split("\n").filter(l => l && !l.startsWith(name + "=")).join("\n") + "\n" + name + "='" + val + "'\n"; fs.writeFileSync(ENV, txt.replace(/^\n+/, ""), { mode: 0o600 }); process.env[name] = val; };
-  require("./production")({ app, auth, wrap, db, current, put, pubPlan: PUB_PLAN, persistKey, upDir: DIR, macAuth: (req, res, next) => deployAuth(req, res, next) });
+  require("./production")({ app, auth, wrap, db, current, put, pubPlan: PUB_PLAN, persistKey, upDir: DIR, macAuth: (req, res, next) => descKeyOk(req) ? (req.user = { name: "Mac des descriptions", role: "owner" }, next()) : deployAuth(req, res, next) });
   require("./metaads")({ app, auth, ownerOnly, wrap, db, put, current, persistKey });
   app.get("/api/g-pubs", auth, wrap(async (req, res) => {
     const mk = /^\d{4}-\d{2}$/.test(String(req.query.month || "")) ? req.query.month : new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Paris" }).slice(0, 7);
@@ -1595,6 +1595,12 @@ module.exports = function (app, { db, wrap, root }) {
   const run = (cmd, args) => new Promise(ok => execFile(cmd, args, { cwd: root, timeout: 180000, maxBuffer: 4e6 }, (err, out, er) => ok({ code: err ? (err.code || 1) : 0, out: String(out || "") + String(er || "") })));
   // Accès : Matis connecté, ou la clé de mise en ligne gardée dans le trousseau du Mac de Matis (en-tête X-Deploy-Key)
   const deployKeyOk = req => { const k = String(req.get("x-deploy-key") || ""), want = process.env.DEPLOY_KEY || ""; return want.length >= 32 && k.length === want.length && crypto.timingSafeEqual(Buffer.from(k), Buffer.from(want)); };
+  // Clé propre au Mac qui écrit les descriptions du Dépôt : n'ouvre que la file des descriptions, jamais la mise en ligne
+  function descKeyOk(req) { const k = String(req.get("x-desc-key") || ""), want = process.env.DESC_KEY || ""; return want.length >= 32 && k.length === want.length && crypto.timingSafeEqual(Buffer.from(k), Buffer.from(want)); }
+  app.put("/api/g-keys/desc", auth, ownerOnly, wrap(async (req, res) => {
+    const k = String((req.body || {}).key || "").trim(); if (!/^[A-Za-z0-9_-]{32,128}$/.test(k)) return res.status(400).json({ error: "Clé invalide : colle la clé copiée sur le Mac." });
+    persistKey("DESC_KEY", k); res.json({ ok: true });
+  }));
   const deployAuth = (req, res, next) => deployKeyOk(req) ? (req.user = { name: "Matis (Mac)", role: "owner" }, next()) : auth(req, res, () => onlyMatis(req, res, next));
   const onlyMatis = (req, res, next) => req.user && req.user.role === "owner" && req.user.name === "Matis" ? next() : res.status(403).json({ error: "Réservé à Matis." });
   // Enregistre la clé de mise en ligne dans le .env du serveur (accès complet, une fois)
