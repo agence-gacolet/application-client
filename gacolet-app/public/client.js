@@ -714,31 +714,21 @@ function onboard(){
   function draw(){
     box.textContent = ""; const f = el("form","login-card cl-onb"); f.noValidate = true;
     const lg = el("span","logo lg"); lg.append(el("span",null,"AGENCE"), el("span",null,"GACOLET")); f.appendChild(lg);
-    const st = el("div","cl-steps"); for (let i = 0; i < 4; i++) st.appendChild(el("i", i <= step ? "on" : null)); f.appendChild(st);
+    const st = el("div","cl-steps"); for (let i = 0; i < 2; i++) st.appendChild(el("i", i <= step ? "on" : null)); f.appendChild(st);
     const er = el("p","err"); er.setAttribute("role","alert");
-    const sb = el("button","btn solid", step === 2 ? "Terminer" : "Continuer"); sb.type = "submit";
+    const sb = el("button","btn solid", step === 1 ? "Ouvrir mon espace" : "Continuer"); sb.type = "submit";
     let check = async () => "";
+    // Deux écrans seulement : le code, puis le prénom. Pas de questionnaire, l’agence connaît déjà le client.
     if (step === 0){
-      f.append(el("h1",null,"Bienvenue"), el("p",null,"Entrez le code reçu par courriel de l’agence. Il relie l’application à votre compte."));
+      f.append(el("h1",null,"Bienvenue"), el("p",null,"Entrez le code reçu de l’agence. Il relie l’application à votre compte."));
       const [l, i] = field("Votre code client","code",{ ph:"GAC-XXXX-XX", ac:"one-time-code" }); i.autocapitalize = "characters"; i.spellcheck = false; i.classList.add("cl-code"); f.append(l, i);
       check = async () => { const r = await api("/api/code", { body: { code: d.code } }); d.code = r.code; info = r.client; keep(); };
-    } else if (step === 1){
-      if (!d.entreprise && info) d.entreprise = info.name;
-      f.append(el("h1",null,"Vous êtes"), el("p",null, info ? "Compte " + info.name + ". Pour savoir à qui l’on parle." : "Pour savoir à qui l’on parle."));
-      const g = el("div","cl-g2"); const a = el("div"), b = el("div"); a.append(...field("Prénom","prenom",{ ac:"given-name" })); b.append(...field("Nom","nom",{ ac:"family-name" })); g.append(a, b); f.appendChild(g);
-      f.append(...field("Entreprise","entreprise",{ ac:"organization" }), ...field("Courriel","email",{ type:"email", ac:"email" }), ...field("Téléphone, facultatif","tel",{ type:"tel", ac:"tel" }));
-      check = async () => { if (!d.prenom.trim() || !d.nom.trim()) return "Indiquez votre prénom et votre nom."; if (!d.entreprise.trim()) return "Indiquez le nom de votre entreprise."; if (!/^\S+@\S+\.\S+$/.test(d.email.trim())) return "Indiquez une adresse courriel valide."; };
-    } else if (step === 2){
-      f.append(el("h1",null,"Votre métier"), el("p",null,"Quelques questions pour préparer vos contenus. Deux minutes, pas plus."));
-      f.append(...field("Votre activité","activite",{ ph:"Ex. menuiserie sur mesure, portes et escaliers" }), ...field("Ville et zone d’intervention","zone",{ ph:"Ex. Nîmes et 30 km autour" }),
-        chips("Réseaux déjà utilisés","reseaux",["Instagram","Facebook","TikTok","LinkedIn","Fiche Google","Aucun"],true),
-        chips("Objectif principal","objectif",["Plus de demandes de devis","Recruter","Faire connaître la marque","Remplir l’agenda"],false),
-        ...field("Vos clients types","clientele",{ ph:"Ex. particuliers propriétaires, 35 à 60 ans" }), ...field("Meilleurs moments pour tourner chez vous","dispo",{ area:true, ph:"Ex. mardi et jeudi matin, à l’atelier ou sur chantier" }));
-      check = async () => { if (!d.activite.trim()) return "Décrivez votre activité en quelques mots."; if (!d.objectif) return "Choisissez votre objectif principal.";
-        const r = await api("/api/register", { body: d }); TOKEN = r.token; ls.set("gc-token", TOKEN); ls.del("gc-draft"); };
     } else {
-      f.append(el("h1",null,"C’est prêt"), el("p",null,"Merci " + d.prenom.trim() + ". L’agence a bien reçu vos informations."));
-      sb.textContent = "Ouvrir mon espace"; check = async () => { location.hash = "accueil"; start(); return "stop"; };
+      f.append(el("h1",null,"Votre prénom"), el("p",null, (info ? "Espace " + info.name + ". " : "") + "Pour que l’agence sache qui valide et qui écrit."));
+      f.append(...field("Prénom","prenom",{ ac:"given-name" }));
+      check = async () => { if (!d.prenom.trim()) return "Indiquez votre prénom.";
+        const r = await api("/api/register", { body: { code: d.code, prenom: d.prenom.trim() } }); TOKEN = r.token; ls.set("gc-token", TOKEN); ls.del("gc-draft");
+        location.hash = "accueil"; start(); return "stop"; };
     }
     f.append(er, sb);
     f.onsubmit = async e => { e.preventDefault(); er.textContent = ""; sb.disabled = true;

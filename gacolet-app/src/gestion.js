@@ -1060,7 +1060,10 @@ module.exports = function (app, { db, wrap, root }) {
     if (!c) return res.status(401).json({ error: "Compte désactivé. Contactez l’agence." });
     if (u.email === PREVIEW_MAIL && req.method !== "GET") return res.status(403).json({ error: "Aperçu de l’agence : lecture seule, rien n’est envoyé." });
     req.cu = u; req.cl = c; const cap = x => { x = String(x || "").trim(); return x.charAt(0).toUpperCase() + x.slice(1); };
-    req.cname = (cap(u.prenom) + " " + cap(u.nom)).trim() || c.name; next();
+    req.cname = (cap(u.prenom) + " " + cap(u.nom)).trim() || c.name;
+    // Aperçu de l’agence : l’accueil dit bonjour comme au client (première personne inscrite, sinon le nom du client), pas « équipe »
+    if (u.email === PREVIEW_MAIL) { const p = await db.one("SELECT prenom, nom FROM users WHERE client_id = ? AND email NOT LIKE '%@agence.interne' AND token NOT LIKE 'retire-%' ORDER BY id LIMIT 1", [c.id]); req.cname = p ? (cap(p.prenom) + " " + cap(p.nom)).trim() : c.name; }
+    next();
   })().catch(e => { console.error(e); res.status(500).json({ error: "Erreur du serveur." }); });
   const cgOf = c => "cg:" + c.id;
   const visioRoom = id => "visio" + String(id).split("").map(x => "abcdefghij"[Number(x)]).join("");

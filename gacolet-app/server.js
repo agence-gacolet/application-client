@@ -64,7 +64,10 @@ app.post("/api/register", wrap(async (req, res) => {
   const b = req.body || {};
   const c = await db.one("SELECT * FROM clients WHERE code = ? AND active = 1", [normCode(b.code)]);
   if (!c) return res.status(404).json({ error: "Code non reconnu." });
-  if (!clean(b.prenom) || !clean(b.nom) || !clean(b.entreprise) || !/^\S+@\S+\.\S+$/.test(clean(b.email))) return res.status(400).json({ error: "Prénom, nom, entreprise et courriel sont obligatoires." });
+  // Pas de questionnaire : le prénom suffit (il dit qui valide ou écrit) ; l’entreprise est celle du code
+  if (!clean(b.prenom)) return res.status(400).json({ error: "Indiquez votre prénom." });
+  if (clean(b.email) && !/^\S+@\S+\.\S+$/.test(clean(b.email))) return res.status(400).json({ error: "Adresse courriel non valide." });
+  b.entreprise = clean(b.entreprise) || c.name; b.nom = clean(b.nom); b.email = clean(b.email);
   const token = crypto.randomBytes(24).toString("hex");
   await db.run(`INSERT INTO users (client_id, prenom, nom, entreprise, email, tel, activite, zone, reseaux, objectif, clientele, dispo, token, created_at)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [c.id, clean(b.prenom, 80), clean(b.nom, 80), clean(b.entreprise, 120), clean(b.email, 160), clean(b.tel, 40),
