@@ -883,7 +883,7 @@ function vAccueil(root){
     const open = k => () => { S.ui.msgMode = md; if (md === "shoot") S.ui.msgShoot = k; else S.ui.msgCh = k; remember(); go("messagerie"); };
     const sfx = md === "shoot" ? ", tournage" : "";
     if (nt) tiles.push([nt, (nt > 1 ? "messages" : "message") + (md === "shoot" ? " tournage" : ""), open(team[0])]);
-    if (nc) tiles.push([nc, (nc > 1 ? "messages clients" : "message client"), open(fc)]); });
+    if (nc) tiles.push([nc, (nc > 1 ? "messages clients" : "message client") + (md === "shoot" ? " tournage" : ""), open(fc)]); });
   tiles.unshift([myTasks, myTasks > 1 ? "tâches" : "tâche", () => { S.ui.tWho = me; go("taches"); }]);
   if (S.role === "owner" && new Date().getDate() <= 5){ if (BI.todo == null) biLoadTodo(); else if (BI.todo) tiles.push([BI.todo, "bilans de " + MONTHS[Number(biPrev().slice(5, 7)) - 1] + " à préparer", () => { S.ui.fiTab = "bilans"; S.ui.biM = biPrev(); remember(); go("fiches"); }]); }
   const s = el("div","w2-tiles");
