@@ -326,8 +326,9 @@ function openViewer(p, start, play){
   const sl = slider(p, { full: true }); ov.appendChild(sl);
   const bot = el("div","cl-vbot");
   if (p.text){ const cap = el("p","cl-vcap",p.text); bot.appendChild(cap); }
+  if (p.note) bot.appendChild(el("p","cl-note" + (p.status === "no" ? " no" : ""), (p.status === "no" ? "Votre raison : " : "Votre demande : ") + p.note));
   if (canDecide(p)){ const a = el("div","cl-acts");
-    a.append(btn("Valider","lemon", () => { close(); decide(p, "ok"); }), btn("Demander une modification","", () => { close(); openBox(p, "mod"); }));
+    a.append(btn("Valider","lemon", () => { close(); decide(p, "ok"); }), btn("Demander une modification","", () => { close(); modSheet(p); }));
     bot.appendChild(a); }
   else bot.appendChild(el("p","cl-vst", ST_LABEL[p.status] + (p.decidedBy ? " par " + p.decidedBy : "")));
   ov.appendChild(bot);
@@ -340,51 +341,45 @@ function openViewer(p, start, play){
   const v = play && strip.querySelector('video[data-i="' + (start || 0) + '"]'); if (v) v.play().catch(() => {});
   strip.addEventListener("scroll", () => strip.querySelectorAll("video").forEach(x => { if (Math.round(strip.scrollLeft / Math.max(1, strip.clientWidth)) !== Number(x.dataset.i)) x.pause(); }), { passive: true });
 }
+/* Demande de modification : une feuille qui monte du bas, une seule case, un bouton */
+function modSheet(p){
+  openModal(m => { m.classList.add("sheet"); const t = el("h3",null,"Qu’est-ce qu’il faut changer ?"); t.id = "mtitle"; m.appendChild(t);
+    m.appendChild(el("p","muted", (p.title || typeLabel(p)) + ", " + fmtDL(p.date)));
+    const ta = el("textarea"); ta.rows = 4; ta.placeholder = "Par exemple : le texte du deuxième visuel, la musique, la photo de fin"; ta.style.cssText = "width:100%;box-sizing:border-box"; m.appendChild(ta);
+    const a = el("div","actions"); a.append(btn("Annuler","", closeModal), btn("Envoyer à l’agence","lemon", () => { const v = ta.value.trim(); if (!v){ toast("Dites ce qu’il faut changer, l’agence en a besoin."); return; } closeModal(); decide(p, "mod", v); })); m.appendChild(a); });
+}
 const canDecide = p => p.status !== "ok" && !p.published;
 function openBox(p, kind){ S.modOpen = p.id; S.modKind = kind; render(); setTimeout(() => { const t = document.getElementById("mod-" + p.id); if (t){ t.scrollIntoView({ block: "center", behavior: "smooth" }); t.focus(); } }, 0); }
 function vValider(root){
   const cnt = s => posts().filter(p => p.status === s).length;
   const n = { wait: waiting(), mod: cnt("mod") + cnt("no") };
-  root.appendChild(head(["À", "valider"], "Faites défiler chaque contenu, puis validez ou expliquez ce qu’il faut changer. Rien n’est publié sans votre accord.",
+  root.appendChild(head(["À", "valider"], "Touchez un contenu pour le voir en grand, puis validez ou dites ce qu’il faut changer. Rien n’est publié sans votre accord.",
     [segm([["wait","À valider" + (n.wait ? " " + n.wait : "")],["mod","Modifications" + (n.mod ? " " + n.mod : "")],["ok","Validées"]], S.pf, v => { S.pf = v; render(); })]));
   if (pg("valider") !== "on"){ locked(root, "com", valPreview); return; }
   if (S.d.postsError) root.appendChild(el("p","status",S.d.postsError));
   if (S.pf === "no") S.pf = "mod";
   const list = posts().filter(p => p.status === S.pf || (S.pf === "mod" && p.status === "no"));
   if (!list.length){ root.appendChild(el("p","empty", S.pf === "wait" ? "Rien en attente. On vous prévient dès que la suite est prête." : "Rien ici pour l’instant.")); return; }
-  const g = el("div","cl-posts");
-  list.forEach(p => {
-    const c = el("article","cl-post cl-tcard");
-    /* Aperçu en petit (première image ou première image de la vidéo) : on le touche pour voir en grand (Matis, 17/11) */
-    if ((p.media || []).length){ const m0 = p.media[0], th = el("button","cl-thumb" + (isTall(p) ? " tall" : "")); th.type = "button"; th.setAttribute("aria-label","Voir en grand");
-      if (m0.video){ const v = document.createElement("video"); v.src = vsrc(m0.url); v.muted = true; v.playsInline = true; v.preload = "metadata"; th.appendChild(v); const pl = el("span","cl-tplay"); pl.innerHTML = '<svg viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg>'; th.appendChild(pl); }
-      else { const im = document.createElement("img"); im.src = m0.url; im.alt = ""; im.loading = "lazy"; th.appendChild(im); }
-      th.appendChild(el("span","cl-ttype", typeLabel(p)));
-      c.appendChild(th);
-      /* Toute la carte ouvre la création, sauf les boutons et la zone de texte (Matis, 17/11) */
-      c.classList.add("cl-open"); c.onclick = e => { const t = e.target.closest("button,textarea,input,a,select"); if (t && !t.classList.contains("cl-thumb")) return; openViewer(p, 0, !!m0.video); }; }
-    const b = el("div","cl-pb");
-    const meta = el("div","cl-pmeta"); meta.append(el("span","pill" + (p.status === "wait" ? " l3" : p.status === "no" ? " no" : ""), ST_LABEL[p.status] || ""), el("span",null, fmtDL(p.date) + (p.time ? ", " + fmtTime(p.time) : "")), el("span",null,p.net || ""));
-    b.appendChild(meta);
-    if (p.title) b.appendChild(el("h3","cl-pt",p.title));
-    if (p.text) b.appendChild(el("p","cl-cap",p.text));
-    if (p.note) b.appendChild(el("p","cl-note" + (p.status === "no" ? " no" : ""), (p.status === "no" ? "Votre raison : " : "Votre demande : ") + p.note));
-    if (p.status !== "wait" && p.decidedBy) b.appendChild(el("p","muted cl-by",ST_LABEL[p.status] + " par " + p.decidedBy + " le " + fmtD(p.decidedAt)));
-    if (canDecide(p)){
-      const open = S.modOpen === p.id, kind = "mod";
-      const a = el("div","cl-acts");
-      a.append(btn("Valider","lemon", () => decide(p, "ok")),
-        btn(open ? "Fermer" : "Demander une modification","", () => { if (open){ S.modOpen = null; render(); } else openBox(p, "mod"); }));
-      b.appendChild(a);
-      if (open){
-        const box = el("div","cl-modbox" + (kind === "no" ? " no" : "")); const ta = el("textarea"); ta.id = "mod-" + p.id; ta.rows = 3;
-        ta.placeholder = "Ce qui ne vous convient pas et ce qu’il faut changer, par exemple le texte du deuxième visuel ou la musique";
-        box.append(el("b",null,"Qu’est-ce qui ne vous convient pas ?"), ta, btn("Envoyer à l’agence","lemon", () => {
-          if (!ta.value.trim()){ toast("Expliquez ce qui ne vous convient pas, l’agence en a besoin pour corriger."); ta.focus(); return; } decide(p, "mod", ta.value.trim()); }));
-        b.appendChild(box);
-      }
-    }
-    c.appendChild(b); g.appendChild(c);
+  /* Galerie : grandes vignettes arrondies, date et titre sur un dégradé ; on touche pour ouvrir en grand et décider (Matis, 17/11) */
+  const g = el("div","vg-grid");
+  const SHORT = ["dim.","lun.","mar.","mer.","jeu.","ven.","sam."];
+  const when = p => { const [y,m,d] = String(p.date).slice(0,10).split("-").map(Number); const x = new Date(y, m-1, d); const j = SHORT[x.getDay()]; return j.charAt(0).toUpperCase() + j.slice(1) + " " + d + " " + MSHORT[m-1] + (p.time ? ", " + fmtTime(p.time) : ""); };
+  list.forEach((p, idx) => {
+    const m0 = (p.media || [])[0], c = el("button","vg-tile vg-" + p.status); c.type = "button";
+    c.setAttribute("aria-label", (p.title || typeLabel(p)) + ", " + (ST_LABEL[p.status] || "") + ", voir en grand");
+    if (m0){ if (m0.video){ const v = document.createElement("video"); v.src = vsrc(m0.url); v.muted = true; v.playsInline = true; v.preload = "metadata"; c.appendChild(v); }
+      else { const im = document.createElement("img"); im.src = m0.url; im.alt = ""; im.loading = "lazy"; c.appendChild(im); } }
+    else c.appendChild(el("span","vg-txt", p.text || p.title || "Publication"));
+    const top = el("span","vg-top"); top.appendChild(el("span","vg-st", ST_LABEL[p.status] || ""));
+    const n = (p.media || []).length;
+    if (m0 && m0.video){ const ic = el("span","vg-ic"); ic.innerHTML = '<svg viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg>'; top.appendChild(ic); }
+    else if (n > 1){ const ic = el("span","vg-ic vg-n"); ic.innerHTML = '<svg viewBox="0 0 24 24"><rect x="7" y="7" width="13" height="13" rx="2.5"/><path d="M4 16V6.5A2.5 2.5 0 0 1 6.5 4H16"/></svg>' + n; top.appendChild(ic); }
+    c.appendChild(top);
+    const bot = el("span","vg-bot"); bot.append(el("span","vg-date", when(p)), el("span","vg-title", p.title || typeLabel(p)));
+    if (p.note) bot.appendChild(el("span","vg-note", "« " + p.note + " »"));
+    c.appendChild(bot);
+    c.onclick = () => openViewer(p, 0, !!(m0 && m0.video));
+    g.appendChild(c);
   });
   root.appendChild(g);
 }
