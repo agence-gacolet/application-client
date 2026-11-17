@@ -9,7 +9,7 @@ const path = require("path");
 
 const BASE = "https://app.metricool.com/api";
 const PATH_SCHEDULED = "/v2/scheduler/posts";
-const CACHE_MS = 5 * 60 * 1000;
+const CACHE_MS = 60 * 1000; // 1 min : une publication déposée apparaît vite chez le client
 const cache = new Map();
 
 const NET = { instagram: "Instagram", facebook: "Facebook", youtube: "YouTube", tiktok: "TikTok", linkedin: "LinkedIn", gmb: "Fiche Google" };
@@ -90,7 +90,9 @@ async function fetchMonth(blogId, month) {
   return posts;
 }
 
-module.exports = { publishDraft, fetchScheduled, fetchMonth };
+// Oublie le planning gardé en mémoire d'une marque (dépôt d'une publication à valider)
+function forget(blogId) { for (const k of [...cache.keys()]) if (k.startsWith(String(blogId) + ":")) cache.delete(k); }
+module.exports = { publishDraft, fetchScheduled, fetchMonth, forget };
 
 // Brouillon soumis au client puis validé dans son espace : il passe en publication programmée (même contenu, draft à false)
 async function publishDraft(blogId, mcId, day) {

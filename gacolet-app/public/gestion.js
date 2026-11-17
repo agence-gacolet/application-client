@@ -2076,6 +2076,12 @@ function cgChannels(){ return (S.cgroups || []).map(g => g.ch); }
 function cdmChannels(){ const me = S.me || "Gabriel"; const set = new Set((S.ui.cdmOpen || []).filter(k => k.endsWith("|" + me))); S.d.messages.forEach(m => { const k = String(m.ch || ""); if (k.startsWith("cdm:") && k.split("|")[1] === me) set.add(k); }); return [...set]; }
 function cdmClient(k){ const g = (S.cgroups || []).find(x => x.id === Number(String(k).slice(4).split("|")[0])); return g ? g.name : "Client"; }
 function cgOf(k){ return (S.cgroups || []).find(g => g.ch === k); }
+/* Les conversations d’un client : [type, canal, libellé] */
+function cliChans(name, mode, pre){ const n = norm(name), out = [], g = (S.cgroups || []).find(x => norm(x.name) === n);
+  if (g) out.push(["cli", pre + g.ch, "Avec le client"]);
+  out.push(["int", pre + "c:" + (clientNames().find(x => norm(x) === n) || name), "Entre nous"]);
+  if (mode !== "shoot") cdmChannels().filter(k => norm(cdmClient(k)) === n).forEach(k => out.push(["prv", k, "Privé"]));
+  return out; }
 async function loadCgroups(){ try { const r = await GC.api("GET","/api/g-cgroups"); S.cgroups = r.groups || []; renderSoon(); } catch(e){} }
 const cliShown = () => { const acc = new Set((S.cgroups || []).map(g => norm(g.name))); return clientNames().filter(n => n !== AGENCE && (acc.has(norm(n)) || (S.d.messages || []).some(m => m.ch === "c:" + n || m.ch === "tg:c:" + n))); };
 function msgChannels(mode){ const pre = mode === "shoot" ? "tg:" : ""; return CHANNELS.map(c => pre + c[0]).concat(mode === "shoot" ? [] : dmChannels()).concat(mode === "shoot" ? cgChannels().map(k => "tg:" + k) : cgChannels().concat(cdmChannels())).concat(cliShown().map(n => pre + "c:" + n)); }
@@ -2604,16 +2610,18 @@ function vMessagerie(root){
     const bot = el("span","wa-rbot"); bot.append(el("span",null, lm ? (lm.who === me ? "Toi : " : String(k).startsWith("dm:") ? "" : lm.who + " : ") + msgPreview(lm) : "Aucun message")); if (un) bot.appendChild(el("span","cnt",String(un)));
     tx.append(top, bot); b.append(chAvatar(k, 44), tx); if (un) b.classList.add("unread");
     b.onclick = () => { if (mode === "shoot") S.ui.msgShoot = k; else S.ui.msgCh = k; S.ui[seenKey(k)] = lastSeenAt(k); S.ui.waConv = true; remember(); render(); };
-    side.appendChild(b);
+    side.appendChild(b); return b;
   };
   side.appendChild(el("span","wa-lab","Équipe")); CHANNELS.forEach(([k,l]) => row(pre+k, l));
   if (mode !== "shoot"){ const dms = dmChannels(); if (dms.length){ side.appendChild(el("span","wa-lab","Privé")); dms.sort((a, b) => ((lastOf[b] || {}).at || "").localeCompare((lastOf[a] || {}).at || "")).forEach(k => row(k, dmOther(k))); } }
-  if (mode !== "shoot"){ const cd = cdmChannels(); if (cd.length){ side.appendChild(el("span","wa-lab","Privé avec les clients")); cd.sort((a, b) => ((lastOf[b] || {}).at || "").localeCompare((lastOf[a] || {}).at || "")).forEach(k => row(k, cdmClient(k))); } }
+  // Clients : une seule ligne par client (sa conversation la plus récente). Dans la conversation, un sélecteur passe de
+  // « Avec le client » (le groupe qu’il voit) à « Entre nous » (l’équipe seule) et « Privé » (toi et le client).
   const cgShown = cgChannels().filter(k => k === ch.replace(/^tg:/, "") || lastOf[pre + k] || ((cgOf(k) || {}).people || []).length).map(k => pre + k);
-  if (cgShown.length){ side.appendChild(el("span","wa-lab","Groupes avec les clients"));
-    cgShown.map(k => [k, chName(k)]).sort((a, b) => ((lastOf[b[0]] || {}).at || "").localeCompare((lastOf[a[0]] || {}).at || "") || a[1].localeCompare(b[1])).forEach(([k, n]) => row(k, n)); }
-  if (cliShown().length) side.appendChild(el("span","wa-lab","Clients, entre nous"));
-  cliShown().map(n => [pre+"c:"+n, n]).sort((a, b) => ((lastOf[b[0]] || {}).at || "").localeCompare((lastOf[a[0]] || {}).at || "") || a[1].localeCompare(b[1])).forEach(([k, n]) => row(k, n));
+  const cliList = []; [].concat(cgShown.map(k => chName(k)), mode !== "shoot" ? cdmChannels().map(cdmClient) : [], cliShown()).forEach(n => { if (n && !cliList.some(x => norm(x) === norm(n))) cliList.push(n); });
+  if (cliList.length) side.appendChild(el("span","wa-lab","Clients"));
+  cliList.map(n => { const cs = cliChans(n, mode, pre), last = cs.slice().sort((a, b) => ((lastOf[b[1]] || {}).at || "").localeCompare((lastOf[a[1]] || {}).at || ""))[0]; return [n, cs, last]; })
+    .sort((a, b) => ((lastOf[b[2][1]] || {}).at || "").localeCompare((lastOf[a[2][1]] || {}).at || "") || a[0].localeCompare(b[0]))
+    .forEach(([n, cs, last]) => { const b = row(cs.some(c => c[1] === ch) ? ch : last[1], n); if (cs.some(c => c[1] === ch)) b.setAttribute("aria-pressed","true"); });
 
   /* Conversation */
   const main = el("section","wa-conv");
@@ -2624,8 +2632,12 @@ function vMessagerie(root){
   ht.append(el("b",null,(mode === "shoot" ? "Tournage, " : "") + chName(ch)), el("small",null, isDm ? "Conversation privée, visible de vous deux seulement" : isCdm ? "Conversation privée avec le client, toi seul la vois" : isCg ? (mode === "shoot" ? "Tournages, partagé avec le client" : "Groupe partagé avec le client") + ((cgOf(ch.replace(/^tg:/, "")) || {}).people || []).filter(Boolean).map((p, i) => (i ? ", " : " : ") + p).join("") : isCli ? "Échanges de l’équipe sur ce client, le client ne les voit pas" : (S.team || []).map(t => t.name).join(", ")));
   const hav = chAvatar(ch, 40); if (isDm){ hav.classList.add("av-click"); hav.onclick = () => profileCard(dmOther(ch)); ht.classList.add("av-click"); ht.onclick = () => profileCard(dmOther(ch)); }
   hd.append(back, hav, ht);
+  // Conversation d’un client : choix entre le groupe avec le client, l’équipe entre nous et le privé
+  let cliSw = null; if (isCli || isCdm || isCg){ const cs = cliChans(isCli ? ch.replace(/^tg:/, "").slice(2) : chName(ch), mode, pre); if (cs.length > 1){
+    cliSw = el("div","wa-clisw"); cliSw.appendChild(segm(cs.map(c => [c[1], c[2]]), ch, v => { if (mode === "shoot") S.ui.msgShoot = v; else S.ui.msgCh = v; S.ui[seenKey(v)] = lastSeenAt(v); S.ui.waConv = true; remember(); render(); }));
+    cliSw.appendChild(el("small","muted", isCli ? "Le client ne voit pas cette conversation." : isCdm ? "Toi et le client seulement." : "Le client voit cette conversation.")); } }
   if (isCg && mode !== "shoot"){ const pv = btn("Message privé","sm", () => { const k = "cdm:" + ch.slice(3) + "|" + me; S.ui.cdmOpen = [...new Set((S.ui.cdmOpen || []).concat(k))]; S.ui.msgCh = k; S.ui.waConv = true; remember(); render(); }); pv.classList.add("wa-hbtn"); hd.appendChild(pv); }
-  main.appendChild(hd);
+  main.appendChild(hd); if (cliSw) main.appendChild(cliSw);
   const list = el("div","wa-msgs"); list.id = "chat-list"; list.dataset.ch = ch;
   const msgs = S.d.messages.filter(m => m.ch === ch).sort((a,b) => (a.at||"").localeCompare(b.at||""));
   const firstPaint = MSG_CH !== ch; MSG_CH = ch; const lastMine = [...msgs].reverse().find(m => m.who === me);

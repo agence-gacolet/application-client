@@ -60,7 +60,8 @@ function avatarEl(name, size, opts){
   opts = opts || {};
   const a = el("span","av"); a.style.width = a.style.height = size + "px"; a.style.fontSize = Math.round(size * .38) + "px";
   if (opts.logo){ a.classList.add("av-logo"); a.innerHTML = LOGO; return a; }
-  const t = ((S.f && S.f.team) || []).find(x => x.name === name);
+  // Photo d’équipe seulement pour l’équipe : jamais pour la personne connectée côté client, même si elle porte le prénom d’un membre
+  const t = name === myName() ? null : ((S.f && S.f.team) || []).find(x => x.name === name);
   if (t && t.avatar){ const i = document.createElement("img"); i.src = t.avatar; i.alt = ""; i.loading = "lazy"; a.appendChild(i); return a; }
   a.textContent = initials(name); a.style.background = avColor(name); return a;
 }
@@ -99,12 +100,12 @@ const has = m => S.d && S.d.client && (S.d.client.modules || []).includes(m);
 /* Pages ouvertes par l’agence selon le pack (réglage /gestion > Paramètres > Espace client) : "on", "discover" (À découvrir) ou "off" (cachée) */
 const pg = k => { const p = S.d && S.d.client && S.d.client.pages; if (p) return p[k] || "on";
   return k === "meta" ? (has("meta") ? "on" : "discover") : (k === "valider" || k === "stats") ? (has("com") ? "on" : "discover") : "on"; };
-const shown = v => v[0] === "accueil" || pg(v[0]) !== "off";
+const shown = v => v[0] === "accueil" || v[0] === "parametres" || pg(v[0]) !== "off";
 const myName = () => (S.f && S.f.me.name) || "";
 const unread = () => S.f ? [...new Set(S.f.messages.map(m => m.ch))].reduce((n, k) => n + unreadIn(k), 0) : 0;
 
 /* ---------- Navigation ---------- */
-const VIEWS = [["accueil","Accueil"],["valider","À valider"],["tournages","Tournages"],["stats","Statistiques"],["bilans","Bilans"],["meta","Meta"],["messagerie","Messagerie"],["visio","Visio"],["idees","Mes idées"],["prel","Prélèvements"]];
+const VIEWS = [["accueil","Accueil"],["valider","À valider"],["tournages","Tournages"],["stats","Statistiques"],["bilans","Bilans"],["meta","Meta"],["messagerie","Messagerie"],["visio","Visio"],["idees","Mes idées"],["prel","Prélèvements"],["parametres","Paramètres"]];
 const MOBILE = ["accueil","valider","tournages","messagerie"];
 const ICONS = {
   accueil:'<path d="M4 11.2 12 4.8l8 6.4V20h-5.6v-5.2H9.6V20H4z"/>',
@@ -117,7 +118,8 @@ const ICONS = {
   plus:'<path d="M5 7h14M5 12h14M5 17h14"/>',
   idees:'<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>',
   bilans:'<path d="M6 3.5h9l3.5 3.5v13.5H6z"/><path d="M14.5 3.5V7H18M9 17v-3M12 17v-6M15 17v-4"/>',
-  tournages:'<rect x="3" y="7" width="13" height="11" rx="2"/><path d="m16 11 5-3v9l-5-3M6 4h7"/>'
+  tournages:'<rect x="3" y="7" width="13" height="11" rx="2"/><path d="m16 11 5-3v9l-5-3M6 4h7"/>',
+  parametres:'<circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/>'
 };
 const ico = k => { const s = document.createElementNS("http://www.w3.org/2000/svg","svg"); s.setAttribute("viewBox","0 0 24 24"); s.setAttribute("aria-hidden","true"); s.classList.add("ico"); s.innerHTML = ICONS[k] || ""; return s; };
 function renderTabs(){
@@ -614,6 +616,24 @@ function docRow(d){
   if (d.url) end.appendChild(el("span","bl-open", d.kind === "contrat" ? "Ouvrir" : "PDF"));
   r.appendChild(end); return r;
 }
+/* ---------- Paramètres du client : son prénom, son compte, l’application ---------- */
+function vParametres(root){
+  root.appendChild(head("Paramètres", "Votre profil et l’application."));
+  const card = (t, sub) => { const c = el("section","pm-card cl-set"); c.appendChild(el("h2",null,t)); if (sub) c.appendChild(el("p","muted",sub)); root.appendChild(c); return c; };
+  const me = card("Votre profil", "Votre prénom apparaît sur vos validations et vos messages.");
+  const f = el("form","form"); const l = el("label","full"); const i = el("input"); i.id = "set-prenom"; i.value = (S.d && S.d.me && S.d.me.prenom) || ""; i.autocomplete = "given-name";
+  l.append(el("span",null,"Prénom"), i); f.appendChild(l);
+  const sv = btn("Enregistrer","lemon", async () => { if (S.f && S.f.preview){ toast("Aperçu en lecture seule : rien n’est enregistré."); return; } const p = i.value.trim(); if (!p){ i.focus(); return; }
+    try { await api("/api/c/profil", { body: { prenom: p } }); await Promise.all([reloadMe(), loadFeed()]); toast("Prénom enregistré."); render(); } catch(e){ toast(e.message); } });
+  f.onsubmit = e => { e.preventDefault(); sv.click(); }; const a = el("div","actions"); a.appendChild(sv); f.appendChild(a); me.appendChild(f);
+  const c = S.d && S.d.client || {};
+  const co = card("Votre compte"); const dl = el("dl","cl-dl");
+  [["Entreprise", (S.f && S.f.client && S.f.client.name) || c.name || ""], ["Formule", c.formula || ""]].filter(x => x[1]).forEach(([k, v]) => dl.append(el("dt",null,k), el("dd",null,v)));
+  co.appendChild(dl); const a2 = el("div","actions"); a2.appendChild(btn("Écrire à l’agence","", () => { S.mmode = "main"; S.mch = "grp"; S.conv = true; go("messagerie"); })); co.appendChild(a2);
+  const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+  const ap = card("L’application", standalone ? "Installée sur cet appareil. Elle se met à jour toute seule." : "Pour la garder à portée de main : dans Safari, bouton Partager puis « Sur l’écran d’accueil ».");
+  const a3 = el("div","actions"); a3.append(btn("Actualiser","", () => location.reload()), btn("Se déconnecter","", () => $("#logout").click())); ap.appendChild(a3);
+}
 function vPrel(root){
   root.appendChild(head(["Mes", "prélèvements"], "Votre abonnement, vos contrats et vos factures, au même endroit."));
   const b = billOf(), p = b.plan, nx = nextDebit(p);
@@ -674,7 +694,7 @@ function vBilans(root){
   if (S.biHtml[cur.m]) show();
   else { box.appendChild(el("p","muted","Chargement du bilan…")); api("/api/c/bilan/" + cur.m).then(r => { S.biHtml[cur.m] = r.html; if (S.view === "bilans") render(); }).catch(e => { box.textContent = e.message; }); }
 }
-const R = { bilans: vBilans, accueil: vAccueil, valider: vValider, tournages: vTournages, stats: vStats, meta: vMeta, messagerie: vMessagerie, visio: vVisio, idees: vIdees, prel: vPrel };
+const R = { parametres: vParametres, bilans: vBilans, accueil: vAccueil, valider: vValider, tournages: vTournages, stats: vStats, meta: vMeta, messagerie: vMessagerie, visio: vVisio, idees: vIdees, prel: vPrel };
 function fromHash(){ const h = location.hash.replace("#",""); S.view = R[h] && (!S.d || shown([h])) ? h : "accueil"; }
 function render(){
   if (!S.d || !S.f) return;
@@ -696,8 +716,19 @@ async function load(){
   catch(e){ if (TOKEN){ const r = $("#app"); $("#shell").hidden = false; r.textContent = ""; const b = el("div","empty"); b.append(el("p",null,e.message), btn("Réessayer","lemon", () => load())); r.appendChild(b); } }
 }
 let poll = 0;
-function startPoll(){ clearInterval(poll); poll = setInterval(() => { if (document.visibilityState === "visible" && TOKEN && S.f) loadFeed().catch(() => {}); }, 8000); }
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && TOKEN && S.d) { api("/api/me").then(d => { S.d = d; render(); }).catch(() => {}); loadFeed().catch(() => {}); } });
+/* Actualisation : messages toutes les 8 s, publications et chiffres toutes les 45 s, appli ouverte (plus besoin de la fermer) */
+let lastMe = Date.now();
+async function reloadMe(){ const d = await api("/api/me"); const was = JSON.stringify(S.d && S.d.posts), typing = document.activeElement && /^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName); S.d = d; lastMe = Date.now(); if (JSON.stringify(d.posts) !== was && !typing) render(); }
+function startPoll(){ clearInterval(poll); poll = setInterval(() => { if (document.visibilityState !== "visible" || !TOKEN || !S.f) return; loadFeed().catch(() => {}); if (Date.now() - lastMe > 45000) reloadMe().catch(() => {}); }, 8000); }
+/* Tirer vers le bas en haut de page pour actualiser (comme dans les applis du téléphone) */
+(() => { let y0 = null, ind = null;
+  document.addEventListener("touchstart", e => { y0 = window.scrollY <= 0 && TOKEN && S.d && !document.querySelector(".dr-wrap, #overlay.open") && !document.body.classList.contains("chat-full") ? e.touches[0].clientY : null; }, { passive: true });
+  document.addEventListener("touchmove", e => { if (y0 == null) return; const dy = e.touches[0].clientY - y0; if (dy > 20 && !ind){ ind = el("div","cl-ptr","Relâchez pour actualiser"); document.body.appendChild(ind); } if (ind) ind.style.opacity = String(Math.min(1, dy / 90)); }, { passive: true });
+  document.addEventListener("touchend", e => { if (y0 == null) return; const dy = e.changedTouches[0].clientY - y0; y0 = null;
+    if (ind && dy > 90){ ind.textContent = "Actualisation…"; Promise.all([reloadMe(), loadFeed()]).then(() => render()).catch(() => {}).finally(() => { const x = ind; ind = null; setTimeout(() => x && x.remove(), 300); }); }
+    else if (ind){ ind.remove(); ind = null; } });
+})();
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && TOKEN && S.d) { reloadMe().then(() => render()).catch(() => {}); loadFeed().catch(() => {}); } });
 $("#logout").onclick = () => confirmBox("Se déconnecter ?", "Il faudra saisir à nouveau votre code sur cet appareil.", "Se déconnecter", () => { TOKEN = null; ls.del("gc-token"); start(); });
 
 /* ---------- Inscription avec le code de l’agence ---------- */

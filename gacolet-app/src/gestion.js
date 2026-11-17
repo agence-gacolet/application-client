@@ -1268,6 +1268,11 @@ module.exports = function (app, { db, wrap, root }) {
     const data = Object.assign(cleanBill(req.body || {}), { updatedAt: new Date().toISOString(), updatedBy: req.user.name });
     await put("billing", "c" + cid, data); res.json(data);
   }));
+  // Paramètres du client : changer son prénom (c’est lui qui apparaît sur ses validations et ses messages)
+  app.post("/api/c/profil", cauth, wrap(async (req, res) => {
+    const p = String((req.body || {}).prenom || "").trim().slice(0, 80); if (!p) return res.status(400).json({ error: "Indiquez votre prénom." });
+    await db.run("UPDATE users SET prenom = ? WHERE id = ?", [p, req.cu.id]); res.json({ ok: true });
+  }));
   app.post("/api/c/msg", cauth, wrap(async (req, res) => {
     const b = req.body || {}, text = String(b.text || "").trim().slice(0, 4000), files = cleanFiles(b.files);
     if (!text && !files.length) return res.status(400).json({ error: "Message vide." });

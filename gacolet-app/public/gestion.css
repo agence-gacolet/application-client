@@ -2113,3 +2113,34 @@ html.tg-lock,html.tg-lock body{overflow:hidden}
 body.kb.chat-full .wa{position:fixed;left:0;right:0;top:var(--kbt,0px);height:var(--kbh,100dvh)!important;z-index:40;margin:0}
 body.kb.chat-full .wa-head{padding-top:6px}
 body.kb .mtabs{display:none}
+
+/* ---------- Espace client sur téléphone : retours de Matis du 17/11 ---------- */
+@media (max-width:900px){
+  /* Accueil centré dans l'écran, textes un peu plus gros */
+  .espace-client .welcome2{min-height:calc(100dvh - 64px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));padding:0 0 12px;justify-content:center}
+  .espace-client .w2-date{font-size:var(--fs-l)}
+  .espace-client .w2-say{font-size:22px;line-height:1.45}
+  .espace-client .w2-tile span{font-size:var(--fs-l)}
+  .espace-client .w2-tile i{font-size:var(--fs-m)}
+  /* Titres en italique : la dernière lettre n'est plus rognée */
+  .espace-client #app h1{overflow:visible;padding-right:.18em}
+  .espace-client #app h1 span{display:inline-block;padding-right:.14em}
+  /* Onglets : pas de fondu à droite quand tout tient */
+  .espace-client .seg,.espace-client .chips{-webkit-mask-image:none;mask-image:none}
+  .espace-client .wa-top .seg{display:flex}
+  .espace-client .wa-top .seg button{flex:1}
+  /* Conversation choisie (fond bleu) : sous-titre lisible */
+  .espace-client .wa-row[aria-pressed="true"] .wa-rtop small,.espace-client .wa-row[aria-pressed="true"] .wa-rbot>span:first-child{color:rgba(255,255,255,.85)}
+  /* Messagerie : la liste descend jusqu'au menu du bas, plus de bande noire entre les deux */
+  .espace-client.chat-full .wa{height:calc(100vh - 64px);height:calc(100dvh - 64px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px))}
+}
+/* Tirer pour actualiser */
+.cl-ptr{position:fixed;top:calc(env(safe-area-inset-top,0px) + 10px);left:50%;transform:translateX(-50%);z-index:60;padding:6px 14px;border-radius:999px;background:var(--surface);color:var(--ink);font-size:var(--fs-s);font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.4);pointer-events:none;transition:opacity .15s}
+.cl-set{margin-bottom:14px}
+.cl-dl{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin:4px 0 0}
+.cl-dl dt{color:var(--muted)}
+.cl-dl dd{margin:0;font-weight:600}
+/* Messagerie équipe : choix de la conversation d'un client (avec le client / entre nous / privé) */
+.wa-clisw{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 14px;border-bottom:1px solid var(--line)}
+.wa-clisw .seg{-webkit-mask-image:none;mask-image:none}
+.wa-clisw small{font-size:var(--fs-s)}

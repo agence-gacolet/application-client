@@ -9,6 +9,8 @@ module.exports = function production({ app, auth, wrap, db, current, put, pubPla
   // Marques hors Publications (pas d'objectif mensuel) : l'agence et Gabriel
   const EXTRA = [["Agence Gacolet", "6874994", 0, 0], ["Gabriel", "6875110", 0, 0]];
   const blogOf = name => { const x = EXTRA.find(([n]) => norm(n) === norm(name)); if (x) return x[1]; const p = pubPlan.find(([n]) => norm(n) === norm(name)) || pubPlan.find(([n]) => norm(name).includes(norm(n)) || norm(n).includes(norm(name))); return p && p[1] ? p[1] : ""; };
+  // Sinon : la marque enregistrée sur le code client (Paramètres > Codes clients), même nom que la fiche
+  const blogFor = async name => { const b = blogOf(name); if (b) return b; const c = (await db.all("SELECT name, metricool_blog_id FROM clients WHERE metricool_blog_id <> ''")).find(x => norm(x.name) === norm(name)); return c ? String(c.metricool_blog_id) : ""; };
   const mc = async (method, path, q, body) => {
     const tok = process.env.METRICOOL_USER_TOKEN; if (!tok) throw Object.assign(new Error("La clé Metricool n’est pas sur le serveur."), { status: 400 });
     const qs = new URLSearchParams(Object.assign({ userId: process.env.METRICOOL_USER_ID || "4634230" }, q));
@@ -34,7 +36,7 @@ module.exports = function production({ app, auth, wrap, db, current, put, pubPla
     const name = String(req.query.client || ""), n = Math.max(1, Math.min(20, Number(req.query.n) || 1));
     // Gabriel : 10 publications par jour sur une grille d'horaires fixe ; on prend les prochains créneaux libres
     if (norm(name) === "gabriel") {
-      const GRID = ["08:30","09:30","10:15","11:00","12:00","13:30","15:00","16:30","18:00","19:30"], used = new Set(), blogG = blogOf(name);
+      const GRID = ["08:30","09:30","10:15","11:00","12:00","13:30","15:00","16:30","18:00","19:30"], used = new Set(), blogG = await blogFor(name);
       const d0 = new Date(), d1 = new Date(); d1.setDate(d1.getDate() + 20); const isoD = x => x.toLocaleDateString("sv-SE", { timeZone: "Europe/Paris" });
       if (process.env.METRICOOL_USER_TOKEN) { try { const j = await mc("GET", "/v2/scheduler/posts", { blogId: blogG, start: isoD(d0) + "T00:00:00", end: isoD(d1) + "T23:59:59", timezone: "Europe/Paris" });
         (Array.isArray(j) ? j : (j && j.data) || []).forEach(p => { const dt = String((p.publicationDate && p.publicationDate.dateTime) || ""); if (dt) used.add(dt.slice(0, 16)); }); } catch (e) {} }
@@ -43,7 +45,7 @@ module.exports = function production({ app, auth, wrap, db, current, put, pubPla
         for (const t of GRID) { const key = day + "T" + t; if (key <= nowP || used.has(key)) continue; out.push({ date: day, time: t }); used.add(key); if (out.length >= n) break; } }
       return res.json({ slots: out, blog: true, hour: "", perMonth: 300 });
     }
-    const { fiche, strat } = await clientContext(name), blog = blogOf(name), hour = usualHour(fiche), plan = perMonth(fiche);
+    const { fiche, strat } = await clientContext(name), blog = await blogFor(name), hour = usualHour(fiche), plan = perMonth(fiche);
     const DAYS = ["dimanche","lundi","mardi","mercredi","jeudi","vendredi","samedi"], rythme = (String(strat).match(/##\s*Rythme[\s\S]*?(?=\n##\s|$)/i) || [""])[0] + " " + (fiche.perMonth || "");
     const pref = DAYS.map((d, k) => new RegExp("\\b" + d + "s?\\b", "i").test(rythme) ? k : -1).filter(k => k >= 0);
     const hm = String(rythme).match(/(\d{1,2})\s*h\s*(\d{2})?/); const H = hm ? String(hm[1]).padStart(2, "0") + ":" + (hm[2] || "00") : hour;
@@ -113,7 +115,7 @@ module.exports = function production({ app, auth, wrap, db, current, put, pubPla
 
   // Programmation dans Metricool (Instagram et Facebook) ; le média est servi par l'appli à une adresse publique impossible à deviner
   app.post("/api/g-prod/schedule", auth, wrap(async (req, res) => {
-    const b = req.body || {}, name = String(b.client || ""), blog = blogOf(name);
+    const b = req.body || {}, name = String(b.client || ""), blog = await blogFor(name);
     if (!blog) return res.status(400).json({ error: "Pas de marque Metricool connue pour " + name + "." });
     const base = (req.get("x-forwarded-proto") || req.protocol) + "://" + req.get("host"), out = [];
     // Mode : « draft » = brouillon Metricool ; « review » = brouillon soumis au client dans son espace (À valider), programmé tout seul quand il valide ; « publish » = programmé
@@ -127,7 +129,7 @@ module.exports = function production({ app, auth, wrap, db, current, put, pubPla
       if (nets.includes("instagram")) info.instagramData = { type: video ? "REEL" : "POST", showReelOnFeed: true };
       if (nets.includes("facebook")) info.facebookData = { type: video ? "REEL" : "POST" };
       try { const r = await mc("POST", "/v2/scheduler/posts", { blogId: blog }, info); const id = r && (r.id || (r.data && r.data.id));
-        if (mode === "review" && id) await put("_prodrev", "mc" + id, { blog, client: name, at: new Date().toISOString() });
+        if (mode === "review" && id) { await put("_prodrev", "mc" + id, { blog, client: name, at: new Date().toISOString() }); try { require("./metricool").forget(blog); } catch (e) {} }
         if (id) { await put("_purge", url.slice(3).replace(/\W/g, "_"), { file: url.slice(3), blog, post: String(id), date: it.date, at: new Date().toISOString() }); setTimeout(purgeFiles, 30000).unref(); }
         out.push({ ok: true, date: it.date, time: it.time, mode }); }
       catch (e) { out.push({ ok: false, error: e.message }); }
