@@ -1,6 +1,6 @@
 // Miniatures légères des visuels et images d'aperçu des vidéos (Matis, 17/11/2026).
 // GET /api/thumb?u=<adresse Metricool>&w=480 : image WebP réduite, gardée sur le disque et en cache dans le téléphone.
-// Images : sharp. Vidéos : une image prise à 1 s par ffmpeg (ffmpeg-static). Si l'un des deux manque sur le serveur,
+// Images : sharp. Vidéos : une image prise à 1 s par ffmpeg (@ffmpeg-installer). Si l'un des deux manque sur le serveur,
 // on redirige vers le fichier d'origine : l'appli marche comme avant, juste moins vite.
 const path = require("path");
 const fs = require("fs");
@@ -12,7 +12,8 @@ module.exports = function (app, { root }) {
   fs.mkdirSync(DIR, { recursive: true });
   let sharp = null, ffmpeg = null;
   try { sharp = require("sharp"); } catch (e) { console.log("Miniatures : sharp absent, fichiers d'origine servis."); }
-  try { ffmpeg = require("ffmpeg-static"); if (ffmpeg && !fs.existsSync(ffmpeg)) ffmpeg = null; } catch (e) { ffmpeg = null; }
+  /* @ffmpeg-installer : le programme arrive tout fait selon le système, sans script d'installation (npm bloque ces scripts sur le serveur) */
+  for (const get of [() => require("@ffmpeg-installer/ffmpeg").path, () => require("ffmpeg-static")]) { try { const f = get(); if (f && fs.existsSync(f)) { ffmpeg = f; break; } } catch (e) {} }
   if (!ffmpeg) console.log("Miniatures : ffmpeg absent, pas d'image d'aperçu pour les vidéos.");
 
   const OK_URL = u => /^https:\/\/static\.metricool\.com\/[^\s"<>]+$/.test(u);
