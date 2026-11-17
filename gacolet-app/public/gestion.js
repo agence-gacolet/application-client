@@ -2708,7 +2708,8 @@ function vMessagerie(root){
     const mine = m.who === me, grouped = prev && prev.who === m.who && (Date.parse(m.at) - Date.parse(prev.at)) < 5*60000;
     const fresh = !firstPaint && !MSG_SHOWN.has(m.id); MSG_SHOWN.add(m.id);
     const line = el("div","wa-line" + (mine ? " mine" : "") + (grouped ? " cont" : "") + (fresh ? " new" : "")); line.id = "m-" + m.id;
-    if (!mine){ if (grouped) line.appendChild(el("span","av-sp")); else { const av = avatarEl(m.who, 30); av.classList.add("av-click"); av.title = "Voir le profil de " + m.who; av.onclick = () => profileCard(m.who); line.appendChild(av); } }
+    // Photo (ou initiale) sur chaque message ; l'affichage ne la montre que sur le dernier d'une suite (« tail »)
+    if (!mine){ const av = avatarEl(m.who, 30); av.classList.add("av-click"); av.title = "Voir le profil de " + m.who; av.onclick = () => profileCard(m.who); line.appendChild(av); }
     const bub = el("div","wa-bub");
     let nm = null; if (!mine && !grouped){ nm = el("b","wa-name",m.who || ""); nm.onclick = e => { e.stopPropagation(); profileCard(m.who); }; }
     if (m.fwd) bub.appendChild(el("span","wa-fwd","Transféré"));
