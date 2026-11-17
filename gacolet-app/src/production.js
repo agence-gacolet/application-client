@@ -10,7 +10,21 @@ module.exports = function production({ app, auth, wrap, db, current, put, pubPla
   const EXTRA = [["Agence Gacolet", "6874994", 0, 0], ["Gabriel", "6875110", 0, 0]];
   const blogOf = name => { const x = EXTRA.find(([n]) => norm(n) === norm(name)); if (x) return x[1]; const p = pubPlan.find(([n]) => norm(n) === norm(name)) || pubPlan.find(([n]) => norm(name).includes(norm(n)) || norm(n).includes(norm(name))); return p && p[1] ? p[1] : ""; };
   // Sinon : la marque enregistrée sur le code client (Paramètres > Codes clients), même nom que la fiche
-  const blogFor = async name => { const b = blogOf(name); if (b) return b; const c = (await db.all("SELECT name, metricool_blog_id FROM clients WHERE metricool_blog_id <> ''")).find(x => norm(x.name) === norm(name)); return c ? String(c.metricool_blog_id) : ""; };
+  // Toutes les marques du compte Metricool (gardées 10 min) : le Dépôt propose chaque client qui en a une, pas seulement ceux du plan de publication
+  let BRANDS = { at: 0, list: [] };
+  async function brands(){ if (Date.now() - BRANDS.at < 600000 || !process.env.METRICOOL_USER_TOKEN) return BRANDS.list;
+    try { const j = await mc("GET", "/admin/simpleProfiles", {}); BRANDS = { at: Date.now(), list: (Array.isArray(j) ? j : (j && j.data) || []).filter(b => b && b.id && !b.deleted).map(b => ({ name: String(b.label || b.title || "").trim(), blog: String(b.id) })).filter(b => b.name) }; } catch (e) { console.error("Marques Metricool :", e.message); }
+    return BRANDS.list; }
+  const blogFor = async name => { const b = blogOf(name); if (b) return b; const c = (await db.all("SELECT name, metricool_blog_id FROM clients WHERE metricool_blog_id <> ''")).find(x => norm(x.name) === norm(name)); if (c) return String(c.metricool_blog_id);
+    const m = (await brands()).find(x => norm(x.name) === norm(name)); return m ? m.blog : ""; };
+  // Clients proposés dans le Dépôt : agence, Gabriel, plan de publication, codes clients reliés, puis toutes les marques Metricool
+  app.get("/api/g-prod/clients", auth, wrap(async (req, res) => {
+    const out = [], seen = new Set(), add = (name, blog) => { const k = norm(name); if (!name || !blog || seen.has(k)) return; seen.add(k); out.push({ name, blog: String(blog) }); };
+    EXTRA.forEach(([n, b]) => add(n, b)); pubPlan.forEach(([n, b]) => add(n, b));
+    (await db.all("SELECT name, metricool_blog_id FROM clients WHERE active = 1 AND metricool_blog_id <> ''")).forEach(c => { if (!out.some(x => x.blog === String(c.metricool_blog_id))) add(c.name, c.metricool_blog_id); });
+    const known = new Set(out.map(x => x.blog)); (await brands()).filter(b => !known.has(b.blog)).sort((a, b) => a.name.localeCompare(b.name, "fr")).forEach(b => add(b.name, b.blog));
+    res.json({ clients: out, metricool: !!process.env.METRICOOL_USER_TOKEN });
+  }));
   const mc = async (method, path, q, body) => {
     const tok = process.env.METRICOOL_USER_TOKEN; if (!tok) throw Object.assign(new Error("La clé Metricool n’est pas sur le serveur."), { status: 400 });
     const qs = new URLSearchParams(Object.assign({ userId: process.env.METRICOOL_USER_ID || "4634230" }, q));

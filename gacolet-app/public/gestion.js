@@ -1843,9 +1843,11 @@ let pubAt = {}; function loadPubs(mk, force){ if (!force && Date.now() - (pubAt[
 /* Dépôt : on dépose les vidéos et visuels d'un client, Claude les transcrit (ou les regarde), propose dates et descriptions, puis tout part dans Metricool */
 function vDepot(root){
   const mk = monthKey(); loadPubs(mk); const R = (S.pubs || {})[mk];
-  const clients = R && (R.rows || R.plan) ? ["Agence Gacolet","Gabriel"].concat((R.rows || R.plan).filter(r => r.blogId).map(r => r.client)) : [];
+  // Clients proposés : toutes les marques Metricool (lues par le serveur), sinon le plan de publication
+  if (!S.pdCl && !S.pdClLoad){ S.pdClLoad = true; GC.api("GET","/api/g-prod/clients").then(r => { S.pdCl = (r.clients || []).map(c => c.name); render(); }).catch(() => {}).then(() => { S.pdClLoad = false; }); }
+  const clients = S.pdCl && S.pdCl.length ? S.pdCl : R && (R.rows || R.plan) ? ["Agence Gacolet","Gabriel"].concat((R.rows || R.plan).filter(r => r.blogId).map(r => r.client)) : [];
   // Liste des clients relue au clic (elle arrive de Metricool après le premier affichage) ; une production ouverte seule n'a besoin que de son client
-  const launch = (c, id) => { const R2 = (S.pubs || {})[mk], cl = R2 && (R2.rows || R2.plan) ? ["Agence Gacolet","Gabriel"].concat((R2.rows || R2.plan).filter(r => r.blogId).map(r => r.client)) : clients;
+  const launch = (c, id) => { const R2 = (S.pubs || {})[mk], cl = S.pdCl && S.pdCl.length ? S.pdCl : R2 && (R2.rows || R2.plan) ? ["Agence Gacolet","Gabriel"].concat((R2.rows || R2.plan).filter(r => r.blogId).map(r => r.client)) : clients;
     prodDrop(cl.length ? cl : c ? [c] : cl, null, { client: c, only: id || "" }); };
   root.appendChild(head("Dépôt", "Dépose les vidéos et visuels d’un client. Claude propose la date et trois descriptions, tu peux fermer la fenêtre.", [addBtn("Déposer des fichiers", () => launch(""))]));
   const all = []; Object.keys(PD.all).forEach(c => PD.all[c].forEach(it => all.push([c, it])));
