@@ -73,7 +73,7 @@ function mapPost(p) {
     url: igUrl,
     review: reviewOf(p),
     // Prête à montrer au client : avec son visuel ou sa vidéo, et sa description si c'est un brouillon déposé par l'agence
-    ready: media.length > 0 && (media.length === (Array.isArray(p.media) ? p.media.length : 0)) && (!p.draft || !!rawText),
+    ready: media.length > 0 && (media.length === (Array.isArray(p.media) ? p.media.length : 0)) && (!p.draft || !!rawText || story),
   };
 }
 

@@ -12,8 +12,11 @@ module.exports = function production({ app, auth, wrap, db, current, put, pubPla
   // Sinon : la marque enregistrée sur le code client (Paramètres > Codes clients), même nom que la fiche
   // Toutes les marques du compte Metricool (gardées 10 min) : le Dépôt propose chaque client qui en a une, pas seulement ceux du plan de publication
   let BRANDS = { at: 0, list: [] };
+  // Réseaux que le Dépôt sait programmer, et le champ de la marque Metricool qui dit s'il est relié
+  const NETS = [["instagram","instagram"],["facebook","facebook"],["tiktok","tiktok"],["linkedin","linkedinCompany"],["youtube","youtube"]];
+  const netsOf = async blog => { const b = (await brands()).find(x => x.blog === String(blog)); return b && b.nets.length ? b.nets : ["instagram","facebook"]; };
   async function brands(){ if (Date.now() - BRANDS.at < 600000 || !process.env.METRICOOL_USER_TOKEN) return BRANDS.list;
-    try { const j = await mc("GET", "/admin/simpleProfiles", {}); BRANDS = { at: Date.now(), list: (Array.isArray(j) ? j : (j && j.data) || []).filter(b => b && b.id && !b.deleted).map(b => ({ name: String(b.label || b.title || "").trim(), blog: String(b.id) })).filter(b => b.name) }; } catch (e) { console.error("Marques Metricool :", e.message); }
+    try { const j = await mc("GET", "/admin/simpleProfiles", {}); BRANDS = { at: Date.now(), list: (Array.isArray(j) ? j : (j && j.data) || []).filter(b => b && b.id && !b.deleted).map(b => ({ name: String(b.label || b.title || "").trim(), blog: String(b.id), nets: NETS.filter(([k, f]) => b[f]).map(([k]) => k) })).filter(b => b.name) }; } catch (e) { console.error("Marques Metricool :", e.message); }
     return BRANDS.list; }
   const blogFor = async name => { const b = blogOf(name); if (b) return b; const c = (await db.all("SELECT name, metricool_blog_id FROM clients WHERE metricool_blog_id <> ''")).find(x => norm(x.name) === norm(name)); if (c) return String(c.metricool_blog_id);
     const m = (await brands()).find(x => norm(x.name) === norm(name)); return m ? m.blog : ""; };
@@ -23,6 +26,7 @@ module.exports = function production({ app, auth, wrap, db, current, put, pubPla
     EXTRA.forEach(([n, b]) => add(n, b)); pubPlan.forEach(([n, b]) => add(n, b));
     (await db.all("SELECT name, metricool_blog_id FROM clients WHERE active = 1 AND metricool_blog_id <> ''")).forEach(c => { if (!out.some(x => x.blog === String(c.metricool_blog_id))) add(c.name, c.metricool_blog_id); });
     const known = new Set(out.map(x => x.blog)); (await brands()).filter(b => !known.has(b.blog)).sort((a, b) => a.name.localeCompare(b.name, "fr")).forEach(b => add(b.name, b.blog));
+    for (const c of out) c.nets = await netsOf(c.blog);
     res.json({ clients: out, metricool: !!process.env.METRICOOL_USER_TOKEN });
   }));
   const mc = async (method, path, q, body) => {
@@ -138,7 +142,7 @@ module.exports = function production({ app, auth, wrap, db, current, put, pubPla
   }));
 
   // Dépôts en cours, gardés sur le serveur (et plus dans le navigateur) : les mêmes sur tous les appareils, rien ne disparaît en fermant une fenêtre
-  const DKEYS = ["client","name","kind","url","date","time","reco","text","props","transcript","wait","asked","err","pct","up","upAt","by","at"];
+  const DKEYS = ["client","name","kind","url","date","time","reco","text","props","transcript","wait","asked","err","pct","up","upAt","upDev","type","nets","by","at"];
   const draftId = id => /^d[a-z0-9]{6,30}$/.test(String(id)) ? String(id) : "";
   app.get("/api/g-prod/drafts", auth, wrap(async (req, res) => {
     const list = await docsOf("_depot");
@@ -172,11 +176,21 @@ module.exports = function production({ app, auth, wrap, db, current, put, pubPla
     for (const it of (Array.isArray(b.items) ? b.items : []).slice(0, 20)) {
       const url = String(it.url || ""); if (!/^\/f\/[a-f0-9]{32}(\.[a-z0-9]{1,7})?$/.test(url)) { out.push({ ok: false, id: it.id || "", error: "Fichier invalide." }); continue; }
       if (!/^\d{4}-\d{2}-\d{2}$/.test(it.date || "") || !/^\d{2}:\d{2}$/.test(it.time || "")) { out.push({ ok: false, id: it.id || "", error: "Date ou heure invalide." }); continue; }
-      const video = it.kind === "video", nets = (Array.isArray(it.networks) && it.networks.length ? it.networks : ["instagram", "facebook"]).filter(x => ["instagram", "facebook"].includes(x));
-      const info = { publicationDate: { dateTime: it.date + "T" + it.time + ":00", timezone: "Europe/Paris" }, text: String(it.text || "").slice(0, 2200), providers: nets.map(network => ({ network })),
+      // Type choisi dans le Dépôt (publication, réel, story) et réseaux cochés parmi ceux reliés à la marque
+      const video = it.kind === "video", type = ["post","reel","story"].includes(it.type) ? it.type : video ? "reel" : "post", okNets = await netsOf(blog);
+      let nets = (Array.isArray(it.networks) && it.networks.length ? it.networks : ["instagram", "facebook"]).filter(x => okNets.includes(x));
+      if (type === "story") nets = nets.filter(x => x === "instagram" || x === "facebook");   // la story n'existe que sur Instagram et Facebook
+      if (!video) nets = nets.filter(x => x !== "youtube");                                   // YouTube : vidéo seulement
+      if (type === "reel" && !video) { out.push({ ok: false, id: it.id || "", error: "Un réel demande une vidéo." }); continue; }
+      if (!nets.length) { out.push({ ok: false, id: it.id || "", error: "Aucun réseau possible pour ce type de publication." }); continue; }
+      const T = type === "story" ? "STORY" : type === "reel" ? "REEL" : "POST", text = String(it.text || "").slice(0, 2200);
+      const info = { publicationDate: { dateTime: it.date + "T" + it.time + ":00", timezone: "Europe/Paris" }, text: type === "story" ? "" : text, providers: nets.map(network => ({ network })),
         media: [base + url], autoPublish: true, draft: mode !== "publish", shortener: false, descendants: [], firstCommentText: "", hasNotReadNotes: false, mediaAltText: [], smartLinkData: { ids: [] } };
-      if (nets.includes("instagram")) info.instagramData = { type: video ? "REEL" : "POST", showReelOnFeed: true };
-      if (nets.includes("facebook")) info.facebookData = { type: video ? "REEL" : "POST" };
+      if (nets.includes("instagram")) info.instagramData = { type: T, showReelOnFeed: true };
+      if (nets.includes("facebook")) info.facebookData = { type: T };
+      if (nets.includes("tiktok")) info.tiktokData = { privacyOption: "PUBLIC_TO_EVERYONE", disableComment: false, disableDuet: false, disableStitch: false };
+      if (nets.includes("linkedin")) info.linkedinData = { type: "post", previewIncluded: true };
+      if (nets.includes("youtube")) info.youtubeData = { title: (text.split("\n").find(l => l.trim() && !l.trim().startsWith("#")) || it.name || "Vidéo").replace(/#\S+/g, "").trim().slice(0, 100), type: "short", privacy: "public", madeForKids: false };
       try { const r = await mc("POST", "/v2/scheduler/posts", { blogId: blog }, info); const id = r && (r.id || (r.data && r.data.id));
         // Miniature préparée tout de suite : la carte du client s'affiche sans attendre
         if (id && app.locals.warmThumbs) { try { app.locals.warmThumbs([{ media: [{ url, video }] }]); } catch (e) {} }
