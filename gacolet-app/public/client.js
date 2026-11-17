@@ -837,7 +837,9 @@ function onboard(){
       try { const msg = await check(); if (msg === "stop") return; if (msg){ er.textContent = msg; return; } step++; draw(); } catch(x){ er.textContent = x.message; } finally { sb.disabled = false; } };
     box.appendChild(f); const f1 = f.querySelector("input,textarea");
     /* Téléphone : pas de clavier qui surgit tout seul (il recouvrait l’animation du logo et faisait sauter la page) ; on touche la case pour écrire */
-    if (f1 && matchMedia("(hover:hover)").matches) f1.focus({ preventScroll: true });
+    const touch = navigator.maxTouchPoints > 0 || "ontouchstart" in window;
+    if (f1 && !touch) f1.focus({ preventScroll: true });
+    else if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
   }
   draw();
 }
