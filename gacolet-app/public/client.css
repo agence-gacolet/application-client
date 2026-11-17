@@ -118,3 +118,6 @@ html,body{background:#090908}
 .pf-change{border:1px solid var(--line-2);background:none;color:var(--ink);border-radius:999px;padding:8px 14px;font:600 14px/1 var(--text);cursor:pointer}
 .pf-form label.full{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
 .pf-form input{width:100%;box-sizing:border-box}
+/* Plein écran : la vidéo occupe exactement son image, les commandes de l'iPhone ne débordent plus sur les bandes */
+.cl-view .cl-strip>.cl-vslide{flex:none;width:100%;height:100%;display:flex;align-items:center;justify-content:center;scroll-snap-align:start;background:none}
+.cl-view .cl-vslide video{width:auto;height:auto;max-width:100%;max-height:100%;object-fit:contain;display:block;background:#000;border-radius:12px}

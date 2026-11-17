@@ -172,7 +172,9 @@ function vAccueil(root){
 }
 /* Accueil immobile sans figer la page (figer la page faisait remonter la barre du bas sur iPhone) : on bloque juste le glissement du doigt */
 document.addEventListener("touchmove", e => { if (document.body.classList.contains("cl-home") && !e.target.closest(".dr-wrap,.cl-view,.overlay,#overlay")) e.preventDefault(); }, { passive: false });
-function fitLine(n){ n.style.whiteSpace = "nowrap"; n.style.fontSize = ""; let fs = parseFloat(getComputedStyle(n).fontSize), max = n.parentElement.clientWidth;
+function fitLine(n){ n.style.whiteSpace = "nowrap"; n.style.fontSize = ""; const ps = getComputedStyle(n.parentElement);
+  /* marge de sécurité : 24 px de chaque côté de l’écran au minimum (Matis, 17/11) */
+  let fs = parseFloat(getComputedStyle(n).fontSize), max = Math.min(n.parentElement.clientWidth - parseFloat(ps.paddingLeft) - parseFloat(ps.paddingRight), window.innerWidth - 48);
   while (n.scrollWidth > max && fs > 12){ fs -= 1; n.style.fontSize = fs + "px"; } }
 
 /* ---------- Tournages : la feuille préparée par l’agence, à valider avant le jour J ---------- */
@@ -295,7 +297,7 @@ function slider(p, opts){
   const box = el("div","cl-media" + (isTall(p) ? " tall" : "") + (opts.full ? " full" : "")); const strip = el("div","cl-strip"); strip.tabIndex = 0; strip.setAttribute("aria-label", typeLabel(p));
   p.media.forEach((m, i) => { let n; if (m.video){ n = document.createElement("video"); n.src = vsrc(m.url); n.playsInline = true; n.preload = "metadata";
       /* Carte : la première image du film, un bouton lecture, et la lecture en plein écran (les commandes de l’iPhone ne recouvrent plus rien) */
-      if (opts.full){ n.controls = true; n.dataset.i = i; }
+      if (opts.full){ n.controls = true; n.dataset.i = i; const w = el("div","cl-vslide"); w.appendChild(n); n = w; } /* cadre = image : les commandes de l’iPhone restent dans la vidéo */
       else { n.muted = true; const w = el("div","cl-vwrap"); w.appendChild(n); const pl = el("button","cl-play"); pl.type = "button"; pl.setAttribute("aria-label","Lire la vidéo"); pl.innerHTML = '<svg viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg>'; const op = () => opts.onOpen ? opts.onOpen(i, true) : (n.controls = true, n.muted = false, n.play().catch(() => {})); pl.onclick = op; n.onclick = op; w.appendChild(pl); n = w; } }
     else { n = document.createElement("img"); n.src = m.url; n.alt = (p.type || "Visuel") + " " + (i + 1); n.loading = "lazy"; if (opts.onOpen){ n.onclick = () => opts.onOpen(cur()); n.classList.add("zoomable"); } } strip.appendChild(n); });
   box.appendChild(strip);
