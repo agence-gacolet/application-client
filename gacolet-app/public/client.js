@@ -474,15 +474,17 @@ function vMessagerie(root){
   hd.append(back, isDm ? avatarEl(other, 40) : avatarEl("Agence Gacolet", 40, { logo: true }), ht); main.appendChild(hd);
   const list = el("div","wa-msgs"); list.id = "chat-list";
   if (!msgs.length) list.appendChild(el("p","wa-empty", isDm ? "Écrivez à " + other + " : seul " + other + " verra ces messages." : S.mmode === "shoot" ? "Tout ce qui concerne les tournages : dates, lieux, matériel, personnes à filmer." : "Écrivez à l’agence : une question, une précision, un retour. L’équipe répond ici."));
-  let prev = null;
+  let prev = null, lastLine = null;
   msgs.forEach(m => {
     const md = new Date(m.at || 0), d = iso(md);
     if (!prev || iso(new Date(prev.at || 0)) !== d){ const dl = fmtDL(d); list.appendChild(el("div","wa-day", d === today() ? "Aujourd’hui" : d === addDays(today(), -1) ? "Hier" : dl.charAt(0).toUpperCase() + dl.slice(1))); prev = null; }
-    const mine = !!m.ext && m.who === me, grouped = prev && prev.who === m.who && (Date.parse(m.at) - Date.parse(prev.at)) < 5*60000;
-    const line = el("div","wa-line" + (mine ? " mine" : "") + (grouped ? " cont" : ""));
-    if (!mine) line.appendChild(grouped ? el("span","av-sp") : avatarEl(m.who, 30));
+    const mine = !!m.ext && m.who === me, grouped = prev && prev.who === m.who && !!prev.ext === !!m.ext && (Date.parse(m.at) - Date.parse(prev.at)) < 5*60000;
+    // Photo sur le dernier message d’une suite (« tail »), comme côté équipe
+    const line = el("div","wa-line tail" + (mine ? " mine" : "") + (grouped ? " cont" : ""));
+    if (grouped && lastLine) lastLine.classList.remove("tail"); lastLine = line;
+    if (!mine) line.appendChild(avatarEl(m.who, 30));
     const bub = el("div","wa-bub");
-    if (!mine && !grouped && !isDm){ const nm = el("b","wa-name",m.who || ""); const t = team.find(x => x.name === m.who); nm.style.color = avColor(m.who); bub.appendChild(nm); if (t && t.poste) nm.appendChild(el("span","cl-poste"," " + t.poste)); }
+    if (!mine && !grouped && !isDm){ const nm = el("b","wa-name",m.who || ""); nm.style.color = avColor(m.who); bub.appendChild(nm); }
     (m.files || []).forEach(f => bub.appendChild(attachEl(f)));
     if (m.audio) { const au = document.createElement("audio"); au.controls = true; au.src = m.audio; au.preload = "none"; bub.appendChild(au); }
     if (m.text) bub.appendChild(el("div","wa-txt",m.text));
