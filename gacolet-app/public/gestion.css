@@ -2164,3 +2164,12 @@ body.kb .mtabs{display:none}
   body.chat-full:has(.wa.show-conv) .wa{bottom:0}
   body.kb.chat-full .wa,body.kb.chat-full:has(.wa.show-conv) .wa{top:var(--kbt,0px)!important;bottom:auto!important;height:var(--kbh,100dvh)!important}
 }
+/* Téléphone, conversation ouverte : le fond gris prend tout l'écran, derrière l'heure et sous la saisie, comme Messages (Matis, 17/11) */
+@media (max-width:900px){
+  html:has(body.chat-full .wa.show-conv),html body.chat-full:has(.wa.show-conv){background:#1C1C1C!important}
+  html body.chat-full:has(.wa.show-conv) .wa{top:0!important;bottom:0!important;height:auto!important}
+  html body.chat-full:has(.wa.show-conv) .wa-head{padding-top:calc(10px + env(safe-area-inset-top,0px))!important}
+  body.espace-client.chat-full:has(.wa.show-conv)::before{display:none}
+  html body.kb.chat-full:has(.wa.show-conv) .wa{top:var(--kbt,0px)!important;bottom:auto!important;height:var(--kbh,100dvh)!important}
+  html body.kb.chat-full:has(.wa.show-conv) .wa-head{padding-top:6px!important}
+}
