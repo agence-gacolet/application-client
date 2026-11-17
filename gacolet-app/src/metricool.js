@@ -9,7 +9,7 @@ const path = require("path");
 
 const BASE = "https://app.metricool.com/api";
 const PATH_SCHEDULED = "/v2/scheduler/posts";
-const CACHE_MS = 60 * 1000; // 1 min : une publication déposée apparaît vite chez le client
+const CACHE_MS = 15 * 1000; // 15 s : ce qui est ajouté ou supprimé dans Metricool se voit presque tout de suite chez le client
 const cache = new Map();
 
 const NET = { instagram: "Instagram", facebook: "Facebook", youtube: "YouTube", tiktok: "TikTok", linkedin: "LinkedIn", gmb: "Fiche Google" };

@@ -832,7 +832,7 @@ let poll = 0;
 /* Actualisation : messages toutes les 8 s, publications et chiffres toutes les 45 s, appli ouverte (plus besoin de la fermer) */
 let lastMe = Date.now();
 async function reloadMe(){ const d = await api("/api/me"); const was = JSON.stringify(S.d && S.d.posts), typing = document.activeElement && /^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName); S.d = d; saveCache(); prefetch(); lastMe = Date.now(); if (JSON.stringify(d.posts) !== was && !typing) render(); }
-function startPoll(){ clearInterval(poll); poll = setInterval(() => { if (document.visibilityState !== "visible" || !TOKEN || !S.f) return; loadFeed().catch(() => {}); if (Date.now() - lastMe > 45000) reloadMe().catch(() => {}); }, 8000); }
+function startPoll(){ clearInterval(poll); poll = setInterval(() => { if (document.visibilityState !== "visible" || !TOKEN || !S.f) return; loadFeed().catch(() => {}); if (Date.now() - lastMe > 20000) reloadMe().catch(() => {}); }, 8000); }
 /* Tirer vers le bas en haut de page pour actualiser (comme dans les applis du téléphone) */
 (() => { let y0 = null, ind = null;
   document.addEventListener("touchstart", e => { y0 = window.scrollY <= 0 && TOKEN && S.d && !document.querySelector(".dr-wrap, #overlay.open") && !document.body.classList.contains("chat-full") ? e.touches[0].clientY : null; }, { passive: true });
