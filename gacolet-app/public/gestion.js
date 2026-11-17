@@ -3943,7 +3943,7 @@ const MOD_LABEL = { "com":"Réseaux sociaux", "meta":"Publicité Meta", "com,met
 const modsFromSv = ks => { const meta = ks.includes("perf") || ks.includes("meta"), com = ks.some(k => ["perf","perfplus","gestion","sur","print","site","ponctuel"].includes(k)); return [com || !meta ? "com" : "", meta ? "meta" : ""].filter(Boolean).join(","); };
 const ficheOf = name => (S.d && S.d.clients || []).find(c => norm(c.name) === norm(name));
 const svShort = x => { const f = ficheOf(x.name), ks = f ? Object.keys(svOf(f)) : []; return ks.length ? SERVICES.filter(([k]) => ks.includes(k)).map(y => y[2]).join(", ") : (MOD_LABEL[x.modules] || x.modules || ""); };
-async function reloadCodes(){ try { const r = await GC.api("GET","/api/g-codes"); S.codes = r.clients; } catch(e){ toast(e.message); if (!S.codes) S.codes = []; } render(); }
+async function reloadCodes(){ try { const r = await GC.api("GET","/api/g-codes"); S.codes = r.clients; S.brands = r.brands || []; } catch(e){ toast(e.message); if (!S.codes) S.codes = []; } render(); }
 function copyCode(code){ (navigator.clipboard ? navigator.clipboard.writeText(code) : Promise.reject()).then(() => toast("Code " + code + " copié."), () => toast(code)); }
 function pmCodes(w){
   if (S.role !== "owner"){ w.appendChild(pmCard("Codes clients", "Réservé à " + fullNames() + ".")); return; }
@@ -4058,10 +4058,14 @@ function editCode(x){
     const svNote = el("p","muted cd-svn"); f.appendChild(svNote);
     const iF = fld("Formule", Object.assign(el("input"), { value: x.formula || (packFill(had) || {}).formula || "", placeholder: "Ex. Pack Performance" }), true);
     const picked = () => SV_KEYS.filter(k => svIn[k].checked);
-    const showMods = () => { const m = modsFromSv(picked()); svNote.textContent = "Son espace montrera : " + (MOD_LABEL[m] || m).toLowerCase() + "."; iG.closest("label").style.display = iQ.closest("label").style.display = m.includes("meta") ? "" : "none"; };
+    const showMods = () => { const m = modsFromSv(picked()); svNote.textContent = "Les pages de son espace suivent ces packs, d’après le réglage de Paramètres > Espace client."; iG.closest("label").style.display = iQ.closest("label").style.display = m.includes("meta") ? "" : "none"; };
     let autoF = iF.value === ((packFill(had) || {}).formula || "") ;
     iF.oninput = () => { autoF = false; };
     Object.values(svIn).forEach(c => c.onchange = () => { const nx = packFill(picked()); if (autoF || !iF.value.trim()){ iF.value = nx ? nx.formula : ""; autoF = true; } showMods(); });
+    // Marque Metricool : sans elle, « À valider » et « Statistiques » restent vides dans l’espace du client
+    const known = (S.brands || []).find(y => norm(y.name) === norm(x.name));
+    const iB = fld("Marque Metricool (numéro)", Object.assign(el("input"), { value: x.metricool_blog_id || (known ? known.blog : ""), inputMode: "numeric", placeholder: "Ex. 6875110" }), true);
+    { const dl = el("datalist"); dl.id = "cd-brands"; (S.brands || []).forEach(y => { const o = el("option"); o.value = y.blog; o.label = y.name; dl.appendChild(o); }); f.appendChild(dl); iB.setAttribute("list","cd-brands"); }
     const iG = fld("Objectif de contacts par mois (Meta)", Object.assign(el("input"), { type: "number", min: 0, value: x.contacts_goal || "" }), true);
     const iA = el("select"); [["1","Actif"],["0","Désactivé"]].forEach(([v,l]) => { const o = el("option",null,l); o.value = v; iA.appendChild(o); }); iA.value = x.active === 0 ? "0" : "1"; if (!isNew) fld("Accès", iA, true);
     const iQ = fld("Définition écrite du contact qualifié (Meta)", Object.assign(el("textarea"), { rows: 3, value: x.qualified_definition || "" }));
@@ -4080,7 +4084,8 @@ function editCode(x){
       if (!iN.value.trim()){ iN.focus(); toast("Indique le nom du client."); return; }
       const pk = picked(); if (!pk.length){ toast("Coche au moins un service."); return; }
       const pre = isNew ? null : await espSnap(x.name);
-      const body = { name: iN.value.trim(), modules: modsFromSv(pk).split(","), formula: iF.value.trim(), goal: Number(iG.value) || 0, qualifiedDef: iQ.value.trim() };
+      const body = { name: iN.value.trim(), modules: modsFromSv(pk).split(","), formula: iF.value.trim(), goal: Number(iG.value) || 0, qualifiedDef: iQ.value.trim(), blog: iB.value.replace(/\D/g, "") };
+      if (!body.blog && !confirm("Aucune marque Metricool : « À valider » et « Statistiques » resteront vides pour ce client. Continuer ?")) return;
       // Les services cochés sont repris dans la fiche du client (Tableau clients), dates « Depuis le » gardées
       if (fc && pk.join() !== Object.keys(sv0).filter(k => SV_KEYS.includes(k)).sort((a, b) => SV_KEYS.indexOf(a) - SV_KEYS.indexOf(b)).join()){
         const services = {}; pk.forEach(k => { services[k] = sv0[k] || ""; }); try { await save("clients", fc.id, { services }, { merge: true }); } catch(e){ if (e.message !== "ro") toast(e.message); } }

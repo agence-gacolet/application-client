@@ -373,16 +373,19 @@ module.exports = function (app, { db, wrap, root }) {
   const newCode = async m => { let code; for (let i = 0; i < 30; i++){ code = "GAC-" + rnd(4) + "-" + (SUFFIX[m] || "RS"); if (!await db.one("SELECT id FROM clients WHERE code = ?", [code])) return code; } throw new Error("Code impossible à générer, réessaie."); };
   const modsOf = arr => ["com", "meta"].filter(x => (arr || []).includes(x)).join(",") || "com";
   app.get("/api/g-codes", auth, ownerOnly, wrap(async (req, res) => {
-    const cl = await db.all("SELECT id, code, name, formula, modules, contacts_goal, qualified_definition, active, created_at FROM clients ORDER BY name");
-    const us = await db.all("SELECT id, client_id, prenom, nom, email, created_at FROM users WHERE token NOT LIKE 'retire-%' ORDER BY id");
-    res.json({ clients: cl.map(c => ({ ...c, people: us.filter(u => u.client_id === c.id) })) });
+    const cl = await db.all("SELECT id, code, name, formula, modules, metricool_blog_id, contacts_goal, qualified_definition, active, created_at FROM clients ORDER BY name");
+    // Les comptes internes (Aperçu, mode test) ne sont pas des personnes inscrites du client
+    const us = await db.all("SELECT id, client_id, prenom, nom, email, created_at FROM users WHERE token NOT LIKE 'retire-%' AND email NOT LIKE '%@agence.interne' ORDER BY id");
+    // Marques Metricool connues (plan de publication) : proposées dans la fiche du code, remplies d'après le nom du client
+    res.json({ clients: cl.map(c => ({ ...c, people: us.filter(u => u.client_id === c.id) })), brands: PUB_PLAN.filter(x => x[1]).map(x => ({ name: x[0], blog: x[1] })) });
   }));
   app.post("/api/g-codes", auth, ownerOnly, wrap(async (req, res) => {
     const b = req.body || {}, name = String(b.name || "").trim().slice(0, 120);
     if (!name) return res.status(400).json({ error: "Nom du client obligatoire." });
     const m = modsOf(b.modules), code = await newCode(m);
+    const blog = String(b.blog || "").replace(/\D/g, "").slice(0, 20) || ((PUB_PLAN.find(x => x[1] && sameName(x[0], name)) || [])[1] || "");
     await db.run("INSERT INTO clients (code, name, formula, modules, metricool_blog_id, contacts_goal, qualified_definition, drive_url, active, created_at) VALUES (?,?,?,?,?,?,?,?,1,?)",
-      [code, name, String(b.formula || "").slice(0, 120), m, "", Number(b.goal) || 0, String(b.qualifiedDef || "").slice(0, 2000), "", new Date().toISOString()]);
+      [code, name, String(b.formula || "").slice(0, 120), m, blog, Number(b.goal) || 0, String(b.qualifiedDef || "").slice(0, 2000), "", new Date().toISOString()]);
     res.json({ ok: true, code });
   }));
   app.patch("/api/g-codes/:id", auth, ownerOnly, wrap(async (req, res) => {
@@ -390,6 +393,7 @@ module.exports = function (app, { db, wrap, root }) {
     const c = await db.one("SELECT * FROM clients WHERE id = ?", [id]); if (!c) return res.status(404).json({ error: "Client introuvable." });
     if (b.renew){ const code = await newCode(c.modules); await db.run("UPDATE clients SET code = ? WHERE id = ?", [code, id]); return res.json({ ok: true, code }); }
     const m = b.modules ? modsOf(b.modules) : c.modules;
+    if (b.blog != null) await db.run("UPDATE clients SET metricool_blog_id = ? WHERE id = ?", [String(b.blog).replace(/\D/g, "").slice(0, 20), id]);
     await db.run("UPDATE clients SET name = ?, formula = ?, modules = ?, contacts_goal = ?, qualified_definition = ?, active = ? WHERE id = ?",
       [b.name != null ? String(b.name).trim().slice(0, 120) || c.name : c.name, b.formula != null ? String(b.formula).slice(0, 120) : c.formula, m,
        b.goal != null ? Number(b.goal) || 0 : c.contacts_goal, b.qualifiedDef != null ? String(b.qualifiedDef).slice(0, 2000) : c.qualified_definition, b.active != null ? (b.active ? 1 : 0) : c.active, id]);
