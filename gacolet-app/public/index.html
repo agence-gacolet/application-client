@@ -32,9 +32,8 @@
 </head>
 <body class="espace-client">
 <style>
-/* Animation du logo à l'ouverture : téléphone seulement, raccourcie à 1,35 s (Matis, 17/11) */
+/* Animation du logo à l'ouverture : téléphone et ordinateur, raccourcie à 1,35 s (Matis, 17/11) */
 .splash{position:fixed;inset:0;z-index:200;background:#090908;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;overflow:hidden;animation:sp-out .35s cubic-bezier(.76,0,.24,1) 1.0s forwards}
-@media (min-width:901px){.splash{display:none}}
 .splash::before{content:"";position:absolute;left:50%;top:50%;width:140vmax;height:1px;background:#C6FF33;transform:translate(-50%,-50%) rotate(-36deg) scaleX(0);opacity:.9;animation:sp-beam .4s cubic-bezier(.6,0,.2,1) 0s forwards}
 .splash svg{position:relative;width:min(260px,56vw);height:auto;overflow:visible;animation:sp-pop .3s cubic-bezier(.3,1.7,.5,1) .72s}
 .splash path{fill:#C6FF33;fill-opacity:0;stroke:#C6FF33;stroke-width:2.2;stroke-linejoin:round;stroke-dasharray:1;stroke-dashoffset:1}
