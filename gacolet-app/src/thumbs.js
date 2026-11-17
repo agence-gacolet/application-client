@@ -54,7 +54,15 @@ module.exports = function (app, { root }) {
     const fallback = () => isVideo(u) ? res.status(404).end() : res.redirect(302, u);
     if (!sharp) return fallback();
     try { const f = await build(u, w); res.setHeader("Cache-Control", "public, max-age=31536000, immutable"); res.type("image/webp"); fs.createReadStream(f).pipe(res); }
-    catch (e) { console.error("Miniature :", e.message); fallback(); }
+    catch (e) { console.error("Miniature :", e.message); res.setHeader("X-Thumb-Error", String(e.message || e).replace(/[^\x20-\x7e]/g, "?").slice(0, 200)); fallback(); }
+  });
+  // État des outils (diagnostic, sans donnée sensible)
+  app.get("/api/thumb-etat", (req, res) => {
+    let info = { sharp: !!sharp, ffmpeg: ffmpeg || null, existe: !!(ffmpeg && fs.existsSync(ffmpeg)) };
+    if (!ffmpeg){ try { info.installer = require.resolve("@ffmpeg-installer/ffmpeg"); } catch (e) { info.installer = "absent : " + e.message.slice(0, 120); }
+      try { const dir = path.dirname(require.resolve("@ffmpeg-installer/ffmpeg/package.json")); info.paquets = fs.readdirSync(path.dirname(dir)); } catch (e) {} info.plateforme = process.platform + "-" + process.arch; return res.json(info); }
+    const p = spawn(ffmpeg, ["-version"]); let out = ""; p.stdout.on("data", d => out += d); p.stderr.on("data", d => out += d);
+    p.on("close", code => res.json(Object.assign(info, { code, sortie: out.slice(0, 160) }))); p.on("error", e => res.json(Object.assign(info, { erreur: e.message })));
   });
 
   // Préparation en arrière-plan dès que les publications sont lues (le client trouve les miniatures prêtes)
