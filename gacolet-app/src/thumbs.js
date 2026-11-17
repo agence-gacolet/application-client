@@ -16,7 +16,10 @@ module.exports = function (app, { root }) {
   for (const get of [() => require("@ffmpeg-installer/ffmpeg").path, () => require("ffmpeg-static")]) { try { const f = get(); if (f && fs.existsSync(f)) { ffmpeg = f; break; } } catch (e) {} }
   if (!ffmpeg) console.log("Miniatures : ffmpeg absent, pas d'image d'aperçu pour les vidéos.");
 
-  const OK_URL = u => /^https:\/\/static\.metricool\.com\/[^\s"<>]+$/.test(u);
+  // Fichiers de Metricool, ou fichiers déposés sur ce serveur (/f/…), lus alors sur le disque
+  const LOCAL = /^\/f\/([a-f0-9]{32}(?:\.[a-z0-9]{1,7})?)$/, UPL = path.join(root, "uploads", "gestion");
+  const OK_URL = u => /^https:\/\/static\.metricool\.com\/[^\s"<>]+$/.test(u) || LOCAL.test(u);
+  const localFile = u => { const m = String(u).match(LOCAL); return m ? path.join(UPL, m[1]) : ""; };
   const isVideo = u => /\.(mp4|mov|webm|m4v)(\?|$)/i.test(u);
   const WIDTHS = [240, 480, 720, 1080, 1440];
   const fileOf = (u, w) => path.join(DIR, crypto.createHash("sha1").update(u).digest("hex") + "-" + w + ".webp");
@@ -52,7 +55,9 @@ module.exports = function (app, { root }) {
     const key = f; if (pending.has(key)) return pending.get(key);
     const job = enqueue(async () => {
       let src;
-      if (isVideo(u)){ if (!ffmpeg) throw new Error("ffmpeg absent"); src = await frameOf(u); }
+      const lf = localFile(u);
+      if (lf){ if (!fs.existsSync(lf)) throw new Error("fichier absent"); if (isVideo(u)){ if (!ffmpeg) throw new Error("ffmpeg absent"); src = await runFrame(lf, 1).catch(() => runFrame(lf, 0)); } else src = fs.readFileSync(lf); }
+      else if (isVideo(u)){ if (!ffmpeg) throw new Error("ffmpeg absent"); src = await frameOf(u); }
       else { const r = await fetch(u); if (!r.ok) throw new Error("téléchargement " + r.status); src = Buffer.from(await r.arrayBuffer()); }
       const out = await sharp(src).rotate().resize({ width: w, withoutEnlargement: true }).webp({ quality: 74 }).toBuffer();
       const tmp = f + ".tmp"; fs.writeFileSync(tmp, out); fs.renameSync(tmp, f); return f;

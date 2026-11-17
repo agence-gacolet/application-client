@@ -164,6 +164,8 @@ module.exports = function production({ app, auth, wrap, db, current, put, pubPla
       if (nets.includes("instagram")) info.instagramData = { type: video ? "REEL" : "POST", showReelOnFeed: true };
       if (nets.includes("facebook")) info.facebookData = { type: video ? "REEL" : "POST" };
       try { const r = await mc("POST", "/v2/scheduler/posts", { blogId: blog }, info); const id = r && (r.id || (r.data && r.data.id));
+        // Miniature préparée tout de suite : la carte du client s'affiche sans attendre
+        if (id && app.locals.warmThumbs) { try { app.locals.warmThumbs([{ media: [{ url, video }] }]); } catch (e) {} }
         if (mode === "review" && id) { await put("_prodrev", "mc" + id, { blog, client: name, at: new Date().toISOString() }); try { require("./metricool").forget(blog); } catch (e) {} }
         if (id) { await put("_purge", url.slice(3).replace(/\W/g, "_"), { file: url.slice(3), blog, post: String(id), date: it.date, at: new Date().toISOString() }); setTimeout(purgeFiles, 30000).unref(); }
         const did = draftId(it.id); if (did) await db.run("UPDATE docs SET deleted = 1, updated_at = ? WHERE col = '_depot' AND id = ?", [new Date().toISOString(), did]);

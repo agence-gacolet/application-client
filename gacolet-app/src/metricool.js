@@ -54,7 +54,11 @@ function mapPost(p) {
   const published = provs.length > 0 && provs.every(x => x.status === "PUBLISHED");
   const igUrl = (provs.find(x => x.network === "instagram" && /^https:\/\/(www\.)?instagram\.com\//.test(x.publicUrl || "")) || {}).publicUrl || "";
   const first = String(p.text || "").split("\n").find(l => l.trim() && !l.trim().startsWith("#")) || "";
-  const media = (Array.isArray(p.media) ? p.media : []).filter(u => /^https:\/\/static\.metricool\.com\//.test(u));
+  // Médias : copie Metricool, ou fichier encore sur notre serveur (brouillon envoyé en validation : Metricool ne le copie qu'à la programmation),
+  // servi alors directement par l'appli, sans attendre Metricool
+  const own = u => { const m = String(u).match(/^https:\/\/[^/]+(\/f\/[a-f0-9]{32}(?:\.[a-z0-9]{1,7})?)$/); return m ? m[1] : ""; };
+  const media = (Array.isArray(p.media) ? p.media : []).map(u => /^https:\/\/static\.metricool\.com\//.test(u) ? u : own(u)).filter(Boolean);
+  const rawText = String(p.text || "").trim();
   return {
     id: "mc" + p.id,
     date: dt.slice(0, 10),
@@ -68,6 +72,8 @@ function mapPost(p) {
     published,
     url: igUrl,
     review: reviewOf(p),
+    // Prête à montrer au client : avec son visuel ou sa vidéo, et sa description si c'est un brouillon déposé par l'agence
+    ready: media.length > 0 && (media.length === (Array.isArray(p.media) ? p.media.length : 0)) && (!p.draft || !!rawText),
   };
 }
 

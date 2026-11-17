@@ -22,7 +22,7 @@ const isImg = f => /^image\//.test(f.type || "") || /\.(jpe?g|png|gif|webp|heic)
 /* Croix des grands écrans : ferme dès que le doigt se lève (le « clic » de l’iPhone se perdait parfois, Matis 17/11) */
 function tapClose(b, fn){ let done = false; const go = e => { if (done) return; done = true; if (e && e.cancelable) e.preventDefault(); fn(); }; b.addEventListener("touchend", go, { passive: false }); b.addEventListener("pointerup", go); }
 /* Miniatures légères préparées par le serveur (/api/thumb) ; si elles manquent, le fichier d’origine prend le relais */
-const isMc = u => /^https:\/\/static\.metricool\.com\//.test(u || "");
+const isMc = u => /^https:\/\/static\.metricool\.com\//.test(u || "") || /^\/f\/[a-f0-9]{32}/.test(u || "");   // fichiers Metricool ou déposés sur le serveur : miniature préparée
 const thumb = (u, w) => isMc(u) ? "/api/thumb?w=" + (w || 480) + "&u=" + encodeURIComponent(u) : u;
 /* « #t=0.1 » : l’iPhone affiche la première image au lieu d’un rectangle noir */
 const vsrc = u => /#t=/.test(u || "") ? u : (u || "") + "#t=0.1";

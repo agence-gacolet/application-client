@@ -1779,6 +1779,9 @@ function prodDrop(clients, host, opts){ opts = opts || {};
     m.appendChild(el("div","pd-body"));
     const act = el("div","actions"); const go = btn("Programmer dans Metricool","lemon pd-go", async () => {
       const bad = items.find(x => x.url && (!x.date || !x.time)); if (!items.some(x => x.url)){ toast("Aucun fichier envoyé à programmer."); return; } if (bad){ toast("Il manque la date ou l’heure de « " + bad.name + " »."); return; }
+      // Le client ne voit rien d'incomplet : pas d'envoi en validation ni de programmation sans fichier arrivé ni description
+      if (mode !== "draft"){ const up = items.find(x => !x.url || x.busy); if (up){ toast("« " + up.name + " » est encore en cours d’envoi : attends la fin."); return; }
+        const nt = items.find(x => !String(x.text || "").trim()); if (nt){ toast(nt.wait ? "Claude écrit encore la description de « " + nt.name + " » : attends qu’elle arrive." : "Il manque la description de « " + nt.name + " »."); return; } }
       if (PD.sending) return; PD.sending = true; go.disabled = true; go.textContent = "Envoi à Metricool…";
       try { const r = await GC.api("POST","/api/g-prod/schedule", { client, mode, items: items.filter(x => x.url).map(x => ({ id: x.id, url: x.url, kind: x.kind, text: x.text, date: x.date, time: x.time })) });
         const ok = r.results.filter(x => x.ok).length, ko = r.results.filter(x => !x.ok), done = new Set(r.results.filter(x => x.ok && x.id).map(x => x.id));

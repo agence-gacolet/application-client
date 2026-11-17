@@ -87,7 +87,8 @@ app.get("/api/me", mw(auth), wrap(async (req, res) => {
 
   let posts = [], postsError = null;
   if ((open("valider") || open("stats")) && c.metricool_blog_id) {
-    try { posts = await fetchScheduled(c.metricool_blog_id); }
+    // Seules les publications prêtes (visuel en place, description écrite) sont montrées au client
+    try { posts = (await fetchScheduled(c.metricool_blog_id)).filter(p => p.ready); }
     catch (e) { console.error(e); postsError = "Le planning est momentanément indisponible."; }
   }
   const decs = await db.all("SELECT d.*, u.prenom, u.nom FROM decisions d JOIN users u ON u.id = d.user_id WHERE d.client_id = ? ORDER BY d.id", [c.id]);
