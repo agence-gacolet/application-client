@@ -2172,3 +2172,4 @@ body.kb .mtabs{display:none}
   html body.kb.chat-full:has(.wa.show-conv) .wa{top:var(--kbt,0px)!important;bottom:auto!important;height:var(--kbh,100dvh)!important}
   html body.kb.chat-full:has(.wa.show-conv) .wa-head{padding-top:6px!important}
 }
+

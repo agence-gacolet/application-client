@@ -2713,7 +2713,6 @@ function vMessagerie(root){
     const bub = el("div","wa-bub");
     let nm = null; if (!mine && !grouped){ nm = el("b","wa-name",m.who || ""); nm.onclick = e => { e.stopPropagation(); profileCard(m.who); }; }
     if (m.fwd) bub.appendChild(el("span","wa-fwd","Transféré"));
-    if (m.ext && !grouped) bub.appendChild(el("span","wa-ext","Client"));
     if (m.rep){ const q = el("button","wa-quote"); q.type = "button"; q.append(el("b",null,m.rep.who === me ? "Vous" : m.rep.who), el("span",null,m.rep.text || ""));
       q.onclick = e => { e.stopPropagation(); const t = document.getElementById("m-" + m.rep.id); if (t){ t.scrollIntoView({ block: "center", behavior: "smooth" }); t.classList.remove("flash"); void t.offsetWidth; t.classList.add("flash"); } }; bub.appendChild(q); }
     (m.files || []).forEach(f => bub.appendChild(attachEl(f)));
