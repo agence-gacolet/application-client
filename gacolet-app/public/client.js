@@ -758,8 +758,11 @@ function fromHash(){ const h = location.hash.replace("#",""); S.view = R[h] && (
 function render(){
   if (!S.d || !S.f) return;
   const root = $("#app"), fid = document.activeElement && document.activeElement.id, caret = fid && document.activeElement.selectionStart;
-  const keepY = window.scrollY;
-  renderTabs(); root.textContent = ""; document.body.classList.toggle("chat-full", S.view === "messagerie");
+  const chat = S.view === "messagerie", enter = chat && !document.body.classList.contains("chat-full");
+  /* Entrée dans la messagerie : remonter en haut AVANT de figer la page, sinon l’iPhone garde le décalage et la barre du bas remonte (Matis, 17/11) */
+  if (enter) window.scrollTo(0, 0);
+  const keepY = chat ? 0 : window.scrollY;
+  renderTabs(); root.textContent = ""; document.body.classList.toggle("chat-full", chat);
   R[S.view](root);
   window.scrollTo(0, keepY);
   if (fid){ const n = document.getElementById(fid); if (n){ n.focus({ preventScroll: true }); try { if (caret != null) n.setSelectionRange(caret, caret); } catch(e){} } }

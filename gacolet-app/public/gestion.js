@@ -3506,7 +3506,8 @@ function render(){
   const root = $("#app");
   const focusId = document.activeElement && document.activeElement.id; const caret = focusId && document.activeElement.selectionStart;
   root.textContent = "";
-  document.body.classList.toggle("chat-full", S.view === "messagerie" && !S.failed && !!S.ready);
+  { const chat = S.view === "messagerie" && !S.failed && !!S.ready; if (chat && !document.body.classList.contains("chat-full")) window.scrollTo(0, 0); /* sinon l’iPhone garde le décalage et la barre du bas remonte */
+    document.body.classList.toggle("chat-full", chat); }
   document.body.classList.toggle("focus-full", S.view === "focus");
   if (S.failed){ root.appendChild(head("Gestionnaire", "")); root.appendChild(el("p","empty",S.failed)); return; }
   if (!S.ready){ root.appendChild(head(VIEWS.find(v => v[0] === S.view)[1], "")); root.appendChild(skeleton()); return; }

@@ -2145,3 +2145,13 @@ body.kb .mtabs{display:none}
 .wa-clisw .seg{-webkit-mask-image:none;mask-image:none}
 .wa-clisw small{font-size:var(--fs-s)}
 .wa-task{display:block;margin:6px 0 2px}
+/* Téléphone, conversation ouverte : plus de barre des pages en bas, la saisie tout en bas comme WhatsApp et Messages (Matis, 17/11) */
+@media (max-width:900px){
+  body:has(.wa.show-conv) .mtabs{display:none!important}
+  body.chat-full:has(.wa.show-conv) .wa,body.espace-client.chat-full:has(.wa.show-conv) .wa{height:calc(100vh - env(safe-area-inset-top,0px))!important;height:calc(100dvh - env(safe-area-inset-top,0px))!important}
+  body:has(.wa.show-conv) .wa-form{padding-bottom:calc(10px + env(safe-area-inset-bottom,0px))!important}
+  body.kb:has(.wa.show-conv) .wa-form{padding-bottom:10px!important}
+  /* En-tête d'une conversation client : boutons compacts, le nom du client reste lisible */
+  .wa-head .wa-hbtn{flex:none;padding:5px 9px!important;min-height:0!important;font-size:12px!important;border-radius:999px}
+  .wa-head .wa-htx{flex:1 1 auto;min-width:0}
+}

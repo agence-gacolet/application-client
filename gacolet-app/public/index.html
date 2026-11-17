@@ -27,7 +27,7 @@
 <link rel="apple-touch-startup-image" href="/demarrage/1242x2688.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
 <link rel="apple-touch-startup-image" href="/demarrage/828x1792.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
 <link rel="apple-touch-startup-image" href="/demarrage/750x1334.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
-<link rel="stylesheet" href="/gestion.css?v=53">
+<link rel="stylesheet" href="/gestion.css?v=55">
 <link rel="stylesheet" href="/client.css?v=1">
 </head>
 <body class="espace-client">
@@ -48,6 +48,12 @@
 @keyframes sp-out{0%{clip-path:inset(0 0 0 0)}100%{clip-path:inset(0 0 100% 0);visibility:hidden}}
 @media (prefers-reduced-motion:reduce){.splash{animation:sp-out .3s ease .5s forwards}.splash *,.splash::before{animation:none!important}.splash path{fill-opacity:1;stroke-opacity:0}}
 </style>
+<style>
+/* Téléphone à l'horizontale : pas de mode paysage (l'iPhone ignore le verrouillage du manifeste), on demande de le remettre droit (Matis, 17/11) */
+.no-land{display:none}
+@media (orientation:landscape) and (max-height:500px) and (hover:none){.no-land{position:fixed;inset:0;z-index:2147483646;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:#090908;color:#F4F4F2;font:600 16px/1.4 Inter,system-ui,sans-serif;text-align:center;padding:20px}.no-land svg{width:90px;fill:#C6FF33}html,body{overflow:hidden!important}}
+</style>
+<div class="no-land" aria-hidden="true"><svg viewBox="140 158 561 281"><path transform="matrix(1,0,0,-1,700.5803,436.46803)" d="M0 0-147.532-1.615-193.477 45.57-273.888 22.275-261.335 93.466-366.182 35.258-183.556 179.076Z"/><path transform="matrix(1,0,0,-1,232.1747,348.0155)" d="M0 0V0L-91.997-90.068 179.263 118.781 271.552 107.27 190.836 189.479 31.32 30.024"/></svg>Remettez le téléphone à la verticale</div>
 <div class="splash" id="splash" aria-hidden="true"><svg viewBox="140 158 561 281"><defs><linearGradient id="spg" x1="0" x2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".85"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient><clipPath id="spc"><path transform="matrix(1,0,0,-1,232.1747,348.0155)" d="M0 0V0L-91.997-90.068 179.263 118.781 271.552 107.27 190.836 189.479 31.32 30.024"/><path transform="matrix(1,0,0,-1,700.5803,436.46803)" d="M0 0-147.532-1.615-193.477 45.57-273.888 22.275-261.335 93.466-366.182 35.258-183.556 179.076Z"/></clipPath></defs><path class="sp-a" pathLength="1" transform="matrix(1,0,0,-1,232.1747,348.0155)" d="M0 0V0L-91.997-90.068 179.263 118.781 271.552 107.27 190.836 189.479 31.32 30.024"/><path class="sp-b" pathLength="1" transform="matrix(1,0,0,-1,700.5803,436.46803)" d="M0 0-147.532-1.615-193.477 45.57-273.888 22.275-261.335 93.466-366.182 35.258-183.556 179.076Z"/><g clip-path="url(#spc)"><rect class="sp-shine" x="140" y="158" width="200" height="281" fill="url(#spg)" transform-origin="0 0" style="transform-box:view-box"/></g></svg></div>
 <script>setTimeout(function(){var s=document.getElementById("splash");if(s)s.remove()},1450)</script>
 <div class="shell" id="shell" hidden>
@@ -68,7 +74,7 @@
 </div>
 <section class="login" id="login" hidden></section>
 <div class="overlay" id="overlay" role="dialog" aria-modal="true" aria-labelledby="mtitle"><div class="modal" id="modal"></div></div>
-<script src="/client.js?v=22"></script>
+<script src="/client.js?v=23"></script>
 <script>/* Pas de zoom : comportement d’une app */
 ["gesturestart","gesturechange","gestureend"].forEach(t => document.addEventListener(t, e => e.preventDefault(), { passive: false }));
 document.addEventListener("touchmove", e => { if (e.touches && e.touches.length > 1) e.preventDefault(); }, { passive: false });
