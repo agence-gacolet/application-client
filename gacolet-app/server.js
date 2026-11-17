@@ -100,6 +100,7 @@ app.get("/api/me", mw(auth), wrap(async (req, res) => {
     return { ...p, status: d ? d.status : p.published ? "ok" : "wait", note: d ? d.note || "" : "", decidedBy: d ? d.prenom + " " + d.nom : "", decidedAt: d ? d.created_at : "" };
   });
 
+  if (app.locals.warmThumbs) app.locals.warmThumbs(posts.filter(p => p.status !== "ok")); /* miniatures prêtes avant qu’on ouvre À valider */
   const leads = open("meta") ? await db.all("SELECT * FROM leads WHERE client_id = ? ORDER BY date DESC, id DESC LIMIT 100", [c.id]) : [];
   const stats = (await db.all("SELECT * FROM stats WHERE client_id = ? ORDER BY period", [c.id])).filter(s => s.module === "meta" ? open("meta") : open("stats"));
   res.json({
@@ -223,6 +224,7 @@ app.get("/api/admin/file/:name", admin, (req, res) => {
   res.download(path.join(UPLOADS, f), f, err => { if (err && !res.headersSent) res.status(404).end(); });
 });
 
+require("./src/thumbs")(app, { root: __dirname });
 require("./src/setup")(app, { db, wrap });
 require("./src/gestion")(app, { db, wrap, admin, root: __dirname });
 

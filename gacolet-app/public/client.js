@@ -21,6 +21,9 @@ const fmtSize = n => !n ? "" : n < 1024*1024 ? Math.max(1, Math.round(n/1024))+"
 const isImg = f => /^image\//.test(f.type || "") || /\.(jpe?g|png|gif|webp|heic)$/i.test(f.name || f.url || "");
 /* Croix des grands écrans : ferme dès que le doigt se lève (le « clic » de l’iPhone se perdait parfois, Matis 17/11) */
 function tapClose(b, fn){ let done = false; const go = e => { if (done) return; done = true; if (e && e.cancelable) e.preventDefault(); fn(); }; b.addEventListener("touchend", go, { passive: false }); b.addEventListener("pointerup", go); }
+/* Miniatures légères préparées par le serveur (/api/thumb) ; si elles manquent, le fichier d’origine prend le relais */
+const isMc = u => /^https:\/\/static\.metricool\.com\//.test(u || "");
+const thumb = (u, w) => isMc(u) ? "/api/thumb?w=" + (w || 480) + "&u=" + encodeURIComponent(u) : u;
 /* « #t=0.1 » : l’iPhone affiche la première image au lieu d’un rectangle noir */
 const vsrc = u => /#t=/.test(u || "") ? u : (u || "") + "#t=0.1";
 const isVid = f => /^video\//.test(f.type || "") || /\.(mp4|mov|webm|m4v)$/i.test(f.name || f.url || "");
@@ -81,7 +84,7 @@ async function api(path, opt = {}){
   if (body && !(body instanceof FormData)){ headers["Content-Type"] = "application/json"; body = JSON.stringify(body); }
   const r = await fetch(path, { method: opt.method || (body ? "POST" : "GET"), headers, body });
   const j = await r.json().catch(() => ({}));
-  if (r.status === 401 && TOKEN && !APERCU){ TOKEN = null; ls.del("gc-token"); start(); throw new Error(j.error || "Session expirée."); }
+  if (r.status === 401 && TOKEN && !APERCU){ TOKEN = null; ls.del("gc-token"); ls.del("gc-cache1"); start(); throw new Error(j.error || "Session expirée."); }
   if (!r.ok) throw new Error(j.error || "Une erreur est survenue.");
   return j;
 }
@@ -295,11 +298,11 @@ function typeLabel(p){ const n = (p.media || []).length; if (/story/i.test(p.typ
 function slider(p, opts){
   opts = opts || {};
   const box = el("div","cl-media" + (isTall(p) ? " tall" : "") + (opts.full ? " full" : "")); const strip = el("div","cl-strip"); strip.tabIndex = 0; strip.setAttribute("aria-label", typeLabel(p));
-  p.media.forEach((m, i) => { let n; if (m.video){ n = document.createElement("video"); n.src = vsrc(m.url); n.playsInline = true; n.preload = "metadata";
+  p.media.forEach((m, i) => { let n; if (m.video){ n = document.createElement("video"); n.src = vsrc(m.url); n.playsInline = true; n.preload = opts.full && i === (opts.start || 0) ? "auto" : "metadata"; if (isMc(m.url)) n.poster = thumb(m.url, 1080);
       /* Carte : la première image du film, un bouton lecture, et la lecture en plein écran (les commandes de l’iPhone ne recouvrent plus rien) */
       if (opts.full){ n.controls = true; n.dataset.i = i; const w = el("div","cl-vslide"); w.appendChild(n); n = w; } /* cadre = image : les commandes de l’iPhone restent dans la vidéo */
       else { n.muted = true; const w = el("div","cl-vwrap"); w.appendChild(n); const pl = el("button","cl-play"); pl.type = "button"; pl.setAttribute("aria-label","Lire la vidéo"); pl.innerHTML = '<svg viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg>'; const op = () => opts.onOpen ? opts.onOpen(i, true) : (n.controls = true, n.muted = false, n.play().catch(() => {})); pl.onclick = op; n.onclick = op; w.appendChild(pl); n = w; } }
-    else { n = document.createElement("img"); n.src = m.url; n.alt = (p.type || "Visuel") + " " + (i + 1); n.loading = "lazy"; if (opts.onOpen){ n.onclick = () => opts.onOpen(cur()); n.classList.add("zoomable"); } } strip.appendChild(n); });
+    else { n = document.createElement("img"); n.src = thumb(m.url, opts.full ? 1440 : 720); n.onerror = () => { n.onerror = null; n.src = m.url; }; n.alt = (p.type || "Visuel") + " " + (i + 1); n.loading = i ? "lazy" : "eager"; n.decoding = "async"; if (opts.onOpen){ n.onclick = () => opts.onOpen(cur()); n.classList.add("zoomable"); } } strip.appendChild(n); });
   box.appendChild(strip);
   if (!opts.full) box.appendChild(el("span","cl-type",typeLabel(p)));
   const cur = () => Math.round(strip.scrollLeft / Math.max(1, strip.clientWidth));
@@ -326,7 +329,7 @@ function openViewer(p, start, play){
   const top = el("div","cl-vtop"); const tt = el("div"); tt.append(el("b",null,typeLabel(p)), el("span",null, fmtDL(p.date) + (p.time ? ", " + fmtTime(p.time) : "") + (p.net ? ", " + p.net : "")));
   const x = el("button","cl-vx"); x.type = "button"; x.setAttribute("aria-label","Fermer"); x.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>';
   top.append(tt, x); ov.appendChild(top);
-  const sl = slider(p, { full: true }); ov.appendChild(sl);
+  const sl = slider(p, { full: true, start: start || 0 }); ov.appendChild(sl);
   const bot = el("div","cl-vbot");
   if (p.text){ const cap = el("p","cl-vcap",p.text); bot.appendChild(cap); }
   if (p.note) bot.appendChild(el("p","cl-note" + (p.status === "no" ? " no" : ""), (p.status === "no" ? "Votre raison : " : "Votre demande : ") + p.note));
@@ -370,8 +373,10 @@ function vValider(root){
   list.forEach((p, idx) => {
     const m0 = (p.media || [])[0], c = el("button","vg-tile vg-" + p.status); c.type = "button";
     c.setAttribute("aria-label", (p.title || typeLabel(p)) + ", " + (ST_LABEL[p.status] || "") + ", voir en grand");
-    if (m0){ if (m0.video){ const v = document.createElement("video"); v.src = /#t=/.test(m0.url) ? m0.url : m0.url + "#t=1"; /* image à 1 s : le début est souvent noir */ v.muted = true; v.playsInline = true; v.preload = "metadata"; c.appendChild(v); }
-      else { const im = document.createElement("img"); im.src = m0.url; im.alt = ""; im.loading = "lazy"; c.appendChild(im); } }
+    if (m0){ const im = document.createElement("img"); im.alt = ""; im.decoding = "async"; im.src = thumb(m0.url, 480);
+      im.onerror = () => { im.onerror = null; if (!m0.video){ im.src = m0.url; return; } /* pas d’aperçu prêt : la vidéo elle-même, image à 1 s */
+        const v = document.createElement("video"); v.src = /#t=/.test(m0.url) ? m0.url : m0.url + "#t=1"; v.muted = true; v.playsInline = true; v.preload = "metadata"; im.replaceWith(v); };
+      c.appendChild(im); }
     else c.appendChild(el("span","vg-txt", p.text || p.title || "Publication"));
     const top = el("span","vg-top"); top.appendChild(el("span","vg-st", ST_LABEL[p.status] || ""));
     const n = (p.media || []).length;
@@ -797,19 +802,34 @@ function render(){
 }
 window.addEventListener("hashchange", () => { fromHash(); S.modOpen = null; render(); window.scrollTo(0,0); });
 
-async function loadFeed(){ const f = await api("/api/c/feed"); const before = S.f ? JSON.stringify([S.f.messages.map(m => m.id + m.at), S.f.idees.map(i => i.id + (i.seen || []).length), (S.f.visio || {}).here, (S.f.shoots || []).map(s => s.id + s.status + s.sentAt), (S.f.bilans || []).map(b => b.m + b.at)]) : ""; S.f = f; if (f.bilans) (f.bilans || []).forEach(b => { if (S.biHtml && S.biAt && S.biAt[b.m] !== b.at) delete S.biHtml[b.m]; (S.biAt = S.biAt || {})[b.m] = b.at; });
+async function loadFeed(){ const f = await api("/api/c/feed"); const before = S.f ? JSON.stringify([S.f.messages.map(m => m.id + m.at), S.f.idees.map(i => i.id + (i.seen || []).length), (S.f.visio || {}).here, (S.f.shoots || []).map(s => s.id + s.status + s.sentAt), (S.f.bilans || []).map(b => b.m + b.at)]) : ""; S.f = f; saveCache(); if (f.bilans) (f.bilans || []).forEach(b => { if (S.biHtml && S.biAt && S.biAt[b.m] !== b.at) delete S.biHtml[b.m]; (S.biAt = S.biAt || {})[b.m] = b.at; });
   const after = JSON.stringify([f.messages.map(m => m.id + m.at), f.idees.map(i => i.id + (i.seen || []).length), (f.visio || {}).here, (f.shoots || []).map(s => s.id + s.status + s.sentAt), (f.bilans || []).map(b => b.m + b.at)]);
   const typing = document.activeElement && /^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName) && S.view !== "messagerie";
   if (before !== after && !typing) render(); }
+/* Cache local : la dernière version de l’espace s’affiche tout de suite à l’ouverture, puis se met à jour (Matis, 17/11) */
+const CACHE_KEY = "gc-cache1";
+let PRE = new Set(), PREV = null;
+function prefetch(){ try {
+  const ps = posts().filter(p => p.status === "wait" || p.status === "mod");
+  ps.forEach(p => (p.media || []).forEach((m, i) => { const u = thumb(m.url, 480); if (!PRE.has(u)){ PRE.add(u); const im = new Image(); im.decoding = "async"; im.src = u; }
+    if (i === 0){ const big = m.video ? thumb(m.url, 1080) : thumb(m.url, 1440); if (!PRE.has(big)){ PRE.add(big); const im2 = new Image(); im2.src = big; } } }));
+  const v = ps.map(p => (p.media || [])[0]).find(m => m && m.video);
+  if (v && !PREV){ PREV = document.createElement("video"); PREV.muted = true; PREV.playsInline = true; PREV.preload = "auto"; PREV.src = v.url; PREV.load(); }
+} catch(e){} }
+function saveCache(){ try { if (!TOKEN || APERCU || !S.d || !S.f) return; const f = Object.assign({}, S.f, { messages: (S.f.messages || []).slice(-300) });
+  ls.set(CACHE_KEY, JSON.stringify({ k: TOKEN.slice(0, 12), at: Date.now(), d: S.d, f })); } catch(e){} }
+function readCache(){ try { const c = JSON.parse(ls.get(CACHE_KEY) || "null"); return c && TOKEN && c.k === TOKEN.slice(0, 12) && Date.now() - c.at < 7 * 864e5 ? c : null; } catch(e){ return null; } }
 async function load(){
+  const c = readCache(); if (c && !S.d){ S.d = c.d; S.f = c.f; fromHash(); $("#shell").hidden = false; $("#login").hidden = true; render(); prefetch(); }
   try { const fonts = document.fonts ? Promise.race([Promise.all([document.fonts.load('400 40px "Bebas Neue"'), document.fonts.load('400 16px "Inter"')]), new Promise(r => setTimeout(r, 1500))]).catch(() => {}) : null;
-    const [d, f] = await Promise.all([api("/api/me"), api("/api/c/feed"), fonts]); S.d = d; S.f = f; fromHash(); $("#shell").hidden = false; $("#login").hidden = true; render(); }
+    const [d, f] = await Promise.all([api("/api/me"), api("/api/c/feed"), c ? null : fonts]); const same = c && JSON.stringify(c.d) === JSON.stringify(d) && JSON.stringify(c.f.messages) === JSON.stringify((f.messages || []).slice(-300));
+    S.d = d; S.f = f; saveCache(); if (!same){ if (!c) fromHash(); $("#shell").hidden = false; $("#login").hidden = true; render(); } prefetch(); }
   catch(e){ if (TOKEN){ const r = $("#app"); $("#shell").hidden = false; r.textContent = ""; const b = el("div","empty"); b.append(el("p",null,e.message), btn("Réessayer","lemon", () => load())); r.appendChild(b); } }
 }
 let poll = 0;
 /* Actualisation : messages toutes les 8 s, publications et chiffres toutes les 45 s, appli ouverte (plus besoin de la fermer) */
 let lastMe = Date.now();
-async function reloadMe(){ const d = await api("/api/me"); const was = JSON.stringify(S.d && S.d.posts), typing = document.activeElement && /^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName); S.d = d; lastMe = Date.now(); if (JSON.stringify(d.posts) !== was && !typing) render(); }
+async function reloadMe(){ const d = await api("/api/me"); const was = JSON.stringify(S.d && S.d.posts), typing = document.activeElement && /^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName); S.d = d; saveCache(); prefetch(); lastMe = Date.now(); if (JSON.stringify(d.posts) !== was && !typing) render(); }
 function startPoll(){ clearInterval(poll); poll = setInterval(() => { if (document.visibilityState !== "visible" || !TOKEN || !S.f) return; loadFeed().catch(() => {}); if (Date.now() - lastMe > 45000) reloadMe().catch(() => {}); }, 8000); }
 /* Tirer vers le bas en haut de page pour actualiser (comme dans les applis du téléphone) */
 (() => { let y0 = null, ind = null;
@@ -828,7 +848,7 @@ function startPoll(){ clearInterval(poll); poll = setInterval(() => { if (docume
   vv.addEventListener("resize", ask); vv.addEventListener("scroll", ask); document.addEventListener("focusin", () => setTimeout(ask, 50)); document.addEventListener("focusout", () => setTimeout(ask, 50));
 })();
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && TOKEN && S.d) { reloadMe().then(() => render()).catch(() => {}); loadFeed().catch(() => {}); } });
-$("#logout").onclick = () => confirmBox("Se déconnecter ?", "Il faudra saisir à nouveau votre code sur cet appareil.", "Se déconnecter", () => { TOKEN = null; ls.del("gc-token"); start(); });
+$("#logout").onclick = () => confirmBox("Se déconnecter ?", "Il faudra saisir à nouveau votre code sur cet appareil.", "Se déconnecter", () => { TOKEN = null; ls.del("gc-token"); ls.del(CACHE_KEY); start(); });
 
 /* ---------- Inscription avec le code de l’agence ---------- */
 const TOUCH = navigator.maxTouchPoints > 0 || "ontouchstart" in window;
