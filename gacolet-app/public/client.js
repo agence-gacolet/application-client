@@ -19,6 +19,8 @@ const fmtTime = t => { if (!t) return ""; const [h, mi] = String(t).split(":"); 
 const waTime = at => { const d = new Date(at || 0), k = iso(d); if (k === today()) return hm(d); if (k === addDays(today(), -1)) return "Hier"; return fmtD(k); };
 const fmtSize = n => !n ? "" : n < 1024*1024 ? Math.max(1, Math.round(n/1024))+" ko" : (n/1024/1024).toFixed(1).replace(".",",")+" Mo";
 const isImg = f => /^image\//.test(f.type || "") || /\.(jpe?g|png|gif|webp|heic)$/i.test(f.name || f.url || "");
+/* « #t=0.1 » : l’iPhone affiche la première image au lieu d’un rectangle noir */
+const vsrc = u => /#t=/.test(u || "") ? u : (u || "") + "#t=0.1";
 const isVid = f => /^video\//.test(f.type || "") || /\.(mp4|mov|webm|m4v)$/i.test(f.name || f.url || "");
 let toastT; function toast(msg){ let t = $(".toast"); if (!t){ t = el("div","toast"); t.setAttribute("role","status"); document.body.appendChild(t); } t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 2600); }
 function btn(label, cls, fn){ const b = el("button","btn "+(cls||""), label); b.type = "button"; b.onclick = fn; return b; }
@@ -131,7 +133,7 @@ function renderTabs(){
   const m = $("#mtabs"); m.textContent = ""; VIEWS.filter(v => MOBILE.includes(v[0]) && shown(v)).forEach(v => m.appendChild(link2(v)));
   const more = el("button","morebtn"); more.type = "button"; more.appendChild(ico("plus")); more.appendChild(el("span","lb","Plus")); if (!MOBILE.includes(S.view)) more.setAttribute("aria-current","page");
   more.onclick = () => openDrawer(link2, badge);
-  m.appendChild(more);
+  m.prepend(more); /* Plus toujours à gauche, du côté où le menu s’ouvre (Matis, 17/11) */
   $("#mbar-title").textContent = (VIEWS.find(v => v[0] === S.view) || ["",""])[1];
   $("#acct-name").textContent = myName(); $("#acct-role").textContent = (S.f && S.f.client.name) || "";
   const tot = badge.valider + badge.tournages + unread(); try { if (navigator.setAppBadge) { tot ? navigator.setAppBadge(tot) : navigator.clearAppBadge(); } } catch(e){}
@@ -174,6 +176,54 @@ async function decideShoot(s, status, note){
     toast(status === "ok" ? "Feuille validée. Merci, l’agence est prévenue." : status === "mod" ? "Vos retours sont envoyés à l’agence." : "Refus envoyé à l’agence."); render();
   } catch(e){ toast(e.message); }
 }
+/* Aperçu de la feuille : la même page A4 que celle de l’agence, toujours visible en tête de la carte (Matis, 17/11) */
+function shHtml(s){
+  const E = t => String(t == null ? "" : t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const O = location.origin, cl = (S.f && S.f.client && S.f.client.name) || "";
+  const lk = t => String(t || "").split(/\s*\n\s*/).map(x => x.trim()).filter(Boolean);
+  const vids = s.videos || [], parle = vids.filter(v => v.kind !== "muet"), muet = vids.filter(v => v.kind === "muet");
+  let n = 0;
+  const li = v => { n++; const l = lk(v.links); return `<div class="it"><span class="no">${String(n).padStart(2, "0")}</span><div><div class="ti">${E(v.title || "Sans titre")}</div>${v.line ? `<div class="ln">${E(v.line)}</div>` : ""}${l.length ? `<div class="lk">${l.map(E).join(" · ")}</div>` : ""}</div></div>`; };
+  const info = [["Date", s.date ? fmtDL(s.date) + " " + s.date.slice(0, 4) : ""], ["Heure", s.time ? fmtTime(s.time) : ""], ["Durée", s.duration], ["Lieu", s.place], ["À l’image", s.onCamera]].filter(x => x[1]);
+  const rules = lk(s.rules), photos = s.photos || [];
+  return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><style>
+@font-face{font-family:"Bebas Neue";src:url("${O}/fonts/bebas-neue.woff2") format("woff2")}
+@font-face{font-family:"Inter";src:url("${O}/fonts/inter.woff2") format("woff2");font-weight:100 900}
+*{box-sizing:border-box}html{overflow:hidden}body{margin:0;font:400 11pt/1.4 Inter,system-ui,sans-serif;color:#1D1D1B;background:#fff}
+.pg{width:210mm;min-height:297mm;padding:0 0 14mm}
+.hd{background:#1D1D1B;color:#F4F4F2;padding:12mm 16mm 9mm}.ag{font-weight:700;font-size:8.5pt;letter-spacing:3px;color:#C6FF33}
+.hd h1{font:400 44pt/0.95 "Bebas Neue";margin:5mm 0 2mm;letter-spacing:.5px}.hd h1 span{color:#C6FF33}.sub{font-size:11pt;color:#DADAD8}
+.info{display:flex;flex-wrap:wrap;gap:2mm 8mm;padding:5mm 16mm;background:#F2F2EE;font-size:9.5pt}
+.info b{display:block;font-size:7.5pt;letter-spacing:1.2px;text-transform:uppercase;color:#6B6B66;font-weight:600}
+.bd{padding:2mm 16mm}h2{font:400 19pt/1 "Bebas Neue";margin:6mm 0 2mm;padding-bottom:1.5mm;border-bottom:2px solid #C6FF33;letter-spacing:.4px}
+.it{display:flex;gap:4mm;padding:2mm 0;border-bottom:1px solid #E6E6E1}.no{font:400 20pt/1 "Bebas Neue";min-width:10mm}
+.ti{font-weight:650;font-size:11.5pt}.ln{color:#4A4A46;font-size:10pt}.lk{color:#6B6B66;font-size:8.5pt;word-break:break-all;margin-top:.5mm}
+.box{margin-top:6mm;background:#1D1D1B;color:#F4F4F2;border-radius:3mm;padding:4mm 6mm}.box b{color:#C6FF33;font:400 14pt/1 "Bebas Neue";display:block;margin-bottom:1.5mm}.box div{font-size:10pt;padding:.6mm 0}
+</style></head><body><div class="pg">
+<div class="hd"><div class="ag">AGENCE GACOLET</div><h1>${E(cl)}<br><span>Feuille de tournage</span></h1><div class="sub">${E(s.num || "")}</div></div>
+<div class="info">${info.map(([k, v]) => `<div><b>${k}</b>${E(v)}</div>`).join("")}</div>
+<div class="bd">${parle.length ? `<h2>Réels parlés</h2>${parle.map(li).join("")}` : ""}${muet.length ? `<h2>Réels sans paroles</h2>${muet.map(v => li(Object.assign({}, v, { title: v.title || "ÉDIT" }))).join("")}` : ""}
+${photos.length ? `<h2>Photos</h2>${photos.map(p => `<div class="it"><span class="no">·</span><div><div class="ti">${E(p.title || "Photo")}</div>${p.line ? `<div class="ln">${E(p.line)}</div>` : ""}</div></div>`).join("")}` : ""}
+${s.broll ? `<h2>À ramener</h2><div class="it"><div class="ti">${E(s.broll).replace(/\n/g, "<br>")}</div></div>` : ""}
+${rules.length ? `<div class="box"><b>À respecter</b>${rules.slice(0, 3).map(r => `<div>${E(r)}</div>`).join("")}</div>` : ""}</div></div></body></html>`;
+}
+/* La page A4 réduite à la largeur de la boîte ; full = plein écran qu’on fait défiler */
+function shPage(s, box, full){
+  const W = 794, H = 1123, f = document.createElement("iframe"); f.className = "sh-a4"; f.setAttribute("title","Aperçu de la feuille de tournage"); f.setAttribute("tabindex","-1"); f.srcdoc = shHtml(s);
+  f.style.cssText = "position:absolute;left:0;top:0;width:" + W + "px;max-width:none;max-height:none;height:" + H + "px;border:0;background:#fff;transform-origin:0 0;pointer-events:none";
+  let ph = H; const fit = () => { const k = box.clientWidth / W; f.style.height = ph + "px"; f.style.transform = "scale(" + k + ")"; box.style.height = (full ? ph : H) * k + "px"; };
+  f.onload = () => { try { ph = Math.max(H, f.contentWindow.document.documentElement.scrollHeight); } catch(e){} fit(); };
+  box.appendChild(f); requestAnimationFrame(fit); window.addEventListener("resize", fit, { passive: true });
+}
+function shOpen(s){
+  const ov = el("div","cl-view sh-view"); ov.setAttribute("role","dialog"); ov.setAttribute("aria-modal","true");
+  const top = el("div","cl-vtop"); const tt = el("div"); tt.append(el("b",null,"Feuille de tournage"), el("span",null, s.date ? fmtDL(s.date) : "Date à fixer"));
+  const x = el("button","cl-vx"); x.type = "button"; x.setAttribute("aria-label","Fermer"); x.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+  top.append(tt, x); ov.appendChild(top);
+  const sc = el("div","sh-scroll"), pg = el("div","sh-box full"); sc.appendChild(pg); ov.appendChild(sc);
+  const close = () => { ov.remove(); document.body.classList.remove("cl-noscroll"); }; x.onclick = close;
+  document.body.appendChild(ov); document.body.classList.add("cl-noscroll"); shPage(s, pg, true);
+}
 function vTournages(root){
   const list = shoots(), f = S.shf || "wait";
   const cnt = k => list.filter(s => k === "mod" ? (s.status === "mod" || s.status === "no") : s.status === k).length;
@@ -184,6 +234,7 @@ function vTournages(root){
   const g = el("div","cl-posts");
   rows.forEach(s => {
     const c = el("article","cl-post cl-shoot"), b = el("div","cl-pb");
+    const pv = el("button","sh-box"); pv.type = "button"; pv.setAttribute("aria-label","Voir la feuille en grand"); pv.onclick = () => shOpen(s); c.appendChild(pv); requestAnimationFrame(() => shPage(s, pv));
     const meta = el("div","cl-pmeta"); meta.append(el("span","pill" + (s.status === "wait" ? " l3" : s.status === "no" ? " no" : ""), SH_LABEL[s.status] || ""), el("span",null, [s.time ? fmtTime(s.time) : "", s.duration].filter(Boolean).join(", "))); b.appendChild(meta);
     b.appendChild(el("h3","cl-pt", s.date ? "Tournage du " + fmtDL(s.date) : "Tournage, date à fixer"));
     const facts = [["Lieu", s.place],["À l’image", s.onCamera]].filter(x => x[1]);
@@ -203,8 +254,8 @@ function vTournages(root){
     if (s.status !== "ok"){
       const open = S.shOpen === s.id, a = el("div","cl-acts");
       a.append(btn("Valider","lemon", () => decideShoot(s, "ok")),
-        btn(open && S.shKind === "mod" ? "Fermer" : "Faire des retours","", () => { if (open && S.shKind === "mod"){ S.shOpen = null; } else { S.shOpen = s.id; S.shKind = "mod"; } render(); }),
-        btn(open && S.shKind === "no" ? "Fermer" : "Refuser","", () => { if (open && S.shKind === "no"){ S.shOpen = null; } else { S.shOpen = s.id; S.shKind = "no"; } render(); }));
+        /* Pas de refus possible : le client demande des modifications (Matis, 17/11) */
+        btn(open ? "Fermer" : "Demander des modifications","", () => { if (open){ S.shOpen = null; } else { S.shOpen = s.id; S.shKind = "mod"; } render(); }));
       b.appendChild(a);
       if (open){ const no = S.shKind === "no", box = el("div","cl-modbox" + (no ? " no" : "")), ta = el("textarea"); ta.id = "sh-" + s.id; ta.rows = 3;
         ta.placeholder = no ? "Pourquoi cette feuille ne vous convient pas" : "Ce qu’il faut changer, ajouter ou retirer : une vidéo, une personne à filmer, l’heure, le lieu";
@@ -234,7 +285,10 @@ function typeLabel(p){ const n = (p.media || []).length; if (/story/i.test(p.typ
 function slider(p, opts){
   opts = opts || {};
   const box = el("div","cl-media" + (isTall(p) ? " tall" : "") + (opts.full ? " full" : "")); const strip = el("div","cl-strip"); strip.tabIndex = 0; strip.setAttribute("aria-label", typeLabel(p));
-  p.media.forEach((m, i) => { let n; if (m.video){ n = document.createElement("video"); n.src = m.url; n.controls = true; n.playsInline = true; n.preload = i === 0 ? "metadata" : "none"; }
+  p.media.forEach((m, i) => { let n; if (m.video){ n = document.createElement("video"); n.src = vsrc(m.url); n.playsInline = true; n.preload = "metadata";
+      /* Carte : la première image du film, un bouton lecture, et la lecture en plein écran (les commandes de l’iPhone ne recouvrent plus rien) */
+      if (opts.full){ n.controls = true; n.dataset.i = i; }
+      else { n.muted = true; const w = el("div","cl-vwrap"); w.appendChild(n); const pl = el("button","cl-play"); pl.type = "button"; pl.setAttribute("aria-label","Lire la vidéo"); pl.innerHTML = '<svg viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg>'; const op = () => opts.onOpen ? opts.onOpen(i, true) : (n.controls = true, n.muted = false, n.play().catch(() => {})); pl.onclick = op; n.onclick = op; w.appendChild(pl); n = w; } }
     else { n = document.createElement("img"); n.src = m.url; n.alt = (p.type || "Visuel") + " " + (i + 1); n.loading = "lazy"; if (opts.onOpen){ n.onclick = () => opts.onOpen(cur()); n.classList.add("zoomable"); } } strip.appendChild(n); });
   box.appendChild(strip);
   if (!opts.full) box.appendChild(el("span","cl-type",typeLabel(p)));
@@ -257,7 +311,7 @@ function slider(p, opts){
   return box;
 }
 /* Plein écran, comme sur le téléphone : on fait défiler, puis on décide */
-function openViewer(p, start){
+function openViewer(p, start, play){
   const ov = el("div","cl-view"); ov.setAttribute("role","dialog"); ov.setAttribute("aria-modal","true"); ov.setAttribute("aria-label", p.title || "Publication");
   const top = el("div","cl-vtop"); const tt = el("div"); tt.append(el("b",null,typeLabel(p)), el("span",null, fmtDL(p.date) + (p.time ? ", " + fmtTime(p.time) : "") + (p.net ? ", " + p.net : "")));
   const x = el("button","cl-vx"); x.type = "button"; x.setAttribute("aria-label","Fermer"); x.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>';
@@ -274,7 +328,10 @@ function openViewer(p, start){
   function close(){ document.removeEventListener("keydown", key); ov.remove(); document.body.classList.remove("cl-noscroll"); }
   x.onclick = close; document.addEventListener("keydown", key);
   document.body.appendChild(ov); document.body.classList.add("cl-noscroll");
-  const strip = sl.querySelector(".cl-strip"); setTimeout(() => { strip.scrollTo({ left: (start || 0) * strip.clientWidth }); strip.focus({ preventScroll: true }); }, 30);
+  const strip = sl.querySelector(".cl-strip"); strip.scrollLeft = (start || 0) * strip.clientWidth; strip.focus({ preventScroll: true });
+  /* Lecture lancée tout de suite quand on a touché une vidéo (dans le geste, sinon l’iPhone la bloque) */
+  const v = play && strip.querySelector('video[data-i="' + (start || 0) + '"]'); if (v) v.play().catch(() => {});
+  strip.addEventListener("scroll", () => strip.querySelectorAll("video").forEach(x => { if (Math.round(strip.scrollLeft / Math.max(1, strip.clientWidth)) !== Number(x.dataset.i)) x.pause(); }), { passive: true });
 }
 const canDecide = p => p.status !== "ok" && !p.published;
 function openBox(p, kind){ S.modOpen = p.id; S.modKind = kind; render(); setTimeout(() => { const t = document.getElementById("mod-" + p.id); if (t){ t.scrollIntoView({ block: "center", behavior: "smooth" }); t.focus(); } }, 0); }
@@ -291,7 +348,7 @@ function vValider(root){
   const g = el("div","cl-posts");
   list.forEach(p => {
     const c = el("article","cl-post");
-    if ((p.media || []).length) c.appendChild(slider(p, { onOpen: i => openViewer(p, i) }));
+    if ((p.media || []).length) c.appendChild(slider(p, { onOpen: (i, play) => openViewer(p, i, play) }));
     const b = el("div","cl-pb");
     const meta = el("div","cl-pmeta"); meta.append(el("span","pill" + (p.status === "wait" ? " l3" : p.status === "no" ? " no" : ""), ST_LABEL[p.status] || ""), el("span",null, fmtDL(p.date) + (p.time ? ", " + fmtTime(p.time) : "")), el("span",null,p.net || ""));
     b.appendChild(meta);
@@ -321,7 +378,7 @@ function vValider(root){
 /* ---------- Pièces jointes ---------- */
 function attachEl(f){
   if (isImg(f)){ const a = el("a","wa-img"); a.href = f.url; a.target = "_blank"; a.rel = "noopener"; const i = document.createElement("img"); i.src = f.url; i.alt = f.name || "Photo"; i.loading = "lazy"; a.appendChild(i); return a; }
-  if (isVid(f)){ const v = document.createElement("video"); v.className = "wa-vid"; v.src = f.url; v.controls = true; v.preload = "metadata"; v.playsInline = true; return v; }
+  if (isVid(f)){ const v = document.createElement("video"); v.className = "wa-vid"; v.src = vsrc(f.url); v.controls = true; v.preload = "metadata"; v.playsInline = true; return v; }
   const a = el("a","wa-file"); a.href = f.url; a.target = "_blank"; a.rel = "noopener"; a.setAttribute("download", f.name || "");
   const ic = el("span","wa-fic", (String(f.name || "").split(".").pop() || "").slice(0, 4).toUpperCase() || "FICHIER");
   const tx = el("span","wa-ftx"); tx.append(el("b",null,f.name || "Fichier"), el("small",null,(f.size ? fmtSize(f.size) + ", " : "") + "Télécharger"));
@@ -354,6 +411,8 @@ function chKey(kind){ const id = S.f.client.id; return kind === "grp" ? (S.mmode
 function seenMap(){ try { return JSON.parse(ls.get("gc-seen2") || "{}"); } catch(e){ return {}; } }
 function markSeen(ch){ const m = seenMap(), last = ((S.f && S.f.messages) || []).filter(x => x.ch === ch).map(x => x.at || "").sort().pop() || ""; if (last && last > (m[ch] || "")){ m[ch] = last; ls.set("gc-seen2", JSON.stringify(m)); } }
 function unreadIn(ch){ const s = seenMap()[ch] || ""; return ((S.f && S.f.messages) || []).filter(m => m.ch === ch && !m.ext && (m.at || "") > s).length; }
+/* Membres de l’équipe dans le groupe affiché (principal : Gabriel et Clara, tournage : Gabriel et Matis, ou ceux ajoutés par l’agence) */
+function grpTeam(){ const g = S.f && S.f.groups, l = g && (S.mmode === "shoot" ? g.shoot : g.main); return l && l.length ? l : ((S.f && S.f.team) || []).map(t => t.name); }
 function vMessagerie(root){
   const me = myName(), id = S.f.client.id, team = S.f.team || [];
   if (S.mch !== "grp" && !(S.mmode === "main" && team.some(t => "dm:" + t.name === S.mch))) S.mch = "grp";
@@ -392,7 +451,7 @@ function vMessagerie(root){
   const back = el("button","wa-back"); back.type = "button"; back.setAttribute("aria-label","Retour aux conversations"); back.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>'; back.onclick = () => { S.conv = false; render(); };
   const ht = el("div","wa-htx"); const isDm = S.mch !== "grp", other = isDm ? S.mch.slice(3) : "";
   const tm = team.find(t => t.name === other);
-  ht.append(el("b",null, isDm ? other : S.mmode === "shoot" ? "Tournages avec l’agence" : "Agence Gacolet"), el("small",null, isDm ? (tm && tm.poste ? tm.poste + ", " : "") + "conversation privée" : (S.mmode === "shoot" ? "Organisation des tournages avec " : "Votre groupe avec ") + team.map(t => t.name).join(", ")));
+  ht.append(el("b",null, isDm ? other : S.mmode === "shoot" ? "Tournages avec l’agence" : "Agence Gacolet"), el("small",null, isDm ? (tm && tm.poste ? tm.poste + ", " : "") + "conversation privée" : (S.mmode === "shoot" ? "Organisation des tournages avec " : "Votre groupe avec ") + grpTeam().join(", ")));
   hd.append(back, isDm ? avatarEl(other, 40) : avatarEl("Agence Gacolet", 40, { logo: true }), ht); main.appendChild(hd);
   const list = el("div","wa-msgs"); list.id = "chat-list";
   if (!msgs.length) list.appendChild(el("p","wa-empty", isDm ? "Écrivez à " + other + " : seul " + other + " verra ces messages." : S.mmode === "shoot" ? "Tout ce qui concerne les tournages : dates, lieux, matériel, personnes à filmer." : "Écrivez à l’agence : une question, une précision, un retour. L’équipe répond ici."));
@@ -712,7 +771,8 @@ async function loadFeed(){ const f = await api("/api/c/feed"); const before = S.
   const typing = document.activeElement && /^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName) && S.view !== "messagerie";
   if (before !== after && !typing) render(); }
 async function load(){
-  try { const [d, f] = await Promise.all([api("/api/me"), api("/api/c/feed")]); S.d = d; S.f = f; fromHash(); $("#shell").hidden = false; $("#login").hidden = true; render(); }
+  try { const fonts = document.fonts ? Promise.race([Promise.all([document.fonts.load('400 40px "Bebas Neue"'), document.fonts.load('400 16px "Inter"')]), new Promise(r => setTimeout(r, 1500))]).catch(() => {}) : null;
+    const [d, f] = await Promise.all([api("/api/me"), api("/api/c/feed"), fonts]); S.d = d; S.f = f; fromHash(); $("#shell").hidden = false; $("#login").hidden = true; render(); }
   catch(e){ if (TOKEN){ const r = $("#app"); $("#shell").hidden = false; r.textContent = ""; const b = el("div","empty"); b.append(el("p",null,e.message), btn("Réessayer","lemon", () => load())); r.appendChild(b); } }
 }
 let poll = 0;
@@ -727,6 +787,14 @@ function startPoll(){ clearInterval(poll); poll = setInterval(() => { if (docume
   document.addEventListener("touchend", e => { if (y0 == null) return; const dy = e.changedTouches[0].clientY - y0; y0 = null;
     if (ind && dy > 90){ ind.textContent = "Actualisation…"; Promise.all([reloadMe(), loadFeed()]).then(() => render()).catch(() => {}).finally(() => { const x = ind; ind = null; setTimeout(() => x && x.remove(), 300); }); }
     else if (ind){ ind.remove(); ind = null; } });
+})();
+(function(){ const vv = window.visualViewport; if (!vv) return; let raf = 0;
+  const fit = () => { raf = 0; const b = document.body, mob = matchMedia("(max-width:900px)").matches;
+    const kb = mob && b.classList.contains("chat-full") && window.innerHeight - vv.height > 120 && document.activeElement && /TEXTAREA|INPUT/.test(document.activeElement.tagName);
+    if (kb){ b.style.setProperty("--kbh", vv.height + "px"); b.style.setProperty("--kbt", vv.offsetTop + "px"); }
+    if (kb !== b.classList.contains("kb")){ b.classList.toggle("kb", kb); if (!kb) window.scrollTo(0, 0); const ms = document.querySelector(".wa-msgs"); if (ms) ms.scrollTop = ms.scrollHeight; } };
+  const ask = () => { if (!raf) raf = requestAnimationFrame(fit); };
+  vv.addEventListener("resize", ask); vv.addEventListener("scroll", ask); document.addEventListener("focusin", () => setTimeout(ask, 50)); document.addEventListener("focusout", () => setTimeout(ask, 50));
 })();
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && TOKEN && S.d) { reloadMe().then(() => render()).catch(() => {}); loadFeed().catch(() => {}); } });
 $("#logout").onclick = () => confirmBox("Se déconnecter ?", "Il faudra saisir à nouveau votre code sur cet appareil.", "Se déconnecter", () => { TOKEN = null; ls.del("gc-token"); start(); });

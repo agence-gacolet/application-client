@@ -2089,6 +2089,15 @@ function cgChannels(){ return (S.cgroups || []).map(g => g.ch); }
 function cdmChannels(){ const me = S.me || "Gabriel"; const set = new Set((S.ui.cdmOpen || []).filter(k => k.endsWith("|" + me))); S.d.messages.forEach(m => { const k = String(m.ch || ""); if (k.startsWith("cdm:") && k.split("|")[1] === me) set.add(k); }); return [...set]; }
 function cdmClient(k){ const g = (S.cgroups || []).find(x => x.id === Number(String(k).slice(4).split("|")[0])); return g ? g.name : "Client"; }
 function cgOf(k){ return (S.cgroups || []).find(g => g.ch === k); }
+/* Membres de l’équipe d’un groupe client : principal = Gabriel et Clara, tournage = Gabriel et Matis, modifiable (bouton Membres) */
+function cgTeam(k, mode){ const g = cgOf(String(k).replace(/^tg:/, "")); return g && g.team ? (mode === "shoot" ? g.team.shoot : g.team.main) || [] : []; }
+function cgIn(k, mode){ return S.role === "owner" || !(cgOf(k) || {}).team || cgTeam(k, mode).includes(S.me); }
+function cgMembersBox(k, mode){ const g = cgOf(String(k).replace(/^tg:/, "")); if (!g) return; const cur = new Set(cgTeam(k, mode));
+  openModal(m => { m.classList.add("sheet"); const h = el("h3",null,(mode === "shoot" ? "Groupe tournage" : "Groupe principal") + ", " + g.name); h.id = "mtitle"; m.appendChild(h);
+    m.appendChild(el("p","muted","Les personnes de l’équipe cochées voient ce groupe et reçoivent ses notifications. Le client voit leurs noms."));
+    const l = el("div","cg-mem"); l.style.cssText = "display:flex;flex-direction:column;gap:12px;margin:12px 0"; (S.team || []).filter(t => !t.disabled).forEach(t => { const r = el("label","cl-ck"); const c = el("input"); c.type = "checkbox"; c.checked = cur.has(t.name); c.onchange = () => c.checked ? cur.add(t.name) : cur.delete(t.name); r.append(c, document.createTextNode(" " + t.name)); l.appendChild(r); }); m.appendChild(l);
+    const a = el("div","actions"); a.append(btn("Annuler","", closeModal), btn("Enregistrer","lemon", async () => { if (!cur.size){ toast("Garde au moins une personne."); return; }
+      try { const r = await GC.api("POST","/api/g-cgroups/members", { id: g.id, mode, names: [...cur] }); g.team = r.team; closeModal(); toast("Membres enregistrés."); render(); } catch(e){ toast(e.message); } })); m.appendChild(a); }); }
 /* Les conversations d’un client : [type, canal, libellé] */
 function cliChans(name, mode, pre){ const n = norm(name), out = [], g = (S.cgroups || []).find(x => norm(x.name) === n);
   if (g) out.push(["cli", pre + g.ch, "Avec le client"]);
@@ -2627,9 +2636,9 @@ function vMessagerie(root){
   };
   side.appendChild(el("span","wa-lab","Équipe")); CHANNELS.forEach(([k,l]) => row(pre+k, l));
   if (mode !== "shoot"){ const dms = dmChannels(); if (dms.length){ side.appendChild(el("span","wa-lab","Privé")); dms.sort((a, b) => ((lastOf[b] || {}).at || "").localeCompare((lastOf[a] || {}).at || "")).forEach(k => row(k, dmOther(k))); } }
-  // Clients : une seule ligne par client (sa conversation la plus récente). Dans la conversation, un sélecteur passe de
-  // « Avec le client » (le groupe qu’il voit) à « Entre nous » (l’équipe seule) et « Privé » (toi et le client).
-  const cgShown = cgChannels().filter(k => k === ch.replace(/^tg:/, "") || lastOf[pre + k] || ((cgOf(k) || {}).people || []).length).map(k => pre + k);
+  // Clients : une seule ligne par client (sa conversation la plus récente). Pas de sélecteur dans la conversation
+  // (retiré le 17/11 à la demande de Matis : inutile).
+  const cgShown = cgChannels().filter(k => k === ch.replace(/^tg:/, "") || ((lastOf[pre + k] || ((cgOf(k) || {}).people || []).length) && cgIn(k, mode))).map(k => pre + k);
   const cliList = []; [].concat(cgShown.map(k => chName(k)), mode !== "shoot" ? cdmChannels().map(cdmClient) : [], cliShown()).forEach(n => { if (n && !cliList.some(x => norm(x) === norm(n))) cliList.push(n); });
   if (cliList.length) side.appendChild(el("span","wa-lab","Clients"));
   cliList.map(n => { const cs = cliChans(n, mode, pre), last = cs.slice().sort((a, b) => ((lastOf[b[1]] || {}).at || "").localeCompare((lastOf[a[1]] || {}).at || ""))[0]; return [n, cs, last]; })
@@ -2645,12 +2654,10 @@ function vMessagerie(root){
   ht.append(el("b",null,(mode === "shoot" ? "Tournage, " : "") + chName(ch)), el("small",null, isDm ? "Conversation privée, visible de vous deux seulement" : isCdm ? "Conversation privée avec le client, toi seul la vois" : isCg ? (mode === "shoot" ? "Tournages, partagé avec le client" : "Groupe partagé avec le client") + ((cgOf(ch.replace(/^tg:/, "")) || {}).people || []).filter(Boolean).map((p, i) => (i ? ", " : " : ") + p).join("") : isCli ? "Échanges de l’équipe sur ce client, le client ne les voit pas" : (S.team || []).map(t => t.name).join(", ")));
   const hav = chAvatar(ch, 40); if (isDm){ hav.classList.add("av-click"); hav.onclick = () => profileCard(dmOther(ch)); ht.classList.add("av-click"); ht.onclick = () => profileCard(dmOther(ch)); }
   hd.append(back, hav, ht);
-  // Conversation d’un client : choix entre le groupe avec le client, l’équipe entre nous et le privé
-  let cliSw = null; if (isCli || isCdm || isCg){ const cs = cliChans(isCli ? ch.replace(/^tg:/, "").slice(2) : chName(ch), mode, pre); if (cs.length > 1){
-    cliSw = el("div","wa-clisw"); cliSw.appendChild(segm(cs.map(c => [c[1], c[2]]), ch, v => { if (mode === "shoot") S.ui.msgShoot = v; else S.ui.msgCh = v; S.ui[seenKey(v)] = lastSeenAt(v); S.ui.waConv = true; remember(); render(); }));
-    cliSw.appendChild(el("small","muted", isCli ? "Le client ne voit pas cette conversation." : isCdm ? "Toi et le client seulement." : "Le client voit cette conversation.")); } }
+  if (isCg){ const tm = cgTeam(ch, mode); if (tm.length){ const sm = ht.querySelector("small"); if (sm) sm.textContent += " · Équipe : " + tm.join(", "); }
+    const mb = btn("Membres","sm", () => cgMembersBox(ch, mode)); mb.classList.add("wa-hbtn"); hd.appendChild(mb); }
   if (isCg && mode !== "shoot"){ const pv = btn("Message privé","sm", () => { const k = "cdm:" + ch.slice(3) + "|" + me; S.ui.cdmOpen = [...new Set((S.ui.cdmOpen || []).concat(k))]; S.ui.msgCh = k; S.ui.waConv = true; remember(); render(); }); pv.classList.add("wa-hbtn"); hd.appendChild(pv); }
-  main.appendChild(hd); if (cliSw) main.appendChild(cliSw);
+  main.appendChild(hd);
   const list = el("div","wa-msgs"); list.id = "chat-list"; list.dataset.ch = ch;
   const msgs = S.d.messages.filter(m => m.ch === ch).sort((a,b) => (a.at||"").localeCompare(b.at||""));
   const firstPaint = MSG_CH !== ch; MSG_CH = ch; const lastMine = [...msgs].reverse().find(m => m.who === me);

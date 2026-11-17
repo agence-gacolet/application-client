@@ -1066,6 +1066,17 @@ module.exports = function (app, { db, wrap, root }) {
     next();
   })().catch(e => { console.error(e); res.status(500).json({ error: "Erreur du serveur." }); });
   const cgOf = c => "cg:" + c.id;
+  /* Membres de l’équipe dans les groupes d’un client (Matis, 17/11) : groupe principal = Gabriel et Clara, groupe tournage = Gabriel et Matis,
+     on peut en ajouter. Réglage { "<id client>": { main: [noms], shoot: [noms] } } dans cfg/cgmembers. */
+  const CGM_DEF = { main: ["Gabriel", "Clara"], shoot: ["Gabriel", "Matis"] };
+  let CGM = null; const cgmCfg = async () => { if (!CGM) CGM = (await current("cfg", "cgmembers")) || {}; return CGM; };
+  async function cgMembers(cid){
+    const team = (await db.all("SELECT name FROM gusers WHERE disabled = 0 ORDER BY created_at")).map(r => r.name);
+    const pick = list => [...new Set(list.map(n => team.find(x => x === n) || team.find(x => normName(x).split(" ")[0] === normName(n))).filter(Boolean))];
+    const c = (await cgmCfg())[String(cid)] || {};
+    return { main: pick(Array.isArray(c.main) ? c.main : CGM_DEF.main), shoot: pick(Array.isArray(c.shoot) ? c.shoot : CGM_DEF.shoot) };
+  }
+  app.locals.cgMembers = cgMembers;
   const visioRoom = id => "visio" + String(id).split("").map(x => "abcdefghij"[Number(x)]).join("");
   async function clientChOk(c, ch) {
     ch = String(ch || "");
@@ -1092,7 +1103,8 @@ module.exports = function (app, { db, wrap, root }) {
     const bilans = (await db.all("SELECT data FROM docs WHERE col = '_bilans' AND deleted = 0 AND id LIKE ?", ["c" + c.id + "-%"])).map(r => { try { const d = JSON.parse(r.data || "{}"); return d.sent && Number(d.cid) === c.id ? { m: d.month, at: d.sent.at } : null; } catch (e) { return null; } }).filter(Boolean).sort((a, b) => b.m.localeCompare(a.m));
     // Pages fermées à ce client (Paramètres > Espace client) : leurs données ne partent pas
     const pg = (await app.locals.clientPagesFor(c, req.cu)).pages, op = k => pg[k] === "on";
-    res.json({ bilans: op("bilans") ? bilans : [], visio: { room: vr, here }, me: { name: req.cname, prenom: req.cname.split(" ")[0], entreprise: req.cu.entreprise }, client: { name: c.name, id: c.id }, preview: req.cu.email === PREVIEW_MAIL, messages, idees: op("idees") ? idees : [], team, billing: op("prel") ? billing : { plan: null, docs: [] }, shoots: op("tournages") ? shoots : [] });
+    const groups = await cgMembers(c.id);
+    res.json({ groups, bilans: op("bilans") ? bilans : [], visio: { room: vr, here }, me: { name: req.cname, prenom: req.cname.split(" ")[0], entreprise: req.cu.entreprise }, client: { name: c.name, id: c.id }, preview: req.cu.email === PREVIEW_MAIL, messages, idees: op("idees") ? idees : [], team, billing: op("prel") ? billing : { plan: null, docs: [] }, shoots: op("tournages") ? shoots : [] });
   }));
   app.get("/api/c/bilan/:m", cauth, wrap(async (req, res) => { const m = String(req.params.m); if (!okMonth(m)) return res.status(400).json({ error: "Demande invalide." });
     const d = await current("_bilans", bilanId(req.cl.id, m)); if (!d || !d.sent || Number(d.cid) !== req.cl.id) return res.status(404).json({ error: "Bilan introuvable." });
@@ -1109,7 +1121,7 @@ module.exports = function (app, { db, wrap, root }) {
   app.post("/api/c/shoot", cauth, wrap(async (req, res) => {
     if (req.cu.email === PREVIEW_MAIL) return res.status(403).json({ error: "Aperçu en lecture seule." });
     const b = req.body || {}, id = String(b.id || ""), status = String(b.status || ""), note = String(b.note || "").trim().slice(0, 4000);
-    if (!okId(id) || !["ok", "mod", "no"].includes(status)) return res.status(400).json({ error: "Demande invalide." });
+    if (!okId(id) || !["ok", "mod"].includes(status)) return res.status(400).json({ error: "Demande invalide." }); // pas de refus côté client (Matis, 17/11)
     if (status !== "ok" && !note) return res.status(400).json({ error: "Expliquez ce qu’il faut changer." });
     const cur = await current("shoots", id);
     if (!cur || !cur.sentAt || !sameName(cur.client, req.cl.name)) return res.status(404).json({ error: "Feuille introuvable." });
@@ -1238,7 +1250,7 @@ module.exports = function (app, { db, wrap, root }) {
     const base = ch.replace(/^tg:/, ""), shoot = ch.startsWith("tg:");
     if (ch.startsWith("dm:")) { to = ch.slice(3).split("|").filter(n => n !== who); title = who; dm = true; }
     else if (ch.startsWith("cdm:")) { const [x, name] = ch.slice(4).split("|"); to = [name].filter(n => n !== who); title = (cl ? cl.name : await cname(x)) + ", privé"; }
-    else if (base.startsWith("cg:")) title = (cl ? cl.name : await cname(base.slice(3))) + (shoot ? ", tournage" : "");
+    else if (base.startsWith("cg:")) { title = (cl ? cl.name : await cname(base.slice(3))) + (shoot ? ", tournage" : ""); const g = await cgMembers(Number(base.slice(3))); to = (shoot ? g.shoot : g.main).filter(n => n !== who); }
     else if (base.startsWith("c:")) title = base.slice(2) + (shoot ? ", tournage" : ", interne");
     else title = shoot ? "Tournages" : "Équipe";
     const f = Array.isArray(d.files) ? d.files : [];
@@ -1315,7 +1327,19 @@ module.exports = function (app, { db, wrap, root }) {
   app.get("/api/g-cgroups", auth, wrap(async (req, res) => {
     const cl = await db.all("SELECT id, name FROM clients WHERE active = 1 ORDER BY name");
     const us = await db.all("SELECT client_id, prenom, nom FROM users WHERE token NOT LIKE 'retire-%' AND email <> ? AND email <> ?", [PREVIEW_MAIL, "test@agence.interne"]);
-    res.json({ groups: cl.map(c => ({ ch: "cg:" + c.id, id: c.id, room: visioRoom(c.id), name: c.name, people: us.filter(u => u.client_id === c.id).map(u => (u.prenom + " " + u.nom).trim()) })) });
+    const out = []; for (const c of cl) out.push({ ch: "cg:" + c.id, id: c.id, room: visioRoom(c.id), name: c.name, people: us.filter(u => u.client_id === c.id).map(u => (u.prenom + " " + u.nom).trim()), team: await cgMembers(c.id) });
+    res.json({ groups: out });
+  }));
+  // Ajouter ou retirer des membres de l’équipe dans le groupe principal ou tournage d’un client
+  app.post("/api/g-cgroups/members", auth, wrap(async (req, res) => {
+    if (req.user.preview) return res.status(403).json({ error: "Aperçu." });
+    const b = req.body || {}, id = Number(b.id), mode = b.mode === "shoot" ? "shoot" : "main";
+    if (!(await db.one("SELECT id FROM clients WHERE id = ?", [id]))) return res.status(404).json({ error: "Client introuvable." });
+    const team = (await db.all("SELECT name FROM gusers WHERE disabled = 0")).map(r => r.name);
+    const names = [...new Set((Array.isArray(b.names) ? b.names : []).map(String).filter(n => team.includes(n)))];
+    if (!names.length) return res.status(400).json({ error: "Gardez au moins une personne de l’équipe dans le groupe." });
+    const cfg = Object.assign({}, await cgmCfg()), cur = await cgMembers(id); cfg[String(id)] = Object.assign({}, cur, { [mode]: names });
+    await put("cfg", "cgmembers", cfg); CGM = cfg; res.json({ team: await cgMembers(id) });
   }));
 
 
