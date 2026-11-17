@@ -94,23 +94,25 @@
 
   const assets = {
     // Gros fichiers : envoi par morceaux de 8 Mo ; si la connexion ou le serveur coupe, on redemande où il en est et on reprend
+    // Gros fichiers : morceaux de 8 Mo envoyés 4 par 4 ; un morceau qui échoue est renvoyé seul, avec une attente croissante
     async upload(file, onProgress) {
-      const SZ = 8 * 1024 * 1024;
+      const SZ = 8 * 1024 * 1024, PAR = 4;
       if (file.size <= SZ) { const fd = new FormData(); fd.append("file", file, file.name); const r = await call("POST", "/api/g-upload", fd, true); if (onProgress) onProgress(1); return r; }
       const id = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, "0")).join("");
       const ext = ((file.name.match(/\.[a-z0-9]{1,7}$/i) || [""])[0]).toLowerCase(), q = "&total=" + file.size + "&ext=" + encodeURIComponent(ext) + "&type=" + encodeURIComponent(file.type || "");
-      let off = 0, fails = 0;
-      while (true) {
-        try {
-          const r = await call("POST", "/api/g-upload-chunk/" + id + "?off=" + off + q, file.slice(off, off + SZ), true);
-          fails = 0; off = r.size; if (onProgress) onProgress(off / file.size);
-          if (r.url) return r;
-        } catch (e) {
-          if (/Connexion requise/.test(e.message) || ++fails > 40) throw e;
-          await new Promise(ok => setTimeout(ok, Math.min(30000, 1500 * fails)));
-          try { off = (await call("GET", "/api/g-upload-chunk/" + id)).size; } catch (x) {}
-        }
-      }
+      const offs = []; for (let o = 0; o < file.size; o += SZ) offs.push(o);
+      let sent = 0, result = null, fatal = null; const todo = offs.slice();
+      const one = async off => { let fails = 0;
+        while (true) {
+          try { const r = await call("POST", "/api/g-upload-par/" + id + "?off=" + off + q, file.slice(off, off + SZ), true);
+            sent += Math.min(SZ, file.size - off); if (onProgress) onProgress(Math.min(0.999, sent / file.size)); if (r.url) result = r; return; }
+          catch (e) { if (/Connexion requise|invalide/.test(e.message) || ++fails > 30) throw e; await new Promise(ok => setTimeout(ok, Math.min(30000, 1500 * fails))); }
+        } };
+      const worker = async () => { while (todo.length && !fatal) { const off = todo.shift(); try { await one(off); } catch (e) { fatal = e; } } };
+      await Promise.all(Array.from({ length: Math.min(PAR, offs.length) }, worker));
+      if (fatal) throw fatal;
+      if (!result) throw new Error("Envoi incomplet, redépose ce fichier.");
+      if (onProgress) onProgress(1); return result;
     },
   };
   const user = { isOwner: async () => false, can: async () => true };

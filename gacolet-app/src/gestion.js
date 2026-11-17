@@ -1040,8 +1040,32 @@ module.exports = function (app, { db, wrap, root }) {
     const name = id + (ext && ext !== "." ? ext : ""); fs.renameSync(f, path.join(DIR, name));
     res.json({ size, id: name, url: "/f/" + name, contentType: type, sizeBytes: size });
   });
+  // Envoi en parallèle (4 morceaux à la fois) : chaque morceau est écrit à sa place dans le fichier, la liste des morceaux reçus est tenue à côté (.got)
+  // Le fichier n'est rendu qu'une fois tous les morceaux arrivés. Plusieurs fois plus rapide qu'un morceau après l'autre sur une connexion lente.
+  const gotOf = id => path.join(DIR, id + ".got");
+  const readGot = id => { try { return JSON.parse(fs.readFileSync(gotOf(id), "utf8")); } catch (e) { return null; } };
+  app.get("/api/g-upload-par/:id", auth, (req, res) => {
+    const id = String(req.params.id); if (!/^[a-f0-9]{32}$/.test(id)) return res.status(400).json({ error: "Envoi inconnu." });
+    const g = readGot(id); res.json({ parts: g ? Object.keys(g.parts).map(Number) : [] });
+  });
+  app.post("/api/g-upload-par/:id", auth, (req, res, next) => { UPLOADS++; let d = false; const end = () => { if (!d) { d = true; UPLOADS--; } }; res.on("finish", end); res.on("close", end); next(); }, rawBody, (req, res) => {
+    const id = String(req.params.id), off = Number(req.query.off), total = Number(req.query.total);
+    const ext = String(req.query.ext || "").toLowerCase().replace(/[^.a-z0-9]/g, "").slice(0, 8), type = String(req.query.type || "").slice(0, 100);
+    if (!/^[a-f0-9]{32}$/.test(id) || !Number.isInteger(off) || off < 0 || !Number.isInteger(total) || total <= 0 || total > 2 * 1024 * 1024 * 1024 || !Buffer.isBuffer(req.body) || off + req.body.length > total) return res.status(400).json({ error: "Morceau invalide." });
+    const f = partOf(id); let g = readGot(id);
+    if (!g || g.total !== total) { g = { total, parts: {} }; fs.writeFileSync(f, ""); fs.truncateSync(f, total); }
+    const fd = fs.openSync(f, "r+"); try { fs.writeSync(fd, req.body, 0, req.body.length, off); } finally { fs.closeSync(fd); }
+    g.parts[off] = req.body.length; fs.writeFileSync(gotOf(id), JSON.stringify(g));
+    const got = Object.values(g.parts).reduce((a, n) => a + n, 0);
+    if (got < total) return res.json({ got });
+    // Tout est là : on vérifie que les morceaux se suivent sans trou avant de rendre le fichier
+    let at = 0; for (const o of Object.keys(g.parts).map(Number).sort((x, y) => x - y)) { if (o !== at) return res.status(409).json({ error: "Morceau manquant.", got }); at += g.parts[o]; }
+    if (at !== total) return res.status(409).json({ error: "Morceau manquant.", got });
+    const name = id + (ext && ext !== "." ? ext : ""); fs.renameSync(f, path.join(DIR, name)); try { fs.unlinkSync(gotOf(id)); } catch (e) {}
+    res.json({ got, id: name, url: "/f/" + name, contentType: type, sizeBytes: total });
+  });
   // Morceaux abandonnés depuis plus de 2 jours : supprimés
-  setInterval(() => { try { const lim = Date.now() - 2 * 86400000; fs.readdirSync(DIR).filter(n => n.endsWith(".part")).forEach(n => { const p = path.join(DIR, n); if (fs.statSync(p).mtimeMs < lim) fs.unlinkSync(p); }); } catch (e) {} }, 6 * 3600000).unref();
+  setInterval(() => { try { const lim = Date.now() - 2 * 86400000; fs.readdirSync(DIR).filter(n => n.endsWith(".part") || n.endsWith(".got")).forEach(n => { const p = path.join(DIR, n); if (fs.statSync(p).mtimeMs < lim) fs.unlinkSync(p); }); } catch (e) {} }, 6 * 3600000).unref();
   app.get("/f/:name", (req, res) => {
     const n = path.basename(req.params.name);
     if (!/^[a-f0-9]{32}(\.[a-z0-9]{1,7})?$/.test(n)) return res.status(404).end();

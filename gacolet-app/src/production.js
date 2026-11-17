@@ -113,6 +113,31 @@ module.exports = function production({ app, auth, wrap, db, current, put, pubPla
     res.json({ propositions: props.slice(0, 3).map(x => String(x).trim()).filter(Boolean) });
   }));
 
+  // Dépôts en cours, gardés sur le serveur (et plus dans le navigateur) : les mêmes sur tous les appareils, rien ne disparaît en fermant une fenêtre
+  const DKEYS = ["client","name","kind","url","date","time","reco","text","props","transcript","wait","asked","err","pct","up","upAt","by","at"];
+  const draftId = id => /^d[a-z0-9]{6,30}$/.test(String(id)) ? String(id) : "";
+  app.get("/api/g-prod/drafts", auth, wrap(async (req, res) => {
+    const list = await docsOf("_depot");
+    for (const d of list) if (d.wait) { const q = await current("_descq", d.wait); if (!q) continue;
+      if (q.status === "done") { Object.assign(d, { props: q.propositions || [], transcript: q.transcript || "", wait: "" }); if (!d.text && d.props[0]) d.text = d.props[0]; const x = Object.assign({}, d); delete x.id; await put("_depot", d.id, x); }
+      else if (q.status === "error") { Object.assign(d, { wait: "", err: q.error || "Claude n’a pas pu écrire les descriptions." }); const x = Object.assign({}, d); delete x.id; await put("_depot", d.id, x); } }
+    res.json({ items: list.sort((a, b) => String(a.at).localeCompare(String(b.at))) });
+  }));
+  app.put("/api/g-prod/drafts/:id", auth, wrap(async (req, res) => {
+    const id = draftId(req.params.id); if (!id) return res.status(400).json({ error: "Dépôt inconnu." });
+    const b = req.body || {}, cur = (await current("_depot", id)) || { at: new Date().toISOString(), by: (req.user && req.user.name) || "" }, d = Object.assign({}, cur);
+    DKEYS.forEach(k => { if (k in b && k !== "at" && k !== "by") d[k] = b[k]; });
+    // Les descriptions reçues par le serveur ne sont jamais effacées par un appareil qui ne les a pas encore
+    if (cur.props && !(b.props && b.props.length)) { d.props = cur.props; d.transcript = cur.transcript; d.wait = cur.wait || ""; if (!d.text) d.text = cur.text || ""; }
+    if (cur.url && !b.url) d.url = cur.url;
+    if (!d.client || !d.name) return res.status(400).json({ error: "Dépôt incomplet." });
+    await put("_depot", id, d); res.json({ ok: true, item: Object.assign({ id }, d) });
+  }));
+  app.delete("/api/g-prod/drafts/:id", auth, wrap(async (req, res) => {
+    const id = draftId(req.params.id); if (!id) return res.status(400).json({ error: "Dépôt inconnu." });
+    await db.run("UPDATE docs SET deleted = 1, updated_at = ? WHERE col = '_depot' AND id = ?", [new Date().toISOString(), id]); res.json({ ok: true });
+  }));
+
   // Programmation dans Metricool (Instagram et Facebook) ; le média est servi par l'appli à une adresse publique impossible à deviner
   app.post("/api/g-prod/schedule", auth, wrap(async (req, res) => {
     const b = req.body || {}, name = String(b.client || ""), blog = await blogFor(name);
@@ -121,8 +146,8 @@ module.exports = function production({ app, auth, wrap, db, current, put, pubPla
     // Mode : « draft » = brouillon Metricool ; « review » = brouillon soumis au client dans son espace (À valider), programmé tout seul quand il valide ; « publish » = programmé
     const mode = ["draft", "review", "publish"].includes(b.mode) ? b.mode : "review";
     for (const it of (Array.isArray(b.items) ? b.items : []).slice(0, 20)) {
-      const url = String(it.url || ""); if (!/^\/f\/[a-f0-9]{32}(\.[a-z0-9]{1,7})?$/.test(url)) { out.push({ ok: false, error: "Fichier invalide." }); continue; }
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(it.date || "") || !/^\d{2}:\d{2}$/.test(it.time || "")) { out.push({ ok: false, error: "Date ou heure invalide." }); continue; }
+      const url = String(it.url || ""); if (!/^\/f\/[a-f0-9]{32}(\.[a-z0-9]{1,7})?$/.test(url)) { out.push({ ok: false, id: it.id || "", error: "Fichier invalide." }); continue; }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(it.date || "") || !/^\d{2}:\d{2}$/.test(it.time || "")) { out.push({ ok: false, id: it.id || "", error: "Date ou heure invalide." }); continue; }
       const video = it.kind === "video", nets = (Array.isArray(it.networks) && it.networks.length ? it.networks : ["instagram", "facebook"]).filter(x => ["instagram", "facebook"].includes(x));
       const info = { publicationDate: { dateTime: it.date + "T" + it.time + ":00", timezone: "Europe/Paris" }, text: String(it.text || "").slice(0, 2200), providers: nets.map(network => ({ network })),
         media: [base + url], autoPublish: true, draft: mode !== "publish", shortener: false, descendants: [], firstCommentText: "", hasNotReadNotes: false, mediaAltText: [], smartLinkData: { ids: [] } };
@@ -131,8 +156,9 @@ module.exports = function production({ app, auth, wrap, db, current, put, pubPla
       try { const r = await mc("POST", "/v2/scheduler/posts", { blogId: blog }, info); const id = r && (r.id || (r.data && r.data.id));
         if (mode === "review" && id) { await put("_prodrev", "mc" + id, { blog, client: name, at: new Date().toISOString() }); try { require("./metricool").forget(blog); } catch (e) {} }
         if (id) { await put("_purge", url.slice(3).replace(/\W/g, "_"), { file: url.slice(3), blog, post: String(id), date: it.date, at: new Date().toISOString() }); setTimeout(purgeFiles, 30000).unref(); }
-        out.push({ ok: true, date: it.date, time: it.time, mode }); }
-      catch (e) { out.push({ ok: false, error: e.message }); }
+        const did = draftId(it.id); if (did) await db.run("UPDATE docs SET deleted = 1, updated_at = ? WHERE col = '_depot' AND id = ?", [new Date().toISOString(), did]);
+        out.push({ ok: true, id: it.id || "", date: it.date, time: it.time, mode }); }
+      catch (e) { out.push({ ok: false, id: it.id || "", error: e.message }); }
     }
     res.json({ results: out });
   }));
