@@ -19,6 +19,8 @@ const fmtTime = t => { if (!t) return ""; const [h, mi] = String(t).split(":"); 
 const waTime = at => { const d = new Date(at || 0), k = iso(d); if (k === today()) return hm(d); if (k === addDays(today(), -1)) return "Hier"; return fmtD(k); };
 const fmtSize = n => !n ? "" : n < 1024*1024 ? Math.max(1, Math.round(n/1024))+" ko" : (n/1024/1024).toFixed(1).replace(".",",")+" Mo";
 const isImg = f => /^image\//.test(f.type || "") || /\.(jpe?g|png|gif|webp|heic)$/i.test(f.name || f.url || "");
+/* Croix des grands écrans : ferme dès que le doigt se lève (le « clic » de l’iPhone se perdait parfois, Matis 17/11) */
+function tapClose(b, fn){ let done = false; const go = e => { if (done) return; done = true; if (e && e.cancelable) e.preventDefault(); fn(); }; b.addEventListener("touchend", go, { passive: false }); b.addEventListener("pointerup", go); }
 /* « #t=0.1 » : l’iPhone affiche la première image au lieu d’un rectangle noir */
 const vsrc = u => /#t=/.test(u || "") ? u : (u || "") + "#t=0.1";
 const isVid = f => /^video\//.test(f.type || "") || /\.(mp4|mov|webm|m4v)$/i.test(f.name || f.url || "");
@@ -167,6 +169,8 @@ function vAccueil(root){
   /* Phrase d’accueil et phrase du dessous : toujours sur une seule ligne, la taille s’adapte à la largeur (Matis, 17/11) */
   requestAnimationFrame(() => W.querySelectorAll(".w2-h,.w2-say").forEach(fitLine));
 }
+/* Accueil immobile sans figer la page (figer la page faisait remonter la barre du bas sur iPhone) : on bloque juste le glissement du doigt */
+document.addEventListener("touchmove", e => { if (document.body.classList.contains("cl-home") && !e.target.closest(".dr-wrap,.cl-view,.overlay,#overlay")) e.preventDefault(); }, { passive: false });
 function fitLine(n){ n.style.whiteSpace = "nowrap"; n.style.fontSize = ""; let fs = parseFloat(getComputedStyle(n).fontSize), max = n.parentElement.clientWidth;
   while (n.scrollWidth > max && fs > 12){ fs -= 1; n.style.fontSize = fs + "px"; } }
 
@@ -224,7 +228,7 @@ function shOpen(s){
   const x = el("button","cl-vx"); x.type = "button"; x.setAttribute("aria-label","Fermer"); x.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>';
   top.append(tt, x); ov.appendChild(top);
   const sc = el("div","sh-scroll"), pg = el("div","sh-box full"); sc.appendChild(pg); ov.appendChild(sc);
-  const close = () => { ov.remove(); document.body.classList.remove("cl-noscroll"); }; x.onclick = close;
+  const close = () => { ov.remove(); document.body.classList.remove("cl-noscroll"); }; x.onclick = close; tapClose(x, close);
   document.body.appendChild(ov); document.body.classList.add("cl-noscroll"); shPage(s, pg, true);
 }
 function vTournages(root){
@@ -329,7 +333,7 @@ function openViewer(p, start, play){
   ov.appendChild(bot);
   const key = e => { if (e.key === "Escape") close(); };
   function close(){ document.removeEventListener("keydown", key); ov.remove(); document.body.classList.remove("cl-noscroll"); }
-  x.onclick = close; document.addEventListener("keydown", key);
+  x.onclick = close; tapClose(x, close); document.addEventListener("keydown", key);
   document.body.appendChild(ov); document.body.classList.add("cl-noscroll");
   const strip = sl.querySelector(".cl-strip"); strip.scrollLeft = (start || 0) * strip.clientWidth; strip.focus({ preventScroll: true });
   /* Lecture lancée tout de suite quand on a touché une vidéo (dans le geste, sinon l’iPhone la bloque) */
@@ -356,7 +360,9 @@ function vValider(root){
       if (m0.video){ const v = document.createElement("video"); v.src = vsrc(m0.url); v.muted = true; v.playsInline = true; v.preload = "metadata"; th.appendChild(v); const pl = el("span","cl-tplay"); pl.innerHTML = '<svg viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg>'; th.appendChild(pl); }
       else { const im = document.createElement("img"); im.src = m0.url; im.alt = ""; im.loading = "lazy"; th.appendChild(im); }
       th.appendChild(el("span","cl-ttype", typeLabel(p)));
-      th.onclick = () => openViewer(p, 0, !!m0.video); c.appendChild(th); }
+      c.appendChild(th);
+      /* Toute la carte ouvre la création, sauf les boutons et la zone de texte (Matis, 17/11) */
+      c.classList.add("cl-open"); c.onclick = e => { const t = e.target.closest("button,textarea,input,a,select"); if (t && !t.classList.contains("cl-thumb")) return; openViewer(p, 0, !!m0.video); }; }
     const b = el("div","cl-pb");
     const meta = el("div","cl-pmeta"); meta.append(el("span","pill" + (p.status === "wait" ? " l3" : p.status === "no" ? " no" : ""), ST_LABEL[p.status] || ""), el("span",null, fmtDL(p.date) + (p.time ? ", " + fmtTime(p.time) : "")), el("span",null,p.net || ""));
     b.appendChild(meta);

@@ -45,9 +45,8 @@ html,body{background:#090908}
 
 /* Accueil sur téléphone : immobile, il tient exactement dans l'écran (pas de défilement ni de rebond) */
 @media (max-width:900px){
-  html:has(body.cl-home),body.cl-home{overflow:hidden;height:100%;overscroll-behavior:none}
   body.cl-home .in{padding-bottom:0}
-  body.cl-home .welcome2{box-sizing:border-box;min-height:0;height:calc(100vh - 64px);height:calc(100dvh - 64px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));padding:0;overflow:hidden}
+  body.cl-home .welcome2{box-sizing:border-box;min-height:0;height:calc(100vh - 64px);height:calc(100dvh - 64px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));padding:0 16px;margin:0 -16px;overflow:visible}
 }
 
 /* Accueil : logo plus gros, phrases sur une ligne (taille ajustée par client.js) */
@@ -69,3 +68,12 @@ html,body{background:#090908}
 .cl-tplay svg{width:18px;height:18px;fill:#fff;margin-left:3px}
 .cl-ttype{position:absolute;left:6px;bottom:6px;right:6px;padding:2px 7px;border-radius:999px;background:rgba(0,0,0,.7);color:#fff;font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center}
 .cl-tcard .cl-acts .btn{min-width:0;font-size:13px;padding:9px 10px;white-space:normal;text-align:center;line-height:1.2}
+/* Croix des grands écrans : plus grande, au-dessus de tout, zone de toucher élargie */
+.cl-vtop{position:relative;z-index:10}
+.cl-vx{width:48px;height:48px;position:relative;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.cl-vx::after{content:"";position:absolute;inset:-12px}
+.cl-vx svg{pointer-events:none}
+/* Carte À valider : toute la carte se touche, l'aperçu occupe toute la hauteur de la carte */
+.cl-tcard{align-items:stretch}
+.cl-tcard.cl-open{cursor:pointer;-webkit-tap-highlight-color:transparent}
+.cl-thumb{align-self:stretch;height:100%;min-height:150px;aspect-ratio:auto!important}
