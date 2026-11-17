@@ -107,7 +107,8 @@ async function save(col, id, body, opts){
   try {
     if (id && opts && opts.merge) await S.db.collection(col).doc(id).update(data);
     else if (id) await S.db.collection(col).doc(id).set(data);
-    else { data.createdAt = data.updatedAt; data.createdBy = S.me || ""; await S.db.collection(col).doc().set(data); }
+    else { data.createdAt = data.updatedAt; data.createdBy = S.me || ""; const ref = S.db.collection(col).doc(); await ref.set(data); return ref.id; }
+    return id;
   } catch(x){
     if (x && x.code === "invalid_argument" && S.canWrite == null){ S.canWrite = false; toast("Consultation seule : demande l’accès Contributeur à Gabriel."); }
     else toast("Enregistrement impossible pour l’instant. Réessaie dans un moment.");
@@ -382,19 +383,31 @@ function openTask(t){
     onDelete: () => remove("tasks", t.id),
     onEdit: () => editTask(t) });
 }
+/* Message privé « Nouvelle tâche » avec bouton « Aller à la tâche » */
+async function taskNotify(id, b, isNew){
+  const me = S.me || "Gabriel", to = b.who;
+  if (!id || !to || to === me || !(S.team || []).some(x => x.name === to && x.role)) { toast(to === me ? "Tâche pour toi : pas de message envoyé." : "Personne à prévenir introuvable : pas de message envoyé."); return; }
+  const k = dmKey(me, to), txt = (isNew ? "Nouvelle tâche pour toi : " : "Tâche mise à jour : ") + b.title + (b.client ? " (" + b.client + ")" : "") + (isISO(b.date) ? ", à rendre le " + fmtDL(b.date) : "") + (b.note ? "\n" + b.note : "");
+  try { await save("messages", null, { ch: k, who: me, text: txt, task: id, at: new Date().toISOString() }); S.ui.dmOpen = [...new Set((S.ui.dmOpen || []).concat(k))]; remember(); setTimeout(() => toast(to + " a reçu un message privé."), 1200); } catch(e){}
+}
+function goTask(id){
+  go("taches"); let n = 0;
+  const tryOpen = () => { const t = (S.d.tasks || []).find(x => x.id === id); if (t) return openTask(t); if (++n < 30) setTimeout(tryOpen, 100); else toast("Tâche introuvable : elle a peut-être été supprimée."); };
+  setTimeout(tryOpen, 60);
+}
 function editTask(t){
   openForm({ key:"ta", title: t.id ? "Modifier la tâche" : "Nouvelle tâche", intro: t.id ? "" : "Intitulé « Verbe + livrable », une seule personne par tâche.",
     values: Object.assign({who: S.ui.tWho && S.ui.tWho !== "Tous" ? S.ui.tWho : (S.me || "À attribuer")}, t, {pole: poleOf(t)}),
     fields: [{k:"who",label:"Qui",type:"select",options:OWNERS,half:true},{k:"pole",label:"Catégorie",type:"select",options:POLES,half:true},
       {k:"client",label:"Client",list:clientNames(),half:true},{k:"title",label:"À faire",req:"Écris ce qu’il faut faire.",ph:"Ex. Monter les 3 réels KR",half:true},
       {k:"date",label:"À rendre le",type:"date",half:true},{k:"postDate",label:"À poster le (calendrier éditorial du client)",type:"date",half:true},
-      {k:"note",label:"Note",type:"textarea"},{k:"done",label:"Fait",type:"check"}],
+      {k:"note",label:"Note",type:"textarea"},{k:"done",label:"Fait",type:"check"}].concat(OWNERS.length > 1 ? [{k:"notify",label:"Prévenir la personne par message privé",type:"check"}] : []),
     onCancel: () => t.id ? openTask(t) : closeModal(),
     onDelete: t.id ? () => remove("tasks", t.id) : null,
-    onSave: out => { const b = Object.assign(t.id ? strip(t) : {}, out); b.doneAt = out.done ? (t.doneAt || today()) : "";
+    onSave: out => { const notify = out.notify; delete out.notify; const b = Object.assign(t.id ? strip(t) : {}, out); delete b.notify; b.doneAt = out.done ? (t.doneAt || today()) : "";
       if (isISO(b.postDate) && !String(b.client || "").trim()) { toast("Indique le client : la date de publication va dans son calendrier éditorial."); throw new Error("client"); }
       if (isISO(b.postDate) && isISO(b.date) && b.postDate < b.date) toast("Attention : la publication tombe avant la date de rendu.");
-      return save("tasks", t.id || null, b).then(() => { if (isISO(b.postDate)) setTimeout(() => toast("Publication du " + fmtD(b.postDate) + " ajoutée au calendrier éditorial de " + b.client + "."), 60); }); } });
+      return save("tasks", t.id || null, b).then(id => { if (notify) taskNotify(id || t.id, b, !t.id); if (isISO(b.postDate)) setTimeout(() => toast("Publication du " + fmtD(b.postDate) + " ajoutée au calendrier éditorial de " + b.client + "."), 60); }); } });
 }
 
 /* Commercial */
@@ -2660,6 +2673,7 @@ function vMessagerie(root){
     (m.files || []).forEach(f => bub.appendChild(attachEl(f)));
     if (m.audio) bub.appendChild(audioFor(m));
     if (m.text) bub.appendChild(linkify(el("div","wa-txt"), m.text));
+    if (m.task){ const gt = el("button","btn sm wa-task","Aller à la tâche"); gt.type = "button"; gt.onclick = e => { e.stopPropagation(); goTask(m.task); }; bub.appendChild(gt); }
     const tm = el("span","wa-time", hhmm(md));
     if (mine){ const tk = el("span","wa-tk"); tk.dataset.at = m.at || ""; tk.innerHTML = '<svg viewBox="0 0 18 12" aria-hidden="true"><path d="M1 6.5 4.5 10 11 2.5M7 9.5l.5.5L14 2.5"/></svg>'; tk.title = "Envoyé"; tm.appendChild(tk); }
     bub.appendChild(tm);

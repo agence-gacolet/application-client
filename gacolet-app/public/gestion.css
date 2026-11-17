@@ -2144,3 +2144,4 @@ body.kb .mtabs{display:none}
 .wa-clisw{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 14px;border-bottom:1px solid var(--line)}
 .wa-clisw .seg{-webkit-mask-image:none;mask-image:none}
 .wa-clisw small{font-size:var(--fs-s)}
+.wa-task{display:block;margin:6px 0 2px}
