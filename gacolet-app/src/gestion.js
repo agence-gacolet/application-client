@@ -1104,7 +1104,7 @@ module.exports = function (app, { db, wrap, root }) {
     // Pages fermées à ce client (Paramètres > Espace client) : leurs données ne partent pas
     const pg = (await app.locals.clientPagesFor(c, req.cu)).pages, op = k => pg[k] === "on";
     const groups = await cgMembers(c.id);
-    res.json({ groups, bilans: op("bilans") ? bilans : [], visio: { room: vr, here }, me: { name: req.cname, prenom: req.cname.split(" ")[0], entreprise: req.cu.entreprise }, client: { name: c.name, id: c.id }, preview: req.cu.email === PREVIEW_MAIL, messages, idees: op("idees") ? idees : [], team, billing: op("prel") ? billing : { plan: null, docs: [] }, shoots: op("tournages") ? shoots : [] });
+    res.json({ groups, bilans: op("bilans") ? bilans : [], visio: { room: vr, here }, me: { name: req.cname, prenom: req.cname.split(" ")[0], entreprise: req.cu.entreprise, tel: req.cu.tel || "", email: /@agence\.interne$/.test(req.cu.email || "") ? "" : (req.cu.email || ""), avatar: ((await current("_cuser", "u" + req.cu.id)) || {}).avatar || "" }, client: { name: c.name, id: c.id }, preview: req.cu.email === PREVIEW_MAIL, messages, idees: op("idees") ? idees : [], team, billing: op("prel") ? billing : { plan: null, docs: [] }, shoots: op("tournages") ? shoots : [] });
   }));
   app.get("/api/c/bilan/:m", cauth, wrap(async (req, res) => { const m = String(req.params.m); if (!okMonth(m)) return res.status(400).json({ error: "Demande invalide." });
     const d = await current("_bilans", bilanId(req.cl.id, m)); if (!d || !d.sent || Number(d.cid) !== req.cl.id) return res.status(404).json({ error: "Bilan introuvable." });
@@ -1281,9 +1281,22 @@ module.exports = function (app, { db, wrap, root }) {
     await put("billing", "c" + cid, data); res.json(data);
   }));
   // Paramètres du client : changer son prénom (c’est lui qui apparaît sur ses validations et ses messages)
+  /* Profil du client : prénom, téléphone, courriel, photo ; la fiche du client côté équipe se remplit toute seule (Matis, 17/11) */
   app.post("/api/c/profil", cauth, wrap(async (req, res) => {
-    const p = String((req.body || {}).prenom || "").trim().slice(0, 80); if (!p) return res.status(400).json({ error: "Indiquez votre prénom." });
-    await db.run("UPDATE users SET prenom = ? WHERE id = ?", [p, req.cu.id]); res.json({ ok: true });
+    const b = req.body || {}, s = (v, n) => String(v == null ? "" : v).trim().slice(0, n);
+    const p = s(b.prenom, 80); if (!p) return res.status(400).json({ error: "Indiquez votre prénom." });
+    const tel = b.tel === undefined ? (req.cu.tel || "") : s(b.tel, 40), email = b.email === undefined ? (req.cu.email || "") : s(b.email, 160);
+    if (email && !/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: "Adresse courriel invalide." });
+    await db.run("UPDATE users SET prenom = ?, tel = ?, email = ? WHERE id = ?", [p, tel, email || req.cu.email, req.cu.id]);
+    let avatar;
+    if (b.avatar !== undefined){ avatar = /^\/f\/[a-f0-9]{32}(\.[a-z0-9]{1,7})?$/.test(String(b.avatar)) ? String(b.avatar) : "";
+      const cur = (await current("_cuser", "u" + req.cu.id)) || {}; cur.avatar = avatar; await put("_cuser", "u" + req.cu.id, cur); }
+    const contact = (p + " " + (req.cu.nom || "")).trim();
+    for (const d of (await docsLike("clients", '"name"')).filter(x => sameName(x.name, req.cl.name))){
+      const id = d.id; delete d.id; let ch = false; const set = (k, v) => { if (v && d[k] !== v){ d[k] = v; ch = true; } };
+      set("tel", tel); set("email", email); set("contact", contact); if (avatar !== undefined) set("photo", avatar);
+      if (ch) await put("clients", id, d); }
+    res.json({ ok: true });
   }));
   app.post("/api/c/msg", cauth, wrap(async (req, res) => {
     const b = req.body || {}, text = String(b.text || "").trim().slice(0, 4000), files = cleanFiles(b.files);

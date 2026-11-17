@@ -12,8 +12,6 @@ html,body{background:#090908}
 @media (max-width:900px){
   /* Bande fixe sous l'heure et la batterie : le contenu ne passe plus dessous en défilant */
   body.espace-client::before{content:"";position:fixed;top:0;left:0;right:0;height:env(safe-area-inset-top,0px);background:#090908;z-index:55;pointer-events:none}
-  /* Pas de rebond de toute la page vers le bas (le tirer pour actualiser reste) */
-  html,body.espace-client{overscroll-behavior-y:none}
   /* Barre du bas : « Plus » en premier, à gauche */
   .espace-client .mtabs .morebtn{order:-1}
 }
@@ -104,3 +102,19 @@ html,body{background:#090908}
 .vg-title{font-size:15px;font-weight:700;line-height:1.2;letter-spacing:-.01em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .vg-note{font-size:11.5px;line-height:1.3;color:#FFC59A;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 @media (prefers-reduced-motion:reduce){.vg-tile{animation:none;transition:none}}
+/* Galerie : texte sous l'image, plus de dégradé sur la création */
+.vg-cell{display:flex;flex-direction:column;gap:8px;min-width:0}
+.vg-tile::after{background:linear-gradient(180deg,rgba(0,0,0,.35) 0,rgba(0,0,0,0) 22%)}
+.vg-cap{display:flex;flex-direction:column;gap:2px;padding:0 4px;border:0;background:none;text-align:left;color:var(--ink);cursor:pointer;-webkit-tap-highlight-color:transparent}
+.vg-cap .vg-title{font-size:15px;font-weight:700;line-height:1.25;letter-spacing:-.01em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.vg-cap .vg-date{font-size:12.5px;font-weight:500;color:var(--muted)}
+.vg-cap .vg-note{color:#FFB37A;font-size:12px}
+.vg-grid{row-gap:20px}
+
+/* Paramètres : profil avec photo */
+.pf-photo{display:flex;align-items:center;gap:16px;margin:6px 0 16px}
+.pf-pic{width:76px;height:76px;flex:none;border-radius:50%;border:0;padding:0;overflow:hidden;display:grid;place-items:center;font:700 26px/1 var(--text);color:#0A0A09;cursor:pointer}
+.pf-pic img{width:100%;height:100%;object-fit:cover;display:block}
+.pf-change{border:1px solid var(--line-2);background:none;color:var(--ink);border-radius:999px;padding:8px 14px;font:600 14px/1 var(--text);cursor:pointer}
+.pf-form label.full{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.pf-form input{width:100%;box-sizing:border-box}

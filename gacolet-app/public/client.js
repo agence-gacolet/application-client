@@ -65,6 +65,7 @@ function avatarEl(name, size, opts){
   const a = el("span","av"); a.style.width = a.style.height = size + "px"; a.style.fontSize = Math.round(size * .38) + "px";
   if (opts.logo){ a.classList.add("av-logo"); a.innerHTML = LOGO; return a; }
   // Photo d’équipe seulement pour l’équipe : jamais pour la personne connectée côté client, même si elle porte le prénom d’un membre
+  if (name === myName() && S.f && S.f.me && S.f.me.avatar){ const i = document.createElement("img"); i.src = S.f.me.avatar; i.alt = ""; a.appendChild(i); return a; }
   const t = name === myName() ? null : ((S.f && S.f.team) || []).find(x => x.name === name);
   if (t && t.avatar){ const i = document.createElement("img"); i.src = t.avatar; i.alt = ""; i.loading = "lazy"; a.appendChild(i); return a; }
   a.textContent = initials(name); a.style.background = avColor(name); return a;
@@ -367,7 +368,7 @@ function vValider(root){
   list.forEach((p, idx) => {
     const m0 = (p.media || [])[0], c = el("button","vg-tile vg-" + p.status); c.type = "button";
     c.setAttribute("aria-label", (p.title || typeLabel(p)) + ", " + (ST_LABEL[p.status] || "") + ", voir en grand");
-    if (m0){ if (m0.video){ const v = document.createElement("video"); v.src = vsrc(m0.url); v.muted = true; v.playsInline = true; v.preload = "metadata"; c.appendChild(v); }
+    if (m0){ if (m0.video){ const v = document.createElement("video"); v.src = /#t=/.test(m0.url) ? m0.url : m0.url + "#t=1"; /* image à 1 s : le début est souvent noir */ v.muted = true; v.playsInline = true; v.preload = "metadata"; c.appendChild(v); }
       else { const im = document.createElement("img"); im.src = m0.url; im.alt = ""; im.loading = "lazy"; c.appendChild(im); } }
     else c.appendChild(el("span","vg-txt", p.text || p.title || "Publication"));
     const top = el("span","vg-top"); top.appendChild(el("span","vg-st", ST_LABEL[p.status] || ""));
@@ -375,11 +376,13 @@ function vValider(root){
     if (m0 && m0.video){ const ic = el("span","vg-ic"); ic.innerHTML = '<svg viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg>'; top.appendChild(ic); }
     else if (n > 1){ const ic = el("span","vg-ic vg-n"); ic.innerHTML = '<svg viewBox="0 0 24 24"><rect x="7" y="7" width="13" height="13" rx="2.5"/><path d="M4 16V6.5A2.5 2.5 0 0 1 6.5 4H16"/></svg>' + n; top.appendChild(ic); }
     c.appendChild(top);
-    const bot = el("span","vg-bot"); bot.append(el("span","vg-date", when(p)), el("span","vg-title", p.title || typeLabel(p)));
-    if (p.note) bot.appendChild(el("span","vg-note", "« " + p.note + " »"));
-    c.appendChild(bot);
+    /* Date et titre SOUS l'image (ils mangeaient le texte de la création, Matis 17/11) */
     c.onclick = () => openViewer(p, 0, !!(m0 && m0.video));
-    g.appendChild(c);
+    const cell = el("div","vg-cell"); cell.appendChild(c);
+    const cap = el("button","vg-cap"); cap.type = "button"; cap.tabIndex = -1; cap.onclick = c.onclick;
+    cap.append(el("span","vg-title", p.title || typeLabel(p)), el("span","vg-date", when(p)));
+    if (p.note) cap.appendChild(el("span","vg-note", "« " + p.note + " »"));
+    cell.appendChild(cap); g.appendChild(cell);
   });
   root.appendChild(g);
 }
@@ -688,11 +691,25 @@ function docRow(d){
 function vParametres(root){
   root.appendChild(head("Paramètres", "Votre profil et l’application."));
   const card = (t, sub) => { const c = el("section","pm-card cl-set"); c.appendChild(el("h2",null,t)); if (sub) c.appendChild(el("p","muted",sub)); root.appendChild(c); return c; };
-  const me = card("Votre profil", "Votre prénom apparaît sur vos validations et vos messages.");
-  const f = el("form","form"); const l = el("label","full"); const i = el("input"); i.id = "set-prenom"; i.value = (S.d && S.d.me && S.d.me.prenom) || ""; i.autocomplete = "given-name";
-  l.append(el("span",null,"Prénom"), i); f.appendChild(l);
-  const sv = btn("Enregistrer","lemon", async () => { if (S.f && S.f.preview){ toast("Aperçu en lecture seule : rien n’est enregistré."); return; } const p = i.value.trim(); if (!p){ i.focus(); return; }
-    try { await api("/api/c/profil", { body: { prenom: p } }); await Promise.all([reloadMe(), loadFeed()]); toast("Prénom enregistré."); render(); } catch(e){ toast(e.message); } });
+  /* Profil : photo, prénom, téléphone, courriel ; l’agence les retrouve dans sa fiche client (Matis, 17/11) */
+  const mi = (S.f && S.f.me) || {}, me = card("Votre profil", "Vos coordonnées sont transmises à l’agence, qui les retrouve dans votre fiche.");
+  const ph = el("div","pf-photo"); let avatar = mi.avatar || "";
+  const pic = el("button","pf-pic"); pic.type = "button"; pic.setAttribute("aria-label","Changer la photo de profil");
+  const drawPic = () => { pic.textContent = ""; if (avatar){ const im = document.createElement("img"); im.src = avatar; im.alt = ""; pic.appendChild(im); } else { pic.textContent = initials(myName()); pic.style.background = avColor(myName()); } };
+  drawPic(); const fi = el("input"); fi.type = "file"; fi.accept = "image/*"; fi.hidden = true;
+  const lab = el("button","pf-change","Changer la photo"); lab.type = "button";
+  pic.onclick = lab.onclick = () => fi.click();
+  fi.onchange = async () => { const f = fi.files[0]; fi.value = ""; if (!f) return; if (S.f && S.f.preview){ toast("Aperçu en lecture seule."); return; }
+    lab.textContent = "Envoi…"; try { const r = await uploadFile(f); avatar = r.url; drawPic(); await api("/api/c/profil", { body: { prenom: i1.value.trim() || mi.prenom, avatar } }); await loadFeed(); toast("Photo enregistrée."); } catch(e){ toast(e.message); } lab.textContent = "Changer la photo"; };
+  ph.append(pic, lab, fi); me.appendChild(ph);
+  const f = el("form","form pf-form");
+  const row = (label, id, val, type, ac) => { const l = el("label","full"); const i = el("input"); i.id = id; i.value = val || ""; i.type = type || "text"; if (ac) i.autocomplete = ac; l.append(el("span",null,label), i); f.appendChild(l); return i; };
+  const i1 = row("Prénom", "set-prenom", mi.prenom || (S.d && S.d.me && S.d.me.prenom), "text", "given-name");
+  const i2 = row("Téléphone", "set-tel", mi.tel, "tel", "tel");
+  const i3 = row("Courriel", "set-email", mi.email, "email", "email");
+  const sv = btn("Enregistrer","lemon", async () => { if (S.f && S.f.preview){ toast("Aperçu en lecture seule : rien n’est enregistré."); return; }
+    const p = i1.value.trim(); if (!p){ i1.focus(); return; }
+    try { await api("/api/c/profil", { body: { prenom: p, tel: i2.value.trim(), email: i3.value.trim() } }); await Promise.all([reloadMe(), loadFeed()]); toast("Profil enregistré. L’agence a vos coordonnées à jour."); render(); } catch(e){ toast(e.message); } });
   f.onsubmit = e => { e.preventDefault(); sv.click(); }; const a = el("div","actions"); a.appendChild(sv); f.appendChild(a); me.appendChild(f);
   const c = S.d && S.d.client || {};
   const co = card("Votre compte"); const dl = el("dl","cl-dl");

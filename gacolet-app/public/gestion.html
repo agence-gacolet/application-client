@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>Gacolet</title>
+<script>/* App installée sur l'écran d'accueil (iOS 26 : la page doit faire au moins la hauteur de l'écran, sinon la barre du bas flotte au-dessus d'une bande vide ; WebKit 301108) */try{if(navigator.standalone||matchMedia("(display-mode: standalone)").matches)document.documentElement.classList.add("standalone")}catch(e){}</script>
+<style>html.standalone{min-height:min(100lvh,calc(100% + env(safe-area-inset-top,0px)))}</style>
 <meta name="theme-color" content="#090908">
 <meta name="robots" content="noindex">
 <link rel="manifest" href="/gestion.webmanifest?v=4">
@@ -107,7 +109,7 @@
   const shell = document.getElementById("shell"), login = document.getElementById("login");
   function boot() {
     login.hidden = true; shell.hidden = false;
-    const s = document.createElement("script"); s.src = "/gestion.js?v=90"; document.body.appendChild(s);
+    const s = document.createElement("script"); s.src = "/gestion.js?v=91"; document.body.appendChild(s);
   }
   window.addEventListener("gc-logout", () => location.reload());
   document.getElementById("logout").onclick = () => GC.logout();

@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>Gacolet</title>
 <meta name="description" content="Votre espace client Agence Gacolet : validations, discussion avec l’agence, idées et médias.">
+<script>/* App installée sur l'écran d'accueil (iOS 26 : la page doit faire au moins la hauteur de l'écran, sinon la barre du bas flotte au-dessus d'une bande vide ; WebKit 301108) */try{if(navigator.standalone||matchMedia("(display-mode: standalone)").matches)document.documentElement.classList.add("standalone")}catch(e){}</script>
+<style>html.standalone{min-height:min(100lvh,calc(100% + env(safe-area-inset-top,0px)))}</style>
 <meta name="theme-color" content="#090908">
 <meta name="robots" content="noindex">
 <link rel="manifest" href="/manifest.webmanifest?v=2">
@@ -32,7 +34,7 @@
 <link rel="preload" href="/fonts/bebas-neue.woff2" as="font" type="font/woff2" crossorigin>
 <style>html,body{background:#090908}</style>
 <link rel="stylesheet" href="/gestion.css?v=58">
-<link rel="stylesheet" href="/client.css?v=9">
+<link rel="stylesheet" href="/client.css?v=11">
 </head>
 <body class="espace-client">
 <style>
@@ -79,7 +81,7 @@
 </div>
 <section class="login" id="login" hidden></section>
 <div class="overlay" id="overlay" role="dialog" aria-modal="true" aria-labelledby="mtitle"><div class="modal" id="modal"></div></div>
-<script src="/client.js?v=32"></script>
+<script src="/client.js?v=34"></script>
 <script>/* Pas de zoom : comportement d’une app */
 ["gesturestart","gesturechange","gestureend"].forEach(t => document.addEventListener(t, e => e.preventDefault(), { passive: false }));
 document.addEventListener("touchmove", e => { if (e.touches && e.touches.length > 1) e.preventDefault(); }, { passive: false });
