@@ -26,14 +26,26 @@ module.exports = function (app, { root }) {
   const next = () => { while (running < 2 && queue.length){ const job = queue.shift(); running++; job().finally(() => { running--; next(); }); } };
   const enqueue = fn => new Promise((res, rej) => { queue.push(() => fn().then(res, rej)); next(); });
 
-  function frameOf(u){
+  /* ffmpeg (version autonome) plante s'il va lui-même sur internet : on télécharge d'abord le début de la vidéo, puis ffmpeg lit le fichier local */
+  function runFrame(file, at){
     return new Promise((res, rej) => {
-      const p = spawn(ffmpeg, ["-v", "error", "-ss", "1", "-i", u, "-frames:v", "1", "-f", "image2pipe", "-vcodec", "png", "pipe:1"]);
-      const out = []; p.stdout.on("data", d => out.push(d));
+      const p = spawn(ffmpeg, ["-v", "error", "-ss", String(at), "-i", file, "-frames:v", "1", "-f", "image2pipe", "-vcodec", "png", "pipe:1"]);
+      const out = [], err = []; p.stdout.on("data", d => out.push(d)); p.stderr.on("data", d => err.push(d));
       const t = setTimeout(() => p.kill("SIGKILL"), 25000);
-      p.on("close", code => { clearTimeout(t); const b = Buffer.concat(out); b.length ? res(b) : rej(new Error("ffmpeg " + code)); });
+      p.on("close", (code, sig) => { clearTimeout(t); const b = Buffer.concat(out); b.length ? res(b) : rej(new Error("ffmpeg " + (sig || code) + " " + Buffer.concat(err).toString().slice(0, 120))); });
       p.on("error", e => { clearTimeout(t); rej(e); });
     });
+  }
+  async function download(u, file, range){
+    const r = await fetch(u, range ? { headers: { Range: "bytes=0-" + range } } : {}); if (!r.ok) throw new Error("téléchargement " + r.status);
+    fs.writeFileSync(file, Buffer.from(await r.arrayBuffer()));
+  }
+  async function frameOf(u){
+    const tmp = path.join(DIR, crypto.randomBytes(6).toString("hex") + path.extname(u.split("?")[0]).slice(0, 6));
+    try {
+      try { await download(u, tmp, 8 * 1024 * 1024 - 1); return await runFrame(tmp, 1); } // le début suffit le plus souvent
+      catch (e) { await download(u, tmp); try { return await runFrame(tmp, 1); } catch (e2) { return await runFrame(tmp, 0); } } // sinon le fichier entier
+    } finally { try { fs.unlinkSync(tmp); } catch (e) {} }
   }
   async function build(u, w){
     const f = fileOf(u, w); if (fs.existsSync(f)) return f;
