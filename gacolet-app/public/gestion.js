@@ -286,6 +286,8 @@ function leadOf(client){ const c = S.d.clients.find(x => x.name === client); ret
 function prepBy(e){ return isISO(e.date) ? addDays(e.date, -7*leadOf(e.client)) : ""; }
 
 /* ---------- Agenda : tous les calques ---------- */
+// Couleur de chaque catégorie dans les pastilles « Afficher » de l'agenda
+const AG_CHIP = { "Tournage":"#C6FF33", "Éditorial":"#5AC8FA", "Maroudeur":"#C49BFF", "Rendez-vous":"#FF9F5A", tasks:"#F5D04C", relances:"#FF6B8B", cevents:"#4CD9A0", keydates:"#7AA7FF", posts:"#EEEAE2" };
 const LAYERS = [["events","Événements"],["tasks","Tâches"],["relances","Relances"],["cevents","Temps forts clients"],["keydates","Dates clés"],["posts","Com de l’agence"]];
 const AGENCE = "Agence Gacolet";
 function agendaItems(){
@@ -2040,11 +2042,24 @@ function evNode(i, compact){
   b.onclick = e => { e.stopPropagation(); openItem(i); };
   // Glisser-déposer sur un autre jour (comme Google Agenda) : événements, tâches, temps forts, posts de l'agence
   if (AG_MOVE.includes(i.k) && i.ref && i.ref.id && writable()){ b.draggable = true;
-    b.ondragstart = e => { AGDRAG = i; e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", i.ref.id); } catch(x){} b.classList.add("dragging"); document.body.classList.add("ag-dragging"); };
+    b.ondragstart = e => { AGDRAG = i; AGOFF = b.classList.contains("wk-ev") ? Math.max(0, Math.min(b.offsetHeight, e.clientY - b.getBoundingClientRect().top)) || 0 : 0; e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", i.ref.id); } catch(x){} b.classList.add("dragging"); document.body.classList.add("ag-dragging"); };
     b.ondragend = () => { AGDRAG = null; b.classList.remove("dragging"); document.body.classList.remove("ag-dragging"); document.querySelectorAll(".drop-on").forEach(x => x.classList.remove("drop-on")); }; }
   return b;
 }
-const AG_MOVE = ["events","tasks","cevents","posts"]; let AGDRAG = null;
+const AG_MOVE = ["events","tasks","cevents","posts"]; let AGDRAG = null, AGOFF = 0;
+const WK_H0 = 7, WK_H1 = 22, WK_PX = 52;   // vue Semaine : 7 h à 22 h, 52 px par heure
+// Heure sous le pointeur dans une colonne de la semaine, au quart d'heure (off : décalage du point saisi dans l'événement)
+function wkTimeAt(col, y, off){ const r = col.getBoundingClientRect(); let m = WK_H0 * 60 + Math.round(((y - r.top - (off || 0)) / WK_PX * 60) / 15) * 15; m = Math.max(WK_H0 * 60, Math.min(WK_H1 * 60 - 15, m)); return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"); }
+function agDropTimed(col, k){
+  let ghost = null;
+  col.addEventListener("dragover", e => { if (!AGDRAG) return; e.preventDefault(); e.dataTransfer.dropEffect = "move"; const t = wkTimeAt(col, e.clientY, AGOFF), [h, m] = t.split(":").map(Number);
+    if (!ghost){ ghost = el("div","wk-ghost"); col.appendChild(ghost); } ghost.style.top = ((h * 60 + m - WK_H0 * 60) / 60 * WK_PX) + "px"; ghost.style.height = (WK_PX - 3) + "px"; ghost.textContent = t.replace(":", " h "); });
+  col.addEventListener("dragleave", e => { if (!col.contains(e.relatedTarget) && ghost){ ghost.remove(); ghost = null; } });
+  col.addEventListener("drop", e => { if (!AGDRAG) return; e.preventDefault(); e.stopPropagation(); if (ghost){ ghost.remove(); ghost = null; }
+    const it = AGDRAG, t = wkTimeAt(col, e.clientY, AGOFF); AGDRAG = null; const withTime = it.k === "events" || it.k === "posts", body = withTime ? { date: k, time: t } : { date: k };
+    if (it.date === k && (!withTime || it.time === t)) return; it.ref.date = k; if (withTime) it.ref.time = t; render();
+    patch(it.k, it.ref.id, body).then(() => toast("Déplacé au " + fmtDL(k) + (withTime ? " à " + t.replace(":", " h ") : "") + ".")).catch(() => render()); });
+}
 // Une case jour (mois) ou une colonne (semaine) accepte un élément glissé : il prend cette date, l'heure ne change pas
 function agDropTarget(node, k){
   node.addEventListener("dragover", e => { if (!AGDRAG) return; e.preventDefault(); e.dataTransfer.dropEffect = "move"; node.classList.add("drop-on"); });
@@ -2061,7 +2076,7 @@ function lrow(i){
   r.appendChild(mid); r.appendChild(el("span","pill tag", i.tag || ""));
   r.onclick = () => openItem(i); return r;
 }
-function newOnDay(k){ if (!writable()) return; editEvent({date:k, client:S.ui.agClient||"", type: S.ui.agTypes.length === 1 ? S.ui.agTypes[0] : "Tournage", who: S.ui.agWho ? [S.ui.agWho] : [], status:"Prévu"}); }
+function newOnDay(k, time){ if (!writable()) return; editEvent({date:k, time: time || "", client:S.ui.agClient||"", type: S.ui.agTypes.length === 1 ? S.ui.agTypes[0] : "Tournage", who: S.ui.agWho ? [S.ui.agWho] : [], status:"Prévu"}); }
 /* Calendrier éditorial d'un client en PDF : une page A4 paysage par mois, aux couleurs de l'agence (impression du navigateur > Enregistrer en PDF) */
 function edPdf(y, m){
   const client = S.ui.agClient && S.ui.agClient !== AGENCE ? S.ui.agClient : "";
@@ -2112,21 +2127,28 @@ function vAgenda(root){
   dd("ag-who","Qui", [["","Tout le monde"]].concat(PEOPLE.map(p => [p,p])), S.ui.agWho, x => { S.ui.agWho = x; });
   /* Un seul menu « Afficher » : tout, un type d’événement, ou une autre catégorie */
   const allL = LAYERS.map(x => x[0]);
-  const curShow = S.ui.agLayers.length === 1 && S.ui.agLayers[0] === "events" && S.ui.agTypes.length === 1 ? "ev:" + S.ui.agTypes[0] : S.ui.agLayers.length === 1 && S.ui.agLayers[0] !== "events" ? S.ui.agLayers[0] : S.ui.agLayers.length === 1 ? "events" : "";
-  { const g = el("div","fgroup"); const lb = el("label","flabel","Afficher"); lb.htmlFor = "ag-show"; const s = el("select","pick"); s.id = "ag-show";
-    const opt = (p, v, l) => { const o = el("option",null,l); o.value = v; p.appendChild(o); };
-    opt(s, "", "Tout");
-    const g1 = document.createElement("optgroup"); g1.label = "Événements"; opt(g1, "events", "Tous les événements"); EV_TYPES.forEach(t => opt(g1, "ev:"+t, t === "Tournage" ? "Tournages" : t === "Rendez-vous" ? "Rendez-vous" : t)); s.appendChild(g1);
-    const g2 = document.createElement("optgroup"); g2.label = "Autres"; LAYERS.filter(x => x[0] !== "events").forEach(([k,l]) => opt(g2, k, l)); s.appendChild(g2);
-    s.value = curShow;
-    s.onchange = () => { const x = s.value;
-      if (!x){ S.ui.agLayers = allL.slice(); S.ui.agTypes = EV_TYPES.slice(); }
-      else if (x === "events"){ S.ui.agLayers = ["events"]; S.ui.agTypes = EV_TYPES.slice(); }
-      else if (x.startsWith("ev:")){ S.ui.agLayers = ["events"]; S.ui.agTypes = [x.slice(3)]; }
-      else { S.ui.agLayers = [x]; S.ui.agTypes = EV_TYPES.slice(); }
-      remember(); render(); };
-    g.append(lb, s); f.appendChild(g); }
   root.appendChild(f);
+  // Afficher : pastilles colorées à cocher, plusieurs à la fois (plus de menu à une seule option)
+  { const bar = el("div","ag-show"); bar.setAttribute("role","group"); bar.setAttribute("aria-label","Afficher");
+    const all = S.ui.agLayers.length === allL.length && S.ui.agTypes.length === EV_TYPES.length;
+    const chip = (label, on, color, fn, cls) => { const b = el("button","ag-chip" + (on ? " on" : "") + (cls ? " " + cls : "")); b.type = "button"; b.setAttribute("aria-pressed", String(on));
+      if (color){ const d = el("span","ag-dot"); d.style.background = color; b.appendChild(d); } b.appendChild(document.createTextNode(label)); b.onclick = fn; bar.appendChild(b); return b; };
+    const apply = () => { if (!S.ui.agLayers.length){ S.ui.agLayers = allL.slice(); S.ui.agTypes = EV_TYPES.slice(); } remember(); render(); };
+    chip("Tout", all, "", () => { S.ui.agLayers = allL.slice(); S.ui.agTypes = EV_TYPES.slice(); apply(); }, "all");
+    const solo = all;   // depuis « Tout », un clic isole la catégorie ; ensuite chaque clic ajoute ou retire
+    EV_TYPES.forEach(t => { const on = !all && S.ui.agLayers.includes("events") && S.ui.agTypes.includes(t);
+      chip(t === "Tournage" ? "Tournages" : t, on, AG_CHIP[t], () => {
+        if (solo){ S.ui.agLayers = ["events"]; S.ui.agTypes = [t]; }
+        else { let ty = S.ui.agLayers.includes("events") ? S.ui.agTypes.slice() : []; ty = ty.includes(t) ? ty.filter(x => x !== t) : ty.concat(t);
+          S.ui.agTypes = ty.length ? ty : EV_TYPES.slice(); S.ui.agLayers = ty.length ? [...new Set(S.ui.agLayers.concat("events"))] : S.ui.agLayers.filter(x => x !== "events"); }
+        apply(); }); });
+    bar.appendChild(el("span","ag-sep"));
+    LAYERS.filter(x => x[0] !== "events").forEach(([k, l]) => { const on = !all && S.ui.agLayers.includes(k);
+      chip(l, on, AG_CHIP[k], () => {
+        if (solo){ S.ui.agLayers = [k]; S.ui.agTypes = EV_TYPES.slice(); }
+        else S.ui.agLayers = on ? S.ui.agLayers.filter(x => x !== k) : S.ui.agLayers.concat(k);
+        apply(); }); });
+    root.appendChild(bar); }
   const items = agendaItems(); const map = {}; items.forEach(i => (map[i.date] = map[i.date] || []).push(i));
   if (v === "month"){
     const dw = el("div","dow"); ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"].forEach(d => dw.appendChild(el("span",null,d)));
@@ -2151,12 +2173,27 @@ function vAgenda(root){
     const evs = map[S.ui.agSel] || []; if (!evs.length) p.appendChild(el("p","empty","Rien de prévu ce jour-là.")); evs.forEach(i => p.appendChild(lrow(i)));
     const a = addBtn("Ajouter ce jour-là", () => newOnDay(S.ui.agSel)); a.style.marginTop = "10px"; p.appendChild(a); root.appendChild(p);
   } else if (v === "week"){
-    const sx = el("div","tw"); sx.style.borderTop = "0"; const w = el("div","week");
+    // Semaine avec les heures (7 h à 22 h), comme Google Agenda : ce qui a une heure est placé sur la grille, le reste dans « Journée »
+    const sx = el("div","tw wk2"); sx.style.borderTop = "0";
+    const head = el("div","wk-row wk-head"), ad = el("div","wk-row wk-ad"), body = el("div","wk-body"), grid = el("div","wk-row wk-grid");
+    head.appendChild(el("div","wk-gut")); ad.appendChild(el("div","wk-gut wk-adl","Journée"));
+    const gut = el("div","wk-gut wk-hours"); for (let h = WK_H0; h < WK_H1; h++) gut.appendChild(el("div","wk-h", h + " h")); grid.appendChild(gut);
     for (let i = 0; i < 7; i++){ const d = new Date(monday); d.setDate(monday.getDate()+i); const k = iso(d);
-      const col = el("div","wcol"); if (k === t0) col.classList.add("today");
-      const h = el("div","whead"); h.append(el("b",null,String(d.getDate())), el("span",null,DAYS[i])); col.appendChild(h);
-      (map[k]||[]).forEach(it => col.appendChild(evNode(it, false))); col.onclick = () => newOnDay(k); agDropTarget(col, k); w.appendChild(col); }
-    sx.appendChild(w); root.appendChild(sx);
+      const h = el("div","whead" + (k === t0 ? " today" : "")); h.append(el("b",null,String(d.getDate())), el("span",null,DAYS[i])); head.appendChild(h);
+      const a = el("div","wk-adc"); a.onclick = () => newOnDay(k); agDropTarget(a, k); ad.appendChild(a);
+      const col = el("div","wk-col" + (k === t0 ? " today" : "")); col.style.height = ((WK_H1 - WK_H0) * WK_PX) + "px";
+      const its = map[k] || [], timed = its.filter(it => /^\d{1,2}:\d{2}/.test(it.time || "")), byStart = {};
+      its.filter(it => !timed.includes(it)).forEach(it => a.appendChild(evNode(it, true)));
+      timed.forEach(it => { const [hh, mm] = it.time.split(":").map(Number), min = Math.max(0, Math.min((WK_H1 - WK_H0) * 60 - 30, hh * 60 + mm - WK_H0 * 60)), slot = Math.floor(min / 60);
+        const n = byStart[slot] = (byStart[slot] || 0) + 1, same = timed.filter(x => Math.floor(Math.max(0, Number(x.time.split(":")[0]) * 60 + Number(x.time.split(":")[1]) - WK_H0 * 60) / 60) === slot).length;
+        const node = evNode(it, false); node.classList.add("wk-ev"); node.style.top = (min / 60 * WK_PX) + "px"; node.style.height = (WK_PX - 3) + "px";
+        node.style.left = "calc(" + ((n - 1) * 100 / same) + "% + 2px)"; node.style.width = "calc(" + (100 / same) + "% - 4px)"; col.appendChild(node); });
+      if (k === t0){ const now = new Date(), nm = now.getHours() * 60 + now.getMinutes() - WK_H0 * 60; if (nm >= 0 && nm <= (WK_H1 - WK_H0) * 60){ const ln = el("div","wk-now"); ln.style.top = (nm / 60 * WK_PX) + "px"; col.appendChild(ln); } }
+      // Clic sur un créneau vide : nouvel événement à cette heure ; dépôt : nouvelle date et nouvelle heure
+      col.onclick = e => { if (e.target !== col) return; newOnDay(k, wkTimeAt(col, e.clientY, 0)); };
+      agDropTimed(col, k); grid.appendChild(col); }
+    body.appendChild(grid); sx.append(head, ad, body); root.appendChild(sx);
+    requestAnimationFrame(() => { body.scrollTop = (8 - WK_H0) * WK_PX; });
   } else {
     const from = iso(new Date(y, m, 1)), to = iso(new Date(y, m+1, 0));
     const days = Object.keys(map).filter(k => k >= from && k <= to).sort();

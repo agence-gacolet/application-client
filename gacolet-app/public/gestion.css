@@ -2190,3 +2190,30 @@ body.kb .mtabs{display:none}
 
 /* Agenda : glisser un événement sur un autre jour */
 .ev[draggable=true]{cursor:grab}.ev.dragging{opacity:.4}.ag-dragging .day,.ag-dragging .wcol{transition:background .12s}.day.drop-on,.wcol.drop-on{background:rgba(198,255,51,.10)!important;outline:2px dashed rgba(198,255,51,.6);outline-offset:-3px}
+
+/* Agenda, vue Semaine avec les heures */
+.wk2{display:flex;flex-direction:column;background:var(--card)}
+.wk-row{display:grid;grid-template-columns:52px repeat(7,minmax(110px,1fr))}
+.wk-head{border-bottom:1px solid var(--line)}.wk-head .whead{padding:10px 8px 6px;margin:0}.wk-head .whead.today b{background:var(--lemon);color:var(--on-lemon);padding:2px 6px 0;border-radius:5px}
+.wk-ad{border-bottom:1px solid var(--line);min-height:34px}.wk-adl{font-size:11px;color:var(--muted);padding:8px 4px;text-align:right}
+.wk-adc{border-left:1px solid var(--line);padding:4px;display:flex;flex-direction:column;gap:3px;min-width:0;cursor:pointer}
+.wk-body{max-height:min(70vh,760px);overflow:auto;position:relative}
+.wk-hours .wk-h{height:52px;font-size:11px;color:var(--muted);text-align:right;padding-right:6px;transform:translateY(-6px)}
+.wk-col{position:relative;border-left:1px solid var(--line);background-image:repeating-linear-gradient(to bottom,transparent 0,transparent 51px,var(--line) 51px,var(--line) 52px);cursor:pointer}
+.wk-col.today{background-color:rgba(198,255,51,.03)}
+.wk-ev{position:absolute!important;margin:0!important;overflow:hidden;flex-direction:column;align-items:flex-start;gap:1px;padding:4px 6px;z-index:1;box-sizing:border-box}
+.wk-now{position:absolute;left:0;right:0;height:2px;background:#ff5b5b;z-index:2;pointer-events:none}.wk-now::before{content:"";position:absolute;left:-4px;top:-3px;width:8px;height:8px;border-radius:50%;background:#ff5b5b}
+.wk-ghost{position:absolute;left:2px;right:2px;border:2px dashed rgba(198,255,51,.8);background:rgba(198,255,51,.12);border-radius:8px;font-size:12px;font-weight:700;color:var(--lemon);padding:3px 6px;pointer-events:none;z-index:3;box-sizing:border-box}
+.wk-adc.drop-on{background:rgba(198,255,51,.10)}
+@media (max-width:900px){.wk-row{grid-template-columns:40px repeat(7,minmax(90px,1fr))}.wk2{overflow-x:auto}}
+
+/* Agenda : pastilles « Afficher » */
+.ag-show{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:2px 0 16px}
+.ag-chip{display:inline-flex;align-items:center;gap:8px;padding:7px 13px;border-radius:999px;border:1px solid var(--line-2);background:rgba(255,255,255,.03);color:var(--muted);font:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s,border-color .15s,color .15s,transform .1s}
+.ag-chip:hover{color:var(--ink);border-color:rgba(255,255,255,.28)}
+.ag-chip:active{transform:scale(.96)}
+.ag-chip.on{color:var(--ink);background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.35)}
+.ag-chip.all.on{background:var(--lemon);border-color:var(--lemon);color:var(--on-lemon,#0E0E0D)}
+.ag-dot{width:9px;height:9px;border-radius:50%;flex:none;opacity:.45;transition:opacity .15s,box-shadow .15s}
+.ag-chip.on .ag-dot,.ag-chip:hover .ag-dot{opacity:1}.ag-chip.on .ag-dot{box-shadow:0 0 0 3px rgba(255,255,255,.08)}
+.ag-sep{width:1px;height:20px;background:var(--line-2);margin:0 4px}
