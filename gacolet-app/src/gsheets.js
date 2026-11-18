@@ -45,29 +45,40 @@ module.exports = function gsheets({ db, put, current, stamp, bump }) {
     const v = await g("https://sheets.googleapis.com/v4/spreadsheets/" + f.id + "/values:batchGet?majorDimension=ROWS&valueRenderOption=FORMATTED_VALUE&" + qs);
     return store(f, client, (v.valueRanges || []).map(r => ({ tab: String(r.range || "").split("!")[0].replace(/^'|'$/g, "").replace(/''/g, "'"), values: r.values })));
   }
-  // ---------- Onglet caché « APPLI » de chaque tableau (rempli par Gab) : deux colonnes, intitulé puis valeur ----------
-  // Client (nom exact dans l'appli), Statut, Budget, Dépense du mois, Contacts du mois, Début, Fin. Relie le tableau au client
-  // et tient à jour sa fiche Campagne (créée si le client n'en a pas encore).
-  const APPLI = /^appli( gacolet)?$/i;
+  // ---------- Onglet « AppliGacolet » de chaque tableau (rempli chaque matin par Make) : une ligne par campagne Meta ----------
+  // Colonnes lues : Mis à jour le, Campagne, Statut, Budget journalier (€), Début, Dépensé à ce jour (€), Contacts Meta, Compte publicitaire.
+  // Tient à jour la fiche Campagne du client relié au tableau (créée s'il n'en a pas).
+  const APPLI = /^appli\s*(gacolet)?$/i;
   const lab = s => normName(s);
+  // « 227,82 », « 1,102.04 », « 9 454 », « 40.00 » : le dernier séparateur est la virgule décimale s'il est suivi de 1 ou 2 chiffres
+  const num = v => { let x = String(v == null ? "" : v).replace(/[\s\u00a0\u202f€%]/g, ""); if (!x) return null;
+    const i = Math.max(x.lastIndexOf(","), x.lastIndexOf(".")); if (i >= 0 && x.length - i - 1 <= 2) x = x.slice(0, i).replace(/[.,]/g, "") + "." + x.slice(i + 1); else x = x.replace(/[.,]/g, "");
+    const n = Number(x); return isFinite(n) ? n : null; };
+  const day = v => { const m = String(v || "").match(/(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/); if (m) return (m[3].length === 2 ? "20" + m[3] : m[3]) + "-" + m[2].padStart(2, "0") + "-" + m[1].padStart(2, "0"); return /^\d{4}-\d{2}-\d{2}/.test(String(v)) ? String(v).slice(0, 10) : ""; };
   function readAppli(values) {
-    const kv = {}; (values || []).forEach(row => { const k = lab(row && row[0]), v = String((row && row[1]) == null ? "" : row[1]).trim(); if (k && v && !(k in kv)) kv[k] = v; });
-    const get = (...keys) => { for (const k of keys) for (const key of Object.keys(kv)) if (key === k || key.startsWith(k)) return kv[key]; return ""; };
-    const num = v => { const x = Number(String(v || "").replace(/[^\d,.-]/g, "").replace(/\s/g, "").replace(",", ".")); return isFinite(x) ? x : null; };
-    const day = v => { const m = String(v || "").match(/(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/); if (m) return (m[3].length === 2 ? "20" + m[3] : m[3]) + "-" + m[2].padStart(2, "0") + "-" + m[1].padStart(2, "0"); return /^\d{4}-\d{2}-\d{2}/.test(String(v)) ? String(v).slice(0, 10) : ""; };
-    const st = lab(get("statut", "etat", "etatdelacampagne"));
-    const status = /cours|actif|active|live|diffus/.test(st) ? "En cours" : /lancer|prepar|attente|venir/.test(st) ? "À lancer" : /arret|pause|termin|fini|stop/.test(st) ? "Arrêtée" : "";
-    return { client: get("client", "nomduclient"), status, budget: get("budget"), spend: num(get("depense", "depensedumois", "montantdepense")), leads: num(get("contacts", "contactsdumois", "leads", "prospects")), start: day(get("debut", "lancement", "datededebut")), end: day(get("fin", "datedefin")) };
+    const rows = (values || []).filter(r => Array.isArray(r)), hi = rows.findIndex(r => r.some(x => lab(x) === "campagne")); if (hi < 0) return null;
+    const H = rows[hi].map(lab), col = (...keys) => { for (const k of keys) { const i = H.findIndex(h => h === k || h.startsWith(k)); if (i >= 0) return i; } return -1; };
+    const C = { at: col("misajourle"), name: col("campagne"), st: col("statut"), bud: col("budgetjournalier", "budget"), start: col("debut"), spent: col("depense"), leads: col("contactsmeta", "contacts"), acc: col("comptepublicitaire", "compte") };
+    const v = (r, i) => i < 0 ? "" : String(r[i] == null ? "" : r[i]).trim();
+    const camps = rows.slice(hi + 1).filter(r => v(r, C.name)).map(r => ({ name: v(r, C.name), status: v(r, C.st), active: /cours|actif|active|live|diffus/.test(lab(v(r, C.st))), daily: num(v(r, C.bud)), start: day(v(r, C.start)), spent: num(v(r, C.spent)), leads: num(v(r, C.leads)), account: v(r, C.acc), at: v(r, C.at) }));
+    return camps.length ? camps : null;
   }
-  async function applyAppli(client, a, file) {
-    if (!client) return;
-    const camps = []; for (const r of await db.all("SELECT id, data FROM docs WHERE col = 'campaigns' AND deleted = 0")) { try { const d = JSON.parse(r.data); if (normName(d.client) === normName(client)) camps.push(Object.assign({ id: r.id }, d)); } catch (e) {} }
-    const RK = { "En cours": 0, "À lancer": 1 }; camps.sort((x, y) => (RK[x.status] ?? 2) - (RK[y.status] ?? 2) || String(y.launchedAt || "").localeCompare(String(x.launchedAt || "")));
-    const cur = camps[0], meta = Object.assign({}, (cur && cur.meta) || {}, { at: new Date().toISOString(), source: "tableau", file }, a.spend != null ? { spend: Math.round(a.spend * 100) / 100 } : {}, a.leads != null ? { leads: a.leads } : {});
+  async function applyAppli(client, camps, file) {
+    if (!client || !camps) return;
+    const list = []; for (const r of await db.all("SELECT id, data FROM docs WHERE col = 'campaigns' AND deleted = 0")) { try { const d = JSON.parse(r.data); if (normName(d.client) === normName(client)) list.push(Object.assign({ id: r.id }, d)); } catch (e) {} }
+    const RK = { "En cours": 0, "À lancer": 1 }; list.sort((x, y) => (RK[x.status] ?? 2) - (RK[y.status] ?? 2) || String(y.launchedAt || "").localeCompare(String(x.launchedAt || "")));
+    const cur = list[0], act = camps.filter(c => c.active), sum = (a, k) => a.reduce((t, c) => t + (c[k] || 0), 0);
+    const starts = act.map(c => c.start).filter(Boolean).sort();
+    const meta = { at: new Date().toISOString(), source: "tableau", file, readAt: camps[0].at || "", account: (camps.find(c => c.account) || {}).account || "",
+      live: act.map(c => c.name), campaigns: camps.map(c => ({ name: c.name, status: c.status, daily: c.daily, start: c.start, spent: c.spent, leads: c.leads })),
+      spentToDate: Math.round(sum(act, "spent") * 100) / 100, leadsToDate: sum(act, "leads"), daily: Math.round(sum(act, "daily") * 100) / 100, since: starts[0] || "" };
     const next = Object.assign({}, cur || { client, createdAt: new Date().toISOString(), createdBy: "Tableau de suivi" }, { meta });
-    delete next.id; if (a.status) next.status = a.status; else if (!next.status) next.status = "À lancer";
-    if (a.budget) next.budget = a.budget; if (a.start) next.launchedAt = a.start; if (a.end) next.endAt = a.end;
-    if (cur && JSON.stringify(Object.assign({}, cur, { id: undefined, meta: Object.assign({}, cur.meta, { at: "" }) })) === JSON.stringify(Object.assign({}, next, { id: undefined, meta: Object.assign({}, meta, { at: "" }) }))) return;
+    delete next.id;
+    // le statut et la date de lancement de la fiche ne bougent que si le tableau dit qu'une campagne tourne ; le budget de la fiche (contrat) n'est jamais touché
+    if (act.length) next.status = "En cours"; else if (!next.status) next.status = "À lancer";
+    if (!next.launchedAt && starts[0]) next.launchedAt = starts[0];
+    const same = (x, y) => JSON.stringify(Object.assign({}, x, { id: undefined, meta: Object.assign({}, x.meta, { at: "" }) })) === JSON.stringify(Object.assign({}, y, { id: undefined, meta: Object.assign({}, y.meta, { at: "" }) }));
+    if (cur && cur.meta && same(cur, next)) return;
     await put("campaigns", cur ? cur.id : "cp" + Date.now().toString(36) + crypto.randomBytes(3).toString("hex"), next);
   }
   // Recopie des onglets d'un fichier (lus par le compte de service ou envoyés par le script Google de l'agence)
@@ -123,12 +134,8 @@ module.exports = function gsheets({ db, put, current, stamp, bump }) {
       const e = c.files[id] || (c.files[id] = { name: String(f.name || id), client: await guessClient(f.name), off: false, modified: "" });
       e.name = String(f.name || e.name).slice(0, 200); e.seen = new Date().toISOString();
       if (e.off){ out.waiting.push(id); continue; }
-      // Nouveau tableau pas encore relié : on demande son contenu, et l'onglet APPLI dit à quel client il appartient
-      if (!e.client){ if (!Array.isArray(f.tabs)){ if (e.askedAt !== String(f.modified || "")){ e.askedAt = String(f.modified || ""); out.again.push(id); } else out.waiting.push(id); continue; }
-        const ap = f.tabs.find(t => APPLI.test(String(t.tab || "").trim())), want = ap ? readAppli(ap.values).client : "", known = await knownClients();
-        const hit = want && (known.find(n => normName(n) === normName(want)) || want);
-        if (!hit){ out.waiting.push(id); continue; }
-        e.client = hit; e.auto = "onglet APPLI"; }
+      // Nouveau tableau pas encore relié : il attend qu'on le choisisse dans Paramètres > Codes clients
+      if (!e.client){ out.waiting.push(id); continue; }
       if (!Array.isArray(f.tabs)){ if (e.resend) out.again.push(id); continue; }
       try { out.tabs += await store({ id, name: e.name, webViewLink: /^https:\/\/docs\.google\.com\//.test(f.url || "") ? String(f.url) : "" }, e.client, f.tabs);
         e.modified = String(f.modified || ""); e.syncedAt = new Date().toISOString(); e.error = ""; e.resend = false; out.stored.push(id); }
