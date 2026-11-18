@@ -2244,3 +2244,11 @@ body.kb .mtabs{display:none}
 .ev.multi:not(.mstart){margin-left:-9px}.ev.multi:not(.mend){margin-right:-9px}
 .wk-adc .ev.multi:not(.mstart){margin-left:-5px}.wk-adc .ev.multi:not(.mend){margin-right:-5px}.ev.multi:not(.mstart) .tx,.ev.multi:not(.mstart) .tm{visibility:hidden}
 .ev.rec .tx::after{content:" ↻";opacity:.7}
+
+/* Messagerie : membres d'un groupe client, comme WhatsApp */
+.cgm .cgm-lab{margin:16px 0 6px;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.cgm-list{display:flex;flex-direction:column;gap:2px}
+.cgm-row{display:flex;align-items:center;gap:12px;padding:8px 6px;border-radius:12px;background:none;border:0;color:var(--ink);font:inherit;text-align:left;width:100%}
+.cgm-row .cgm-n{flex:1;font-size:15px}
+.cgm-add{cursor:pointer}.cgm-add:hover{background:rgba(255,255,255,.05)}
+.cgm-plus{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--lemon);color:#0E0E0D;font-size:20px;font-weight:700;line-height:1}

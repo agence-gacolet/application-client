@@ -2291,12 +2291,22 @@ function cgOf(k){ return (S.cgroups || []).find(g => g.ch === k); }
 function cgTeam(k, mode){ const g = cgOf(String(k).replace(/^tg:/, "")); return g && g.team ? (mode === "shoot" ? g.team.shoot : g.team.main) || [] : []; }
 // Membre du groupe (principal ou tournage) : seules les personnes cochées le voient, accès complet compris
 function cgIn(k, mode){ const g = cgOf(String(k).replace(/^tg:/, "")); if (!g) return false; if (g.in) return !!g.in[mode === "shoot" ? "shoot" : "main"]; return !g.team || cgTeam(k, mode).includes(S.me); }
-function cgMembersBox(k, mode){ const g = cgOf(String(k).replace(/^tg:/, "")); if (!g) return; const cur = new Set(cgTeam(k, mode));
-  openModal(m => { m.classList.add("sheet"); const h = el("h3",null,(mode === "shoot" ? "Groupe tournage" : "Groupe principal") + ", " + g.name); h.id = "mtitle"; m.appendChild(h);
-    m.appendChild(el("p","muted","Les personnes de l’équipe cochées voient ce groupe et reçoivent ses notifications. Le client voit leurs noms."));
-    const l = el("div","cg-mem"); l.style.cssText = "display:flex;flex-direction:column;gap:12px;margin:12px 0"; (S.team || []).filter(t => !t.disabled).forEach(t => { const r = el("label","cl-ck"); const c = el("input"); c.type = "checkbox"; c.checked = cur.has(t.name); c.onchange = () => c.checked ? cur.add(t.name) : cur.delete(t.name); r.append(c, document.createTextNode(" " + t.name)); l.appendChild(r); }); m.appendChild(l);
-    const a = el("div","actions"); a.append(btn("Annuler","", closeModal), btn("Enregistrer","lemon", async () => { if (!cur.size){ toast("Garde au moins une personne."); return; }
-      try { const r = await GC.api("POST","/api/g-cgroups/members", { id: g.id, mode, names: [...cur] }); g.team = r.team; closeModal(); toast("Membres enregistrés."); render(); } catch(e){ toast(e.message); } })); m.appendChild(a); }); }
+function cgMembersBox(k, mode){ const g = cgOf(String(k).replace(/^tg:/, "")); if (!g) return;
+  // Comme les infos d'un groupe WhatsApp : les membres (retirer), puis « Ajouter des membres » ; chaque changement est enregistré tout de suite
+  const team = ((S.team || []).filter(t => !t.disabled).map(t => t.name)).concat(PEOPLE).filter((n, i, a) => n && a.indexOf(n) === i);
+  let cur = cgTeam(k, mode).slice();
+  const saveM = async names => { try { const r = await GC.api("POST","/api/g-cgroups/members", { id: g.id, mode, names }); g.team = r.team; if (g.in) g.in[mode === "shoot" ? "shoot" : "main"] = (mode === "shoot" ? r.team.shoot : r.team.main).includes(S.me); cur = cgTeam(k, mode).slice(); return true; } catch(e){ toast(e.message); return false; } };
+  openModal(m => { m.classList.add("sheet","cgm"); const draw = () => { m.textContent = "";
+    const h = el("h3",null,(mode === "shoot" ? "Groupe tournage, " : "Groupe ") + g.name); h.id = "mtitle"; m.appendChild(h);
+    m.appendChild(el("p","muted", (g.people || []).length ? "Côté client : " + g.people.join(", ") + ". Ils voient les noms de l’équipe." : "Le client ne s’est pas encore inscrit."));
+    m.appendChild(el("div","cgm-lab", plural(cur.length, "membre") + " de l’équipe"));
+    const l = el("div","cgm-list"); cur.forEach(n => { const r = el("div","cgm-row"); r.append(avatarEl(n, 34), el("span","cgm-n", n + (n === S.me ? " (toi)" : "")));
+      const x = btn("Retirer","sm", async () => { if (cur.length < 2){ toast("Le groupe doit garder au moins une personne de l’équipe."); return; } if (n === S.me && !confirm("Te retirer du groupe ? Tu ne le verras plus.")) return; x.disabled = true; if (await saveM(cur.filter(y => y !== n))){ toast(n + " retiré du groupe."); if (n === S.me){ closeModal(); render(); } else draw(); } else x.disabled = false; });
+      r.appendChild(x); l.appendChild(r); }); m.appendChild(l);
+    const others = team.filter(n => !cur.includes(n));
+    if (others.length){ m.appendChild(el("div","cgm-lab","Ajouter des membres")); const l2 = el("div","cgm-list"); others.forEach(n => { const r = el("button","cgm-row cgm-add"); r.type = "button"; r.append(avatarEl(n, 34), el("span","cgm-n", n), el("span","cgm-plus","+"));
+        r.onclick = async () => { r.disabled = true; if (await saveM(cur.concat(n))){ toast(n + " ajouté au groupe."); draw(); } else r.disabled = false; }; l2.appendChild(r); }); m.appendChild(l2); }
+    const a = el("div","actions"); a.appendChild(btn("Fermer","", () => { closeModal(); render(); })); m.appendChild(a); }; draw(); }); }
 /* Les conversations d’un client : [type, canal, libellé] */
 function cliChans(name, mode, pre){ const n = norm(name), out = [], g = (S.cgroups || []).find(x => norm(x.name) === n);
   if (g && cgIn(g.ch, mode)) out.push(["cli", pre + g.ch, "Avec le client"]);
@@ -2833,22 +2843,15 @@ function vMessagerie(root){
     b.onclick = () => { if (mode === "shoot") S.ui.msgShoot = k; else S.ui.msgCh = k; S.ui[seenKey(k)] = lastSeenAt(k); S.ui.waConv = true; remember(); render(); };
     side.appendChild(b); return b;
   };
-  side.appendChild(el("span","wa-lab","Équipe")); CHANNELS.forEach(([k,l]) => row(pre+k, l));
-  if (mode !== "shoot"){ const dms = dmChannels(); if (dms.length){ side.appendChild(el("span","wa-lab","Privé")); dms.sort((a, b) => ((lastOf[b] || {}).at || "").localeCompare((lastOf[a] || {}).at || "")).forEach(k => row(k, dmOther(k))); } }
-  // Clients : une seule ligne par client (sa conversation la plus récente). Pas de sélecteur dans la conversation
-  // (retiré le 17/11 à la demande de Matis : inutile).
-  const cgShown = cgChannels().filter(k => k === ch.replace(/^tg:/, "") || ((lastOf[pre + k] || ((cgOf(k) || {}).people || []).length) && cgIn(k, mode))).map(k => pre + k);
-  const cliList = []; [].concat(cgShown.map(k => chName(k)), mode !== "shoot" ? cdmChannels().map(cdmClient) : [], cliShown()).forEach(n => { if (n && !cliList.some(x => norm(x) === norm(n))) cliList.push(n); });
-  if (cliList.length) side.appendChild(el("span","wa-lab","Clients"));
-  cliList.map(n => { const cs = cliChans(n, mode, pre), last = cs.slice().sort((a, b) => ((lastOf[b[1]] || {}).at || "").localeCompare((lastOf[a[1]] || {}).at || ""))[0]; return [n, cs, last]; })
-    .sort((a, b) => ((lastOf[b[2][1]] || {}).at || "").localeCompare((lastOf[a[2][1]] || {}).at || "") || a[0].localeCompare(b[0]))
-    .forEach(([n, cs, last]) => { const b = row(cs.some(c => c[1] === ch) ? ch : last[1], n); if (cs.some(c => c[1] === ch)) b.setAttribute("aria-pressed","true"); });
-  // Accès complet : groupes clients où l'on n'est pas, pour pouvoir s'y rajouter (on n'en voit pas les messages)
-  if (S.role === "owner"){ const out = (S.cgroups || []).filter(g => !cgIn(g.ch, mode)); if (out.length){ const lk = el("button","wa-more","Groupes " + (mode === "shoot" ? "tournage " : "") + "dont tu n’es pas membre (" + out.length + ")"); lk.type = "button";
-    lk.onclick = () => openModal(m => { const h = el("h3", null, "Groupes dont tu n’es pas membre"); h.id = "mtitle"; m.appendChild(h); m.appendChild(el("p","muted","Tu ne vois pas leurs messages. Ouvre un groupe pour changer ses membres."));
-      const l = el("div","cl-list"); l.style.cssText = "display:flex;flex-direction:column;gap:8px;margin:12px 0"; out.forEach(g => l.appendChild(btn(g.name, "", () => { closeModal(); setTimeout(() => cgMembersBox(pre + g.ch, mode), 50); }))); m.appendChild(l);
-      const a = el("div","actions"); a.appendChild(btn("Fermer","", closeModal)); m.appendChild(a); });
-    side.appendChild(lk); } }
+  // Deux rubriques, comme WhatsApp : « Groupe » (équipe et groupes clients dont on est membre) et « Privé » (conversations à deux)
+  const recent = (x, y) => ((lastOf[y] || {}).at || "").localeCompare((lastOf[x] || {}).at || "");
+  side.appendChild(el("span","wa-lab","Groupe")); CHANNELS.forEach(([k,l]) => row(pre+k, l));
+  const grp = cgChannels().filter(k => cgIn(k, mode)).map(k => [pre + k, chName(k)]);
+  // Anciennes conversations internes d'un client (« Entre nous ») : seulement si elles contiennent des messages
+  cliShown().forEach(n => { const k = pre + "c:" + n; if (lastOf[k]) grp.push([k, n + " (équipe)"]); });
+  grp.sort((x, y) => recent(x[0], y[0]) || x[1].localeCompare(y[1], "fr")).forEach(([k, l]) => { const b = row(k, l); if (k === ch) b.setAttribute("aria-pressed","true"); });
+  const prv = mode !== "shoot" ? dmChannels().map(k => [k, dmOther(k)]).concat(cdmChannels().map(k => [k, cdmClient(k) + " (privé)"])) : [];
+  if (prv.length){ side.appendChild(el("span","wa-lab","Privé")); prv.sort((x, y) => recent(x[0], y[0])).forEach(([k, l]) => row(k, l)); }
 
   /* Conversation */
   const main = el("section","wa-conv");
