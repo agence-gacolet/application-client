@@ -2434,6 +2434,78 @@ async function addFiles(ch, list){
   }
 }
 
+/* ---------- Infos d'une conversation, comme WhatsApp : participants, médias, documents, liens, recherche ---------- */
+function waInfo(ch, mode, tab){
+  document.querySelectorAll(".wi-wrap").forEach(x => x.remove());
+  const me = S.me || "Gabriel", isDm = ch.startsWith("dm:"), isCdm = ch.startsWith("cdm:"), isCg = ch.replace(/^tg:/, "").startsWith("cg:"), g = isCg ? cgOf(ch.replace(/^tg:/, "")) : isCdm ? (S.cgroups || []).find(x => x.id === Number(ch.slice(4).split("|")[0])) : null;
+  const msgs = (S.d.messages || []).filter(m => m.ch === ch).sort((a, b) => (b.at || "").localeCompare(a.at || ""));
+  const files = []; msgs.forEach(m => (m.files || []).forEach(f => files.push(Object.assign({ who: m.who, at: m.at, mid: m.id }, f))));
+  const media = files.filter(f => isImg(f) || isVid(f)), docs = files.filter(f => !isImg(f) && !isVid(f)).concat(msgs.filter(m => m.audio).map(m => ({ url: m.audio, name: "Message vocal de " + m.who, who: m.who, at: m.at, mid: m.id, audio: true })));
+  const links = []; msgs.forEach(m => (String(m.text || "").match(/https?:\/\/[^\s<>"]+/g) || []).forEach(u => links.push({ url: u.replace(/[).,;!?]+$/, ""), who: m.who, at: m.at, mid: m.id, text: m.text })));
+  const wrap = el("div","wi-wrap"), pan = el("aside","wi"); pan.setAttribute("role","dialog"); pan.setAttribute("aria-label","Infos de la conversation"); wrap.appendChild(pan);
+  const close = () => { wrap.remove(); document.removeEventListener("keydown", esc); }, esc = e => { if (e.key === "Escape") close(); };
+  wrap.onclick = e => { if (e.target === wrap) close(); }; document.addEventListener("keydown", esc);
+  const jump = mid => { close(); const t = document.getElementById("m-" + mid); if (t){ t.scrollIntoView({ block: "center", behavior: "smooth" }); t.classList.remove("flash"); void t.offsetWidth; t.classList.add("flash"); } };
+  const head = el("div","wi-top"); const x = el("button","wi-x"); x.type = "button"; x.setAttribute("aria-label","Fermer"); x.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>'; x.onclick = close;
+  const view = tab || "home";
+  if (view === "home"){
+    head.append(x, el("b",null, isDm ? "Infos du contact" : isCdm ? "Infos de la conversation" : "Infos du groupe")); pan.appendChild(head);
+    const id = el("div","wi-id"); id.append(chAvatar(ch, 96), el("h2",null, (mode === "shoot" ? "Tournage, " : "") + chName(ch)));
+    const team = isCg ? cgTeam(ch, mode) : isDm ? [me, dmOther(ch)] : isCdm ? [me] : PEOPLE.slice(), people = (g && g.people) || [];
+    id.appendChild(el("p","wi-sub", isDm ? ((S.team || []).find(t => t.name === dmOther(ch)) || {}).poste || "Conversation privée" : isCdm ? "Conversation privée avec le client" : "Groupe · " + plural(team.length + people.length, "participant")));
+    pan.appendChild(id);
+    // Médias, liens et documents
+    const md = el("button","wi-sec wi-media"); md.type = "button"; const mh = el("div","wi-row"); mh.append(el("span",null,"Médias, liens et documents"), el("span","wi-n", String(media.length + docs.length + links.length) + " ›")); md.appendChild(mh);
+    const strip = el("div","wi-strip"); media.slice(0, 4).forEach(f => strip.appendChild(waThumb(f))); if (media.length) md.appendChild(strip);
+    md.onclick = () => waInfo(ch, mode, "media"); pan.appendChild(md);
+    // Rechercher dans la conversation
+    const sr = el("div","wi-sec"); const inp = el("input","wi-search"); inp.type = "search"; inp.placeholder = "Rechercher dans la conversation"; const res = el("div","wi-res"); sr.append(inp, res); pan.appendChild(sr);
+    inp.oninput = () => { res.textContent = ""; const q = norm(inp.value); if (q.length < 2) return; const hit = msgs.filter(m => norm(m.text || "").includes(q)).slice(0, 30);
+      if (!hit.length){ res.appendChild(el("p","wi-empty","Aucun message trouvé.")); return; }
+      hit.forEach(m => { const b = el("button","wi-hit"); b.type = "button"; b.append(el("small",null, m.who + ", " + fmtDL((m.at || "").slice(0, 10))), el("span",null, m.text)); b.onclick = () => jump(m.id); res.appendChild(b); }); };
+    // Participants
+    if (!isDm){ const ps = el("div","wi-sec"); ps.appendChild(el("div","wi-lab", plural(team.length + people.length, "participant")));
+      if (isCg && S.role === "owner"){ const add = el("button","wi-p wi-add"); add.type = "button"; const pl = el("span","wi-plus","+"); add.append(pl, el("b",null,"Ajouter ou retirer des membres")); add.onclick = () => { close(); cgMembersBox(ch, mode); }; ps.appendChild(add); }
+      team.forEach(n => { const t = (S.team || []).find(y => y.name === n) || {}; const r = el("button","wi-p"); r.type = "button"; const tx = el("span","wi-pt"); tx.append(el("b",null, n === me ? "Toi" : n), el("small",null, t.poste || "Équipe"));
+        r.append(avatarEl(n, 40), tx); if (n !== me){ r.title = "Écrire à " + n + " en privé"; r.onclick = () => { close(); const k = dmKey(me, n); S.ui.dmOpen = [...new Set((S.ui.dmOpen || []).concat(k))]; S.ui.msgMode = "main"; S.ui.msgCh = k; S.ui.waConv = true; remember(); render(); }; } ps.appendChild(r); });
+      if (g && people.length && !isCdm){ const r = el("button","wi-p wi-add"); r.type = "button"; r.append(el("span","wi-plus","✉"), el("b",null,"Message privé au client")); r.onclick = () => { close(); const k = "cdm:" + g.id + "|" + me; S.ui.cdmOpen = [...new Set((S.ui.cdmOpen || []).concat(k))]; S.ui.msgMode = "main"; S.ui.msgCh = k; S.ui.waConv = true; remember(); render(); }; ps.appendChild(r); }
+      people.forEach(n => { const r = el("div","wi-p"); const tx = el("span","wi-pt"); tx.append(el("b",null,n), el("small",null,"Client, " + (g ? g.name : ""))); r.append(avatarEl(n, 40), tx, el("span","wi-tag","Client")); ps.appendChild(r); });
+      pan.appendChild(ps); }
+    else { const ps = el("div","wi-sec"); const r = el("button","wi-p"); r.type = "button"; r.append(el("span","wi-pt", "Voir le profil de " + dmOther(ch))); r.onclick = () => { close(); profileCard(dmOther(ch)); }; ps.appendChild(r); pan.appendChild(ps); }
+    if (isCg && S.role === "owner"){ const dz = el("div","wi-sec"); const del = el("button","wi-danger","Supprimer le groupe"); del.type = "button";
+      del.onclick = async () => { if (!confirm("Supprimer le groupe « " + chName(ch) + " » ? Tous ses messages sont effacés pour toute l’équipe.")) return; try { await GC.api("POST","/api/g-cgroups/delete", { id: g.id, mode }); g.hidden = Object.assign({}, g.hidden, { [mode === "shoot" ? "shoot" : "main"]: true }); toast("Groupe supprimé."); S.ui.msgCh = ""; S.ui.msgShoot = ""; S.ui.waConv = false; remember(); close(); render(); } catch(e){ toast(e.message); } };
+      dz.appendChild(del); pan.appendChild(dz); }
+  } else {
+    // Médias / Documents / Liens, en onglets
+    const back = el("button","wi-x"); back.type = "button"; back.setAttribute("aria-label","Retour"); back.innerHTML = '<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>'; back.onclick = () => waInfo(ch, mode);
+    head.append(back, el("b",null, chName(ch))); pan.appendChild(head);
+    const cur = ["media","docs","links"].includes(view) ? view : "media";
+    pan.appendChild(segm([["media","Médias (" + media.length + ")"],["docs","Documents (" + docs.length + ")"],["links","Liens (" + links.length + ")"]], cur, v => waInfo(ch, mode, v)));
+    const body = el("div","wi-body"); pan.appendChild(body);
+    if (cur === "media"){ if (!media.length) body.appendChild(el("p","wi-empty","Aucune photo ni vidéo échangée.")); const grid = el("div","wi-grid"); media.forEach((f, i) => { const t = waThumb(f); t.onclick = e => { e.stopPropagation(); waLight(media, i); }; grid.appendChild(t); }); body.appendChild(grid); }
+    if (cur === "docs"){ if (!docs.length) body.appendChild(el("p","wi-empty","Aucun document échangé.")); docs.forEach(f => { const r = el("a","wi-doc"); r.href = f.url; r.target = "_blank"; r.rel = "noopener"; if (!f.audio) r.setAttribute("download", f.name || "");
+      r.append(el("span","wa-fic", f.audio ? "♪" : (String(f.name || "").split(".").pop() || "").slice(0, 4).toUpperCase()), Object.assign(el("span","wi-pt"), {}));
+      r.lastChild.append(el("b",null,f.name || "Fichier"), el("small",null, [f.size ? fmtSize(f.size) : "", f.who, fmtD((f.at || "").slice(0, 10))].filter(Boolean).join(" · "))); body.appendChild(r); }); }
+    if (cur === "links"){ if (!links.length) body.appendChild(el("p","wi-empty","Aucun lien échangé.")); links.forEach(l => { const r = el("div","wi-link"); const a = el("a",null,l.url.replace(/^https?:\/\/(www\.)?/, "")); a.href = l.url; a.target = "_blank"; a.rel = "noopener";
+      const meta = el("small",null, l.who + " · " + fmtD((l.at || "").slice(0, 10)) + " · "); const go = el("button","wi-go","voir le message"); go.type = "button"; go.onclick = () => jump(l.mid); meta.appendChild(go);
+      r.append(el("span","wi-lic","🔗"), Object.assign(el("span","wi-pt"), {})); r.lastChild.append(a, meta); body.appendChild(r); }); }
+  }
+  document.body.appendChild(wrap); requestAnimationFrame(() => wrap.classList.add("open"));
+}
+// Vignette carrée d'une photo ou d'une vidéo
+function waThumb(f){ const t = el("button","wi-th"); t.type = "button"; if (isImg(f)){ const i = document.createElement("img"); i.src = f.url; i.alt = ""; i.loading = "lazy"; t.appendChild(i); }
+  else { const v = document.createElement("video"); v.src = f.url + "#t=0.5"; v.muted = true; v.preload = "metadata"; t.appendChild(v); t.appendChild(el("span","wi-play","▶")); } return t; }
+// Visionneuse plein écran (flèches pour passer d'un média à l'autre)
+function waLight(list, i){
+  const ov = el("div","wl"), close = () => { ov.remove(); document.removeEventListener("keydown", key, true); };
+  const show = () => { ov.textContent = ""; const f = list[i]; const x = el("button","wl-x","×"); x.onclick = close; const cnt = el("span","wl-n", (i + 1) + " / " + list.length + " · " + (f.who || "") + " · " + fmtD((f.at || "").slice(0, 10)));
+    const box = el("div","wl-box"); if (isImg(f)){ const im = document.createElement("img"); im.src = f.url; box.appendChild(im); } else { const v = document.createElement("video"); v.src = f.url; v.controls = true; v.autoplay = true; v.playsInline = true; box.appendChild(v); }
+    const dl = el("a","wl-dl","Télécharger"); dl.href = f.url; dl.setAttribute("download", f.name || ""); ov.append(x, cnt, dl, box);
+    if (list.length > 1){ const p = el("button","wl-p","‹"), n = el("button","wl-nx","›"); p.onclick = e => { e.stopPropagation(); i = (i - 1 + list.length) % list.length; show(); }; n.onclick = e => { e.stopPropagation(); i = (i + 1) % list.length; show(); }; ov.append(p, n); } };
+  const key = e => { if (e.key === "Escape"){ e.stopPropagation(); close(); } else if (e.key === "ArrowLeft" && list.length > 1){ i = (i - 1 + list.length) % list.length; show(); } else if (e.key === "ArrowRight" && list.length > 1){ i = (i + 1) % list.length; show(); } };
+  ov.onclick = e => { if (e.target === ov) close(); }; document.addEventListener("keydown", key, true); show(); document.body.appendChild(ov);
+}
+
 /* ---------- Messagerie (façon messagerie de téléphone) ---------- */
 function msgMenu(anchor, m, ch, mine){
   document.querySelectorAll(".wa-menu").forEach(x => x.remove());
@@ -2878,11 +2950,11 @@ function vMessagerie(root){
   const ht = el("div","wa-htx"); const isCli = ch.replace(/^tg:/,"").startsWith("c:");
   const isDm = ch.startsWith("dm:"), isCdm = ch.startsWith("cdm:"), isCg = ch.replace(/^tg:/, "").startsWith("cg:");
   ht.append(el("b",null,(mode === "shoot" ? "Tournage, " : "") + chName(ch)), el("small",null, isDm ? "Conversation privée, visible de vous deux seulement" : isCdm ? "Conversation privée avec le client, toi seul la vois" : isCg ? (mode === "shoot" ? "Tournages, partagé avec le client" : "Groupe partagé avec le client") + ((cgOf(ch.replace(/^tg:/, "")) || {}).people || []).filter(Boolean).map((p, i) => (i ? ", " : " : ") + p).join("") : isCli ? "Échanges de l’équipe sur ce client, le client ne les voit pas" : (S.team || []).map(t => t.name).join(", ")));
-  const hav = chAvatar(ch, 40); if (isDm){ hav.classList.add("av-click"); hav.onclick = () => profileCard(dmOther(ch)); ht.classList.add("av-click"); ht.onclick = () => profileCard(dmOther(ch)); }
+  // Clic sur le logo ou le nom : infos de la conversation, comme WhatsApp (participants, médias, documents, liens, recherche)
+  const hav = chAvatar(ch, 40); hav.classList.add("av-click"); ht.classList.add("av-click"); hav.title = ht.title = "Infos"; hav.onclick = ht.onclick = () => waInfo(ch, mode);
   hd.append(back, hav, ht);
   if (isCg){ const tm = cgTeam(ch, mode); if (tm.length){ const sm = ht.querySelector("small"); if (sm) sm.textContent += " · Équipe : " + tm.join(", "); }
-    const mb = btn("Membres","sm", () => cgMembersBox(ch, mode)); mb.classList.add("wa-hbtn"); hd.appendChild(mb); }
-  if (isCg && mode !== "shoot"){ const pv = btn("Message privé","sm", () => { const k = "cdm:" + ch.slice(3) + "|" + me; S.ui.cdmOpen = [...new Set((S.ui.cdmOpen || []).concat(k))]; S.ui.msgCh = k; S.ui.waConv = true; remember(); render(); }); pv.classList.add("wa-hbtn"); hd.appendChild(pv); }
+  }   // membres, message privé, médias : dans les infos (clic sur le logo ou le nom), comme WhatsApp
   main.appendChild(hd);
   const list = el("div","wa-msgs"); list.id = "chat-list"; list.dataset.ch = ch;
   const msgs = S.d.messages.filter(m => m.ch === ch).sort((a,b) => (a.at||"").localeCompare(b.at||""));
