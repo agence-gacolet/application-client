@@ -1320,7 +1320,7 @@ function metaNote(c){ const m = c.meta; if (!m) return null; const d = el("div",
 function metaSyncBtn(){ const b = btn("Actualiser depuis Meta","", async () => { b.disabled = true; b.textContent = "Lecture de Meta…";
     try { const r = await GC.api("POST","/api/g-metaads/sync"); toast("État des campagnes lu sur Meta (" + plural(r.accounts, "compte") + ")."); } catch(e){ toast(e.message); } b.disabled = false; b.textContent = "Actualiser depuis Meta"; }); return b; }
 function vCampagnes(root){
-  root.appendChild(head("Campagnes", "Budget payé par le client directement à Meta. État mis à jour toutes les heures.", [metaSyncBtn(), addBtn("Nouvelle campagne", () => editCampaign({}))]));
+  root.appendChild(head("Campagnes", "Budget payé par le client directement à Meta. État mis à jour toutes les heures.", [addBtn("Nouvelle campagne", () => editCampaign({}))]));
   const CATS = [["En cours","EN COURS"],["À lancer","À LANCER"],["Arrêtée","ARRÊTÉES"]];
   const cur = CATS.some(c => c[0] === S.ui.cpStatus) ? S.ui.cpStatus : "";
   { const f = el("div","filters ag-f"); const g = el("div","fgroup"); const lb = el("label","flabel","Statut"); lb.htmlFor = "cp-status"; const s = el("select","pick"); s.id = "cp-status";
@@ -1441,7 +1441,7 @@ function vMeta(root){
     if (cur){ const d = el("span","mt-dot"); d.style.setProperty("--c", colorOf(cur)); g.appendChild(d); }
     tabs.appendChild(g); }
   if (!cur){
-    root.appendChild(head("Meta", "Un onglet par client. Budget payé par le client directement à Meta, état mis à jour toutes les heures.", [metaSyncBtn(), addBtn("Nouvelle campagne", () => editCampaign({}))]));
+    root.appendChild(head("Meta", "Un onglet par client. Budget payé par le client directement à Meta, état mis à jour toutes les heures.", [addBtn("Nouvelle campagne", () => editCampaign({}))]));
     root.appendChild(tabs);
     const {w, tb} = table(["Client","Campagne","Budget","~Contacts ce mois","~Qualifiés ce mois","~Dernier contact"]);
     names.filter(n => mtCat < 0 || rank(n) === mtCat).forEach(n => {
@@ -1463,7 +1463,7 @@ function vMeta(root){
 
   const c = mc(cur), cs = S.d.campaigns.filter(x => x.client === cur).sort((a, b) => (CAMP_RANK[a.status] ?? 3) - (CAMP_RANK[b.status] ?? 3));
   const ls = leadsOf(cur), lm = ls.filter(l => (l.date || "").slice(0, 7) === month);
-  const tools = [metaSyncBtn(), addBtn("Nouvelle campagne", () => editCampaign({ client: cur }))];
+  const tools = [addBtn("Nouvelle campagne", () => editCampaign({ client: cur }))];
   if (c) tools.push(btn("Ajouter un contact","", () => addLead(c)));
   root.appendChild(head(cur, "Publicité Meta, budget payé par le client directement à Meta.", tools));
   root.appendChild(tabs);
