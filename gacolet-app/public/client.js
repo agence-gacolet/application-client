@@ -284,7 +284,7 @@ function vTournages(root){
 /* ---------- À valider ---------- */
 const ST_LABEL = { wait: "À valider", ok: "Validée", mod: "Modification demandée", no: "Refusée" };
 async function decide(p, status, note){
-  if (S.f && S.f.preview){ toast("Aperçu en lecture seule : rien n’est envoyé. Pour agir vraiment, ouvrez le mode test depuis Paramètres, bouton « Tester pour de vrai »."); return; }
+  if (S.f && S.f.preview){ toast("Aperçu en lecture seule : rien n’est envoyé."); return; }
   try { await api("/api/decision", { body: { postId: p.id, status, note, title: p.title, date: p.date + " " + (p.time || "") } });
     p.status = status; p.note = note || ""; p.decidedBy = myName(); p.decidedAt = new Date().toISOString(); S.modOpen = null;
     if (status !== "ok"){ const t = (status === "mod" ? "Modification demandée sur « " : "Publication refusée : « ") + (p.title || "Publication") + " » (" + fmtDL(p.date) + (p.time ? ", " + fmtTime(p.time) : "") + ")" + (note ? "\n" + (status === "mod" ? "À changer : " : "Raison : ") + note : "");
@@ -908,8 +908,7 @@ function start(){
   $("#login").hidden = true; $("#shell").hidden = false;
   load(); startPoll();
 }
-const TEST = (() => { try { return new URLSearchParams(location.search).get("test") === "1"; } catch(e){ return false; } })();
-if (APERCU){ const b = el("div","cl-apercu", TEST ? "Mode test : tout fonctionne vraiment, les actions sont signées Test Agence. " : "Aperçu de l’agence : vous voyez l’espace de ce client, en lecture seule. ");
+if (APERCU){ const b = el("div","cl-apercu", "Aperçu de l’agence : vous voyez l’espace de ce client, en lecture seule. ");
   const back = el("a", null, "Retour à l’espace équipe"); back.href = "/gestion#parametres"; back.style.cssText = "color:inherit;text-decoration:underline;white-space:nowrap"; b.appendChild(back);
   document.body.appendChild(b); document.body.classList.add("has-apercu"); }
 if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));

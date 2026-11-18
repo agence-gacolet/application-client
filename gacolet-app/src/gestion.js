@@ -327,20 +327,15 @@ module.exports = function (app, { db, wrap, root }) {
     res.json({ url: "/?apercu=" + u.token });
   }));
 
-  // Mode test : l’agence utilise l’espace d’un client comme lui, actions comprises, sous le nom « Test Agence ».
-  const TEST_MAIL = "test@agence.interne";
-  app.post("/api/g-test-client", auth, ownerOnly, wrap(async (req, res) => {
-    const c = await db.one("SELECT * FROM clients WHERE id = ? AND active = 1", [Number(req.body && req.body.clientId)]);
-    if (!c) return res.status(404).json({ error: "Client introuvable." });
-    let u = await db.one("SELECT * FROM users WHERE client_id = ? AND email = ?", [c.id, TEST_MAIL]);
-    if (!u) {
-      const token = crypto.randomBytes(24).toString("hex");
-      await db.run("INSERT INTO users (client_id, prenom, nom, entreprise, email, tel, activite, zone, reseaux, objectif, clientele, dispo, token, created_at) VALUES (?,?,?,?,?,'','','','','','','',?,?)",
-        [c.id, "Test", "Agence", c.name, TEST_MAIL, token, stamp()]);
-      u = await db.one("SELECT * FROM users WHERE client_id = ? AND email = ?", [c.id, TEST_MAIL]);
-    }
-    res.json({ url: "/?apercu=" + u.token + "&test=1" });
-  }));
+  // Comptes test retirés (18/11, demande de Matis) : nettoyage unique des anciens comptes « Test Agence » et du client « Test client »
+  setTimeout(async () => { try { await ensure(); const done = await current("cfg", "cleanupTest1"); if (done) return;
+    await db.run("DELETE FROM users WHERE email = ?", ["test@agence.interne"]);
+    for (const c of await db.all("SELECT id FROM clients WHERE LOWER(TRIM(name)) IN ('test client','client test')")) {
+      await db.run("DELETE FROM users WHERE client_id = ?", [c.id]);
+      for (const r of await db.all("SELECT id, data FROM docs WHERE col = 'messages' AND deleted = 0")) { try { const ch = String(JSON.parse(r.data || "{}").ch || ""); if (ch === "cg:" + c.id || ch === "tg:cg:" + c.id || ch.startsWith("cdm:" + c.id + "|")) await db.run("UPDATE docs SET deleted = 1, updated_at = ? WHERE col = 'messages' AND id = ?", [stamp(), r.id]); } catch (e) {} }
+      await db.run("DELETE FROM clients WHERE id = ?", [c.id]); }
+    for (const r of await db.all("SELECT id, data FROM docs WHERE col = 'clients' AND deleted = 0")) { try { if (/^(test client|client test)$/i.test(String(JSON.parse(r.data || "{}").name || "").trim())) await db.run("UPDATE docs SET deleted = 1, updated_at = ? WHERE col = 'clients' AND id = ?", [stamp(), r.id]); } catch (e) {} }
+    await put("cfg", "cleanupTest1", { at: new Date().toISOString() }); bump(); } catch (e) { console.error("Nettoyage test", e.message); } }, 8000).unref();
 
   // ---------- Meta : suivi des contacts par client (tables de l’espace client) ----------
   const metaRole = (req, res, next) => req.user && (req.user.role === "owner" || (req.user.views || []).includes("campagnes")) ? next() : res.status(403).json({ error: "Accès non ouvert pour ton prénom." });
@@ -1423,8 +1418,19 @@ module.exports = function (app, { db, wrap, root }) {
     const us = await db.all("SELECT client_id, prenom, nom FROM users WHERE token NOT LIKE 'retire-%' AND email <> ? AND email <> ?", [PREVIEW_MAIL, "test@agence.interne"]);
     const out = []; for (const c of cl) out.push({ ch: "cg:" + c.id, id: c.id, room: visioRoom(c.id), name: c.name, people: us.filter(u => u.client_id === c.id).map(u => (u.prenom + " " + u.nom).trim()), team: await cgMembers(c.id) });
     // Les groupes dont on n'est pas membre ne sont envoyés qu'aux accès complets (pour pouvoir s'y rajouter)
+    // Groupe supprimé : caché tant qu'aucun message n'est arrivé après la suppression
+    const lastAt = {}; for (const r of await db.all("SELECT data FROM docs WHERE col = 'messages' AND deleted = 0")) { try { const d = JSON.parse(r.data || "{}"); const k2 = String(d.ch || ""); if (/^(tg:)?cg:\d+$/.test(k2) && String(d.at || "") > (lastAt[k2] || "")) lastAt[k2] = String(d.at || ""); } catch (e) {} }
+    const cfgH = await cgmCfg(); out.forEach(x => { const hd = (cfgH[String(x.id)] || {}).hidden || {}; x.hidden = { main: !!hd.main && !((lastAt[x.ch] || "") > hd.main), shoot: !!hd.shoot && !((lastAt["tg:" + x.ch] || "") > hd.shoot) }; });
     for (let k = out.length - 1; k >= 0; k--) { const x = out[k], inn = { main: cgInSync(req.user.name, x.ch), shoot: cgInSync(req.user.name, "tg:" + x.ch) }; x.in = inn; if (!inn.main && !inn.shoot && req.user.role !== "owner") out.splice(k, 1); }
     res.json({ groups: out });
+  }));
+  // Supprimer un groupe client (principal ou tournage) : ses messages sont effacés, il disparaît de la liste de l'équipe jusqu'au prochain message
+  app.post("/api/g-cgroups/delete", auth, ownerOnly, wrap(async (req, res) => {
+    const b = req.body || {}, id = Number(b.id), mode = b.mode === "shoot" ? "shoot" : "main", ch = (mode === "shoot" ? "tg:" : "") + "cg:" + id;
+    if (!(await db.one("SELECT id FROM clients WHERE id = ?", [id]))) return res.status(404).json({ error: "Client introuvable." });
+    let n = 0; for (const r of await db.all("SELECT id, data FROM docs WHERE col = 'messages' AND deleted = 0")) { try { if (JSON.parse(r.data || "{}").ch === ch) { await db.run("UPDATE docs SET deleted = 1, updated_at = ? WHERE col = 'messages' AND id = ?", [stamp(), r.id]); n++; } } catch (e) {} }
+    const cfg = Object.assign({}, await cgmCfg()), cur = Object.assign({}, cfg[String(id)] || {}); cur.hidden = Object.assign({}, cur.hidden, { [mode]: new Date().toISOString() }); cfg[String(id)] = cur;
+    await put("cfg", "cgmembers", cfg); CGM = cfg; bump(); res.json({ ok: true, deleted: n });
   }));
   // Ajouter ou retirer des membres de l’équipe dans le groupe principal ou tournage d’un client
   app.post("/api/g-cgroups/members", auth, wrap(async (req, res) => {
