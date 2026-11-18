@@ -2313,3 +2313,4 @@ button.wi-p{cursor:pointer}button.wi-p:hover .wi-pt b{color:var(--lemon)}
 .id-bt{display:flex;flex-direction:column;gap:3px}.id-bt b{font-size:17px}.id-bt small{color:var(--muted);font-size:13px}
 .id-compose{margin-bottom:18px}.id-compose[hidden]{display:none}
 .id-cacts{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.actions .left:has(+ .left){margin-right:8px}

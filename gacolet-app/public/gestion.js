@@ -241,10 +241,11 @@ function openFacts(o){
     m.appendChild(dl);
     const act = el("div","actions");
     // Supprimer directement depuis la fiche (deux clics : Supprimer puis Confirmer)
-    if (o.onDelete && writable()){ const del = el("button","btn danger left","Supprimer"); del.type = "button"; let armed = false;
-      del.onclick = async () => { if (!armed){ armed = true; del.textContent = "Confirmer la suppression"; del.classList.add("armed"); setTimeout(() => { armed = false; del.textContent = "Supprimer"; del.classList.remove("armed"); }, 4000); return; }
-        del.disabled = true; try { await o.onDelete(); closeModal(); } catch(x){ del.disabled = false; } };
-      act.appendChild(del); }
+    // o.deletes : plusieurs boutons de suppression (ex. « Supprimer ce jour » et « Supprimer la série » d'un événement répété)
+    if (writable()) (o.deletes || (o.onDelete ? [["Supprimer", o.onDelete]] : [])).forEach(([label, fn]) => { const del = el("button","btn danger left",label); del.type = "button"; let armed = false;
+      del.onclick = async () => { if (!armed){ armed = true; del.textContent = "Confirmer"; del.classList.add("armed"); setTimeout(() => { armed = false; del.textContent = label; del.classList.remove("armed"); }, 4000); return; }
+        del.disabled = true; try { await fn(); closeModal(); } catch(x){ del.disabled = false; } };
+      act.appendChild(del); });
     const close = el("button","btn","Fermer"); close.onclick = closeModal; act.appendChild(close);
     if (o.onEdit && writable()){ const e = el("button","btn solid","Modifier"); e.onclick = o.onEdit; act.appendChild(e); }
     m.appendChild(act);
@@ -377,15 +378,13 @@ function openEvent(e, occ){
   const quick = [["Passer en Fait", () => patch("events", e.id, {status:"Fait"}).then(closeModal)],["Passer en Annulé", () => patch("events", e.id, {status:"Annulé"}).then(closeModal)]];
   // Invités : chacun répond (oui ou non), visible par toute l'équipe
   if ((e.who || []).includes(me)) quick.unshift(["Je viens" + (rs[me] === "oui" ? " ✓" : ""), () => patch("events", e.id, { rsvp: Object.assign({}, rs, { [me]: "oui" }) }).then(closeModal)], ["Je ne viens pas" + (rs[me] === "non" ? " ✓" : ""), () => patch("events", e.id, { rsvp: Object.assign({}, rs, { [me]: "non" }) }).then(closeModal)]);
-  if (rec) quick.push(["Supprimer ce jour", () => { if (!confirm("Retirer seulement le " + fmtDL(d) + " de la série ?")) return; patch("events", e.id, { skip: [...new Set((e.skip || []).concat(d))] }).then(closeModal); }],
-    ["Supprimer la série", () => { if (!confirm("Supprimer toute la série « " + (e.title || e.type) + " » ? Elle disparaît pour toute l’équipe.")) return; remove("events", e.id).then(closeModal).catch(() => {}); }]);
-  else quick.push(["Supprimer", () => { if (!confirm("Supprimer « " + (e.title || e.type) + " » du " + fmtDL(e.date) + " ? Il disparaît pour toute l’équipe.")) return; remove("events", e.id).then(closeModal).catch(() => {}); }]);
+  const deletes = rec ? [["Supprimer ce jour", () => patch("events", e.id, { skip: [...new Set((e.skip || []).concat(d))] })], ["Supprimer la série", () => remove("events", e.id)]] : [["Supprimer", () => remove("events", e.id)]];
   const when = fmtDL(d) + " " + (d || "").slice(0, 4) + (e.time ? ", " + fmtTime(e.time) + (e.end ? " – " + fmtTime(e.end) : "") : "") + (isISO(e.endDate) && e.endDate > e.date ? ", jusqu’au " + fmtDL(e.endDate) : "");
   const rem = { "10":"10 min avant", "30":"30 min avant", "60":"1 h avant", "1440":"La veille" }[String(e.reminder || "")] || "";
   const answers = (e.who || []).map(n => n + " : " + (rs[n] === "oui" ? "vient" : rs[n] === "non" ? "ne vient pas" : "pas encore répondu")).join(", ");
   openFacts({ title: e.title || e.type, client: e.client,
     facts: [["Date", when],["Répétition", rec ? REPEAT_L[e.repeat] + (isISO(e.until) ? " jusqu’au " + fmtDL(e.until) : "") : ""],["Type", e.type],["Invités", answers],["Rappel", rem],["Statut", e.status||"Prévu"],["Lieu", e.place],["Note", e.note],["Fichiers", filesList(e.files)]],
-    quick,
+    quick, deletes,
     onEdit: () => editEvent(e) });
 }
 function editEvent(e){
