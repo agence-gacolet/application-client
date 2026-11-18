@@ -1131,6 +1131,13 @@ module.exports = function (app, { db, wrap, root }) {
     const rows = await db.all("SELECT id, data FROM docs WHERE col = ? AND deleted = 0 AND data LIKE ?", [col, "%" + needle + "%"]);
     return rows.map(r => { let d = {}; try { d = JSON.parse(r.data || "{}"); } catch (e) {} return Object.assign({ id: r.id }, d); });
   }
+  // Métier du client (fiche du Tableau clients, sinon relevé dans les fiches du Drive le 18/11) : adapte les textes de son espace
+  const METIER_DEF = { "ar climatisation":"climatisation", "bonobo":"magasin de vêtements", "delta sud formation":"formation agricole", "domaine pagezi":"vigneron", "flora design":"paysagiste, jardins",
+    "france etancheite":"piscines, pose de liner", "gaufrement bon":"food truck de gaufres", "hugo maitre nageur":"maître nageur", "kr thermolaquage":"thermolaquage", "l insolent":"bar", "insolent":"bar",
+    "la vie la construction":"maçon constructeur", "le petit mas":"restaurant", "locamex":"recherche de fuites de piscine", "meyer pic":"maroquinerie", "only clean":"nettoyage",
+    "paillotte bassamoise":"restaurant", "sos pare brise":"pare-brise", "sta group":"menuiserie", "sport defense":"salle de sport", "gabriel":"agence de communication", "gabriel nicolet":"agence de communication" };
+  async function metierOf(name) { const k = normName(name); try { for (const r of await db.all("SELECT data FROM docs WHERE col = 'clients' AND deleted = 0")) { const d = JSON.parse(r.data || "{}"); if (normName(d.name) === k && String(d.metier || "").trim()) return String(d.metier).trim().slice(0, 120); } } catch (e) {}
+    return METIER_DEF[k] || ""; }
   app.get("/api/c/feed", cauth, wrap(async (req, res) => {
     const c = req.cl, ch = cgOf(c);
     const mine = m => m.ch === ch || m.ch === "tg:" + ch || String(m.ch || "").startsWith("cdm:" + c.id + "|");
@@ -1145,7 +1152,7 @@ module.exports = function (app, { db, wrap, root }) {
     // Pages fermées à ce client (Paramètres > Espace client) : leurs données ne partent pas
     const pg = (await app.locals.clientPagesFor(c, req.cu)).pages, op = k => pg[k] === "on";
     const groups = await cgMembers(c.id);
-    res.json({ groups, bilans: op("bilans") ? bilans : [], visio: { room: vr, here }, me: { name: req.cname, prenom: req.cname.split(" ")[0], entreprise: req.cu.entreprise, tel: req.cu.tel || "", email: /@agence\.interne$/.test(req.cu.email || "") ? "" : (req.cu.email || ""), avatar: ((await current("_cuser", "u" + req.cu.id)) || {}).avatar || "" }, client: { name: c.name, id: c.id }, preview: req.cu.email === PREVIEW_MAIL, messages, idees: op("idees") ? idees : [], team, billing: op("prel") ? billing : { plan: null, docs: [] }, shoots: op("tournages") ? shoots : [] });
+    res.json({ groups, bilans: op("bilans") ? bilans : [], visio: { room: vr, here }, me: { name: req.cname, prenom: req.cname.split(" ")[0], entreprise: req.cu.entreprise, tel: req.cu.tel || "", email: /@agence\.interne$/.test(req.cu.email || "") ? "" : (req.cu.email || ""), avatar: ((await current("_cuser", "u" + req.cu.id)) || {}).avatar || "" }, client: { name: c.name, id: c.id, metier: await metierOf(c.name) }, preview: req.cu.email === PREVIEW_MAIL, messages, idees: op("idees") ? idees : [], team, billing: op("prel") ? billing : { plan: null, docs: [] }, shoots: op("tournages") ? shoots : [] });
   }));
   app.get("/api/c/bilan/:m", cauth, wrap(async (req, res) => { const m = String(req.params.m); if (!okMonth(m)) return res.status(400).json({ error: "Demande invalide." });
     const d = await current("_bilans", bilanId(req.cl.id, m)); if (!d || !d.sent || Number(d.cid) !== req.cl.id) return res.status(404).json({ error: "Bilan introuvable." });

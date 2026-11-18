@@ -620,8 +620,23 @@ function vVisio(root){
 
 /* ---------- Mes idées : idées, photos, vidéos pour les prochains contenus ---------- */
 const KINDS = [["Idée","Idée"],["Photos","Photos"],["Vidéos","Vidéos"],["Inspiration","Inspiration"]];
+// Textes de « Mes idées » selon le métier du client (fiche client de l'agence) : jamais « chantier » pour un restaurant
+function ideesWords(){
+  const m = String(((S.f && S.f.client) || {}).metier || "").toLowerCase(), has = re => re.test(m);
+  const W = (what, ex) => ({ intro: "Une idée, " + what + " : l’équipe s’en sert pour vos prochains contenus.", media: "Un mot sur ces photos ou vidéos (facultatif) : " + ex, idea: "Votre idée en quelques mots, ou collez un lien qui vous plaît" });
+  if (has(/restau|bar\b|brasserie|food|gaufre|pizz|traiteur|boulang|pâtiss|patiss|café|cuisine/)) return W("vos plats, la salle, l’ambiance d’un service", "un plat, une soirée, l’envers du décor en cuisine");
+  if (has(/vêtement|vetement|boutique|maroquin|magasin|mode|bijou|fleur(?!.*jardin)|concept/)) return W("vos nouveautés, la boutique, un client qui essaie", "une nouveauté, la vitrine, un client conquis");
+  if (has(/sport|pilates|muscu|boxe|nageur|natation|coach|yoga|fitness/)) return W("une séance, vos élèves en action, un progrès qui vous rend fier", "une séance, un cours, la salle");
+  if (has(/formation|école|ecole|enseign/)) return W("une session, vos stagiaires, le terrain", "une session, vos stagiaires, un moment fort");
+  if (has(/vign|vin\b|cave|domaine/)) return W("les vignes, la cave, une dégustation", "les vignes, la cave, une bouteille");
+  if (has(/nettoy|ménage|menage|propreté|proprete/)) return W("un avant après, votre équipe en intervention", "un avant après, une intervention");
+  if (has(/agence|communication|conseil/)) return W("un projet, les coulisses, un client content", "un projet, les coulisses");
+  if (has(/clim|maçon|macon|construct|piscine|liner|menuis|paysag|jardin|thermolaq|pare-brise|plomb|électric|electric|charpent|couvr|peint|carrel|fuite|rénov|renov|bâtiment|batiment/)) return W("des photos de chantier, un avant après, l’équipe au travail", "le chantier, un avant après, ce que vous aimeriez en faire");
+  return W("des photos de votre activité, les coulisses, un client content", "où, quand, ce que vous aimeriez en faire");
+}
 function vIdees(root){
-  root.appendChild(head(["Mes", "idées"], "Une idée, des photos de chantier, une vidéo prise sur le vif : l’équipe s’en sert pour vos prochains contenus."));
+  const W = ideesWords();
+  root.appendChild(head(["Mes", "idées"], W.intro));
   // Deux grandes cartes : envoyer des photos ou vidéos (ouvre directement la pellicule), ou proposer une idée ; puis l'historique
   const fi = el("input"); fi.type = "file"; fi.multiple = true; fi.hidden = true; fi.accept = "image/*,video/*"; fi.onchange = () => { if (fi.files.length){ S.idMode = "media"; addFiles("idee", fi.files); } fi.value = ""; render(); };
   root.appendChild(fi);
@@ -639,7 +654,7 @@ function vIdees(root){
     const pb = pendBox("idee"); if (pb) card.appendChild(pb);
     if (media){ const more = el("button","btn","Ajouter d’autres photos ou vidéos"); more.type = "button"; more.onclick = () => fi.click(); card.appendChild(more); }
     const ta = el("textarea"); ta.rows = media ? 2 : 4; ta.id = "idee-input"; ta.value = S.idDraft;
-    ta.placeholder = media ? "Un mot sur ces photos ou vidéos (facultatif) : où, quand, ce que vous aimeriez en faire" : "Votre idée en quelques mots, ou collez un lien qui vous plaît";
+    ta.placeholder = media ? W.media : W.idea;
     ta.oninput = () => { S.idDraft = ta.value; }; card.appendChild(ta);
     if (!media){ const add = el("button","btn sm","Joindre une photo ou une vidéo"); add.type = "button"; add.onclick = () => fi.click(); card.appendChild(add); }
     const acts = el("div","id-cacts"); const cancel = el("button","btn","Annuler"); cancel.type = "button"; cancel.onclick = () => { S.idMode = ""; S.idDraft = ""; S.pend.idee = []; render(); };
@@ -749,7 +764,7 @@ function vMeta(root){
 }
 function valPreview(pv){
   const g = el("div","cl-posts");
-  for (let i = 0; i < 3; i++){ const c = el("article","cl-post"); const m = el("div","lk-media"); c.appendChild(m); const b = el("div","cl-pb"); b.append(el("span","pill l3","À valider"), el("h3","cl-pt",["Le chantier de la semaine","Avant, après","Trois conseils d’entretien"][i]), el("p","cl-cap","Texte de la publication, prêt à être validé.")); c.appendChild(b); g.appendChild(c); }
+  for (let i = 0; i < 3; i++){ const c = el("article","cl-post"); const m = el("div","lk-media"); c.appendChild(m); const b = el("div","cl-pb"); b.append(el("span","pill l3","À valider"), el("h3","cl-pt",["Les coulisses de la semaine","Avant, après","Trois conseils de pro"][i]), el("p","cl-cap","Texte de la publication, prêt à être validé.")); c.appendChild(b); g.appendChild(c); }
   pv.appendChild(g);
 }
 
@@ -894,8 +909,8 @@ function render(){
 }
 window.addEventListener("hashchange", () => { fromHash(); S.modOpen = null; render(); window.scrollTo(0,0); });
 
-async function loadFeed(){ const f = await api("/api/c/feed"); const before = S.f ? JSON.stringify([S.f.messages.map(m => m.id + m.at), S.f.idees.map(i => i.id + (i.seen || []).length), (S.f.visio || {}).here, (S.f.shoots || []).map(s => s.id + s.status + s.sentAt), (S.f.bilans || []).map(b => b.m + b.at)]) : ""; S.f = f; saveCache(); if (f.bilans) (f.bilans || []).forEach(b => { if (S.biHtml && S.biAt && S.biAt[b.m] !== b.at) delete S.biHtml[b.m]; (S.biAt = S.biAt || {})[b.m] = b.at; });
-  const after = JSON.stringify([f.messages.map(m => m.id + m.at), f.idees.map(i => i.id + (i.seen || []).length), (f.visio || {}).here, (f.shoots || []).map(s => s.id + s.status + s.sentAt), (f.bilans || []).map(b => b.m + b.at)]);
+async function loadFeed(){ const f = await api("/api/c/feed"); const before = S.f ? JSON.stringify([(S.f.client || {}).metier || "", S.f.messages.map(m => m.id + m.at), S.f.idees.map(i => i.id + (i.seen || []).length), (S.f.visio || {}).here, (S.f.shoots || []).map(s => s.id + s.status + s.sentAt), (S.f.bilans || []).map(b => b.m + b.at)]) : ""; S.f = f; saveCache(); if (f.bilans) (f.bilans || []).forEach(b => { if (S.biHtml && S.biAt && S.biAt[b.m] !== b.at) delete S.biHtml[b.m]; (S.biAt = S.biAt || {})[b.m] = b.at; });
+  const after = JSON.stringify([(f.client || {}).metier || "", f.messages.map(m => m.id + m.at), f.idees.map(i => i.id + (i.seen || []).length), (f.visio || {}).here, (f.shoots || []).map(s => s.id + s.status + s.sentAt), (f.bilans || []).map(b => b.m + b.at)]);
   const typing = document.activeElement && /^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName) && S.view !== "messagerie";
   if (before !== after && !typing) render(); }
 /* Cache local : la dernière version de l’espace s’affiche tout de suite à l’ouverture, puis se met à jour (Matis, 17/11) */
