@@ -63,8 +63,16 @@ module.exports = function gsheets({ db, put, current, stamp, bump }) {
     const camps = rows.slice(hi + 1).filter(r => v(r, C.name)).map(r => ({ name: v(r, C.name), status: v(r, C.st), active: /cours|actif|active|live|diffus/.test(lab(v(r, C.st))), daily: num(v(r, C.bud)), start: day(v(r, C.start)), spent: num(v(r, C.spent)), leads: num(v(r, C.leads)), account: v(r, C.acc), at: v(r, C.at) }));
     return camps.length ? camps : null;
   }
+  // Un même tableau pour plusieurs fiches d'un client, ex. « Locamex (particuliers) » et « Locamex (piscinistes) » :
+  // chaque campagne va à la fiche dont le mot entre parenthèses figure dans son nom (6 premières lettres, sans accents ni casse).
   async function applyAppli(client, camps, file) {
     if (!client || !camps) return;
+    const base = String(client).split(" (")[0], names = new Set();
+    for (const r of await db.all("SELECT data FROM docs WHERE col = 'campaigns' AND deleted = 0")) { try { const n = JSON.parse(r.data).client; if (n && normName(String(n).split(" (")[0]) === normName(base) && /\(([^)]+)\)/.test(n)) names.add(n); } catch (e) {} }
+    if (names.size > 1) { for (const n of names) { const q = normName(n.match(/\(([^)]+)\)/)[1]).slice(0, 6), mine = camps.filter(c => normName(c.name).includes(q)); if (mine.length) await applyOne(n, mine, file); } return; }
+    return applyOne(client, camps, file);
+  }
+  async function applyOne(client, camps, file) {
     const list = []; for (const r of await db.all("SELECT id, data FROM docs WHERE col = 'campaigns' AND deleted = 0")) { try { const d = JSON.parse(r.data); if (normName(d.client) === normName(client)) list.push(Object.assign({ id: r.id }, d)); } catch (e) {} }
     const RK = { "En cours": 0, "À lancer": 1 }; list.sort((x, y) => (RK[x.status] ?? 2) - (RK[y.status] ?? 2) || String(y.launchedAt || "").localeCompare(String(x.launchedAt || "")));
     const cur = list[0], act = camps.filter(c => c.active), sum = (a, k) => a.reduce((t, c) => t + (c[k] || 0), 0);
