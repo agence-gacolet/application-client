@@ -2302,3 +2302,14 @@ button.wi-p{cursor:pointer}button.wi-p:hover .wi-pt b{color:var(--lemon)}
 .wl-n{position:absolute;top:22px;left:20px;color:#ccc;font-size:13px}
 .wl-dl{position:absolute;top:22px;right:76px;color:#fff;font-size:13px}
 .wl-p,.wl-nx{position:absolute;top:50%;transform:translateY(-50%);width:48px;height:48px;border-radius:50%;border:0;background:rgba(255,255,255,.1);color:#fff;font-size:30px;cursor:pointer}.wl-p{left:16px}.wl-nx{right:16px}
+
+/* Espace client, Mes idées : deux grandes cartes (photos et vidéos / idée) */
+.id-bigs{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin:6px 0 14px}
+.id-big{display:flex;align-items:center;gap:16px;padding:22px 20px;border-radius:20px;border:1px solid var(--line-2);background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.015));color:var(--ink);font:inherit;text-align:left;cursor:pointer;transition:border-color .15s,background .15s,transform .1s}
+.id-big:hover{border-color:rgba(198,255,51,.5)}.id-big:active{transform:scale(.985)}
+.id-big.on{border-color:var(--lemon);background:rgba(198,255,51,.07)}
+.id-big svg{width:44px;height:44px;flex:none;padding:10px;border-radius:14px;background:var(--lemon);fill:none;stroke:#0E0E0D;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;box-sizing:border-box}
+.id-big.idea svg{background:#5AC8FA}
+.id-bt{display:flex;flex-direction:column;gap:3px}.id-bt b{font-size:17px}.id-bt small{color:var(--muted);font-size:13px}
+.id-compose{margin-bottom:18px}.id-compose[hidden]{display:none}
+.id-cacts{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}

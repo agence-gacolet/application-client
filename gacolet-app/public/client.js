@@ -622,33 +622,46 @@ function vVisio(root){
 const KINDS = [["Idée","Idée"],["Photos","Photos"],["Vidéos","Vidéos"],["Inspiration","Inspiration"]];
 function vIdees(root){
   root.appendChild(head(["Mes", "idées"], "Une idée, des photos de chantier, une vidéo prise sur le vif : l’équipe s’en sert pour vos prochains contenus."));
-  const card = el("form","cl-drop");
-  card.appendChild(segm(KINDS, S.kind, v => { S.kind = v; render(); }));
-  const ta = el("textarea"); ta.rows = 3; ta.id = "idee-input"; ta.value = S.idDraft;
-  ta.placeholder = { "Idée": "Votre idée en quelques mots", "Photos": "Ce que montrent les photos, où et quand", "Vidéos": "Ce que montre la vidéo, ce que vous aimeriez en faire", "Inspiration": "Collez un lien ou décrivez ce qui vous plaît" }[S.kind];
-  ta.oninput = () => { S.idDraft = ta.value; };
-  card.appendChild(ta);
-  const pb = pendBox("idee"); if (pb) card.appendChild(pb);
-  const fi = el("input"); fi.type = "file"; fi.multiple = true; fi.hidden = true; fi.accept = "image/*,video/*"; fi.onchange = () => { addFiles("idee", fi.files); fi.value = ""; };
-  const zone = el("button","cl-zone"); zone.type = "button";
-  zone.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V5M7.5 9.5 12 5l4.5 4.5M5 15v3.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V15"/></svg>';
-  zone.appendChild(el("span",null,"Ajouter des photos ou des vidéos")); zone.appendChild(el("small",null,"Ou glissez-les ici, jusqu’à 2 Go par fichier, en qualité d’origine"));
-  zone.onclick = () => fi.click();
-  card.ondragover = e => { e.preventDefault(); card.classList.add("drop"); };
-  card.ondragleave = () => card.classList.remove("drop");
-  card.ondrop = e => { e.preventDefault(); card.classList.remove("drop"); if (e.dataTransfer.files.length) addFiles("idee", e.dataTransfer.files); };
-  const sb = el("button","btn lemon","Envoyer à l’agence"); sb.type = "submit";
-  card.append(fi, zone, sb);
-  card.onsubmit = async e => { e.preventDefault();
-    if (S.f.preview){ toast("Aperçu de l’agence : rien n’est envoyé."); return; }
-    if (busy("idee")){ toast("Attendez la fin de l’envoi des fichiers."); return; }
-    const text = ta.value.trim(), files = readyFiles("idee"); if (!text && !files.length){ toast("Écrivez une idée ou ajoutez une photo ou une vidéo."); return; }
-    sb.disabled = true;
-    try { await api("/api/c/idee", { body: { kind: S.kind, text, files } }); S.idDraft = ""; S.pend.idee = []; toast("Envoyé. Merci, l’équipe regarde ça."); await loadFeed(); }
-    catch(x){ toast(x.message); sb.disabled = false; } };
+  // Deux grandes cartes : envoyer des photos ou vidéos (ouvre directement la pellicule), ou proposer une idée ; puis l'historique
+  const fi = el("input"); fi.type = "file"; fi.multiple = true; fi.hidden = true; fi.accept = "image/*,video/*"; fi.onchange = () => { if (fi.files.length){ S.idMode = "media"; addFiles("idee", fi.files); } fi.value = ""; render(); };
+  root.appendChild(fi);
+  if ((S.pend.idee || []).length && S.idMode !== "idea") S.idMode = "media";
+  const big = (cls, icon, title, sub, on) => { const b = el("button","id-big " + cls + (S.idMode === cls ? " on" : "")); b.type = "button"; b.innerHTML = icon;
+    const t = el("span","id-bt"); t.append(el("b",null,title), el("small",null,sub)); b.appendChild(t); b.onclick = on; return b; };
+  const ICAM = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>', IIDEA = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg>';
+  const row = el("div","id-bigs");
+  row.append(big("media", ICAM, "Envoyer des photos ou vidéos", "Qualité d’origine, jusqu’à 2 Go par fichier", () => { S.idMode = "media"; fi.click(); }),
+    big("idea", IIDEA, "Proposer une idée", "Un texte, un lien, une envie", () => { S.idMode = S.idMode === "idea" ? "" : "idea"; render(); setTimeout(() => { const t = document.getElementById("idee-input"); if (t) t.focus(); }, 30); }));
+  root.appendChild(row);
+  const card = el("form","cl-drop id-compose");
+  if (S.idMode){
+    const media = S.idMode === "media";
+    const pb = pendBox("idee"); if (pb) card.appendChild(pb);
+    if (media){ const more = el("button","btn","Ajouter d’autres photos ou vidéos"); more.type = "button"; more.onclick = () => fi.click(); card.appendChild(more); }
+    const ta = el("textarea"); ta.rows = media ? 2 : 4; ta.id = "idee-input"; ta.value = S.idDraft;
+    ta.placeholder = media ? "Un mot sur ces photos ou vidéos (facultatif) : où, quand, ce que vous aimeriez en faire" : "Votre idée en quelques mots, ou collez un lien qui vous plaît";
+    ta.oninput = () => { S.idDraft = ta.value; }; card.appendChild(ta);
+    if (!media){ const add = el("button","btn sm","Joindre une photo ou une vidéo"); add.type = "button"; add.onclick = () => fi.click(); card.appendChild(add); }
+    const acts = el("div","id-cacts"); const cancel = el("button","btn","Annuler"); cancel.type = "button"; cancel.onclick = () => { S.idMode = ""; S.idDraft = ""; S.pend.idee = []; render(); };
+    const sb = el("button","btn lemon","Envoyer à l’agence"); sb.type = "submit"; acts.append(cancel, sb); card.appendChild(acts);
+    card.ondragover = e => { e.preventDefault(); card.classList.add("drop"); }; card.ondragleave = () => card.classList.remove("drop");
+    card.ondrop = e => { e.preventDefault(); card.classList.remove("drop"); if (e.dataTransfer.files.length) addFiles("idee", e.dataTransfer.files); };
+    card.onsubmit = async e => { e.preventDefault();
+      if (S.f.preview){ toast("Aperçu de l’agence : rien n’est envoyé."); return; }
+      if (busy("idee")){ toast("Attendez la fin de l’envoi des fichiers."); return; }
+      const text = ta.value.trim(), files = readyFiles("idee"); if (!text && !files.length){ toast(media ? "Ajoutez une photo ou une vidéo." : "Écrivez votre idée."); return; }
+      // Type déduit : vidéos, photos, lien (inspiration) ou idée
+      const kind = files.some(f => /^video\//.test(f.type || "") || /\.(mp4|mov|m4v|webm)$/i.test(f.name || "")) ? "Vidéos" : files.length ? "Photos" : /https?:\/\//.test(text) ? "Inspiration" : "Idée";
+      sb.disabled = true;
+      try { await api("/api/c/idee", { body: { kind, text, files } }); S.idDraft = ""; S.pend.idee = []; S.idMode = ""; toast("Envoyé. Merci, l’équipe regarde ça."); if (document.activeElement) document.activeElement.blur(); await loadFeed(); render(); }
+      catch(x){ toast(x.message); sb.disabled = false; } };
+  } else { card.hidden = true; }
+  // Glisser des fichiers n'importe où sur la page : envoi de photos ou vidéos
+  root.ondragover = e => { if (e.dataTransfer && [...e.dataTransfer.types].includes("Files")) e.preventDefault(); };
+  root.ondrop = e => { if (!e.dataTransfer || !e.dataTransfer.files.length) return; e.preventDefault(); S.idMode = "media"; addFiles("idee", e.dataTransfer.files); render(); };
   root.appendChild(card);
   const all = (S.f && S.f.idees) || [];
-  root.appendChild(el("h2","cl-h2", all.length ? "Déjà partagé" : ""));
+  root.appendChild(el("h2","cl-h2", all.length ? "Déjà envoyé" : ""));
   if (!all.length){ root.appendChild(el("p","empty","Rien de partagé pour l’instant.")); return; }
   const g = el("div","id-grid");
   all.forEach(i => {
