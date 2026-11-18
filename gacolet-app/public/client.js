@@ -174,7 +174,7 @@ const myName = () => (S.f && S.f.me.name) || "";
 const unread = () => S.f ? [...new Set(S.f.messages.map(m => m.ch))].reduce((n, k) => n + unreadIn(k), 0) : 0;
 
 /* ---------- Navigation ---------- */
-const VIEWS = [["accueil","Accueil"],["valider","À valider"],["tournages","Tournages"],["stats","Statistiques"],["bilans","Bilans"],["meta","Meta"],["messagerie","Messagerie"],["visio","Visio"],["idees","Photos et vidéos"],["prel","Prélèvements"],["parametres","Paramètres"]];
+const VIEWS = [["accueil","Accueil"],["valider","À valider"],["tournages","Tournages"],["stats","Statistiques"],["bilans","Bilans"],["meta","Meta"],["messagerie","Messagerie"],["visio","Visio"],["idees","Mes idées"],["prel","Prélèvements"],["parametres","Paramètres"]];
 const MOBILE = ["accueil","valider","tournages","messagerie"];
 const ICONS = {
   accueil:'<path d="M4 11.2 12 4.8l8 6.4V20h-5.6v-5.2H9.6V20H4z"/>',
@@ -621,7 +621,7 @@ function vVisio(root){
 /* ---------- Mes idées : idées, photos, vidéos pour les prochains contenus ---------- */
 const KINDS = [["Idée","Idée"],["Photos","Photos"],["Vidéos","Vidéos"],["Inspiration","Inspiration"]];
 function vIdees(root){
-  root.appendChild(head(["Photos", "et vidéos"], "Envoyez-nous vos photos, vidéos et idées en qualité d’origine (jusqu’à 2 Go par fichier) : elles arrivent directement dans votre dossier à l’agence."));
+  root.appendChild(head(["Mes", "idées"], "Une idée, des photos de chantier, une vidéo prise sur le vif : l’équipe s’en sert pour vos prochains contenus."));
   const card = el("form","cl-drop");
   card.appendChild(segm(KINDS, S.kind, v => { S.kind = v; render(); }));
   const ta = el("textarea"); ta.rows = 3; ta.id = "idee-input"; ta.value = S.idDraft;
