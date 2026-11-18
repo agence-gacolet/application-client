@@ -2128,27 +2128,31 @@ function vAgenda(root){
   /* Un seul menu « Afficher » : tout, un type d’événement, ou une autre catégorie */
   const allL = LAYERS.map(x => x[0]);
   root.appendChild(f);
-  // Afficher : pastilles colorées à cocher, plusieurs à la fois (plus de menu à une seule option)
-  { const bar = el("div","ag-show"); bar.setAttribute("role","group"); bar.setAttribute("aria-label","Afficher");
+  // Afficher : liste à gauche du calendrier, comme « Mes agendas » dans Google Agenda (case de couleur, nombre d'éléments sur la période)
+  { const lay = el("div","ag-lay"), side = el("aside","ag-side"), mainC = el("div","ag-main"); lay.append(side, mainC); root.appendChild(lay);
+    const from = v === "week" ? iso(monday) : iso(new Date(y, m, 1)), to = v === "week" ? iso(sunday) : iso(new Date(y, m + 1, 0));
+    const keepL = S.ui.agLayers, keepT = S.ui.agTypes; S.ui.agLayers = allL.slice(); S.ui.agTypes = EV_TYPES.slice();
+    const every = agendaItems().filter(i => i.date >= from && i.date <= to); S.ui.agLayers = keepL; S.ui.agTypes = keepT;
+    const nOf = key => every.filter(i => EV_TYPES.includes(key) ? i.k === "events" && i.ref && i.ref.type === key : i.k === key).length;
+    const isOn = key => EV_TYPES.includes(key) ? S.ui.agLayers.includes("events") && S.ui.agTypes.includes(key) : S.ui.agLayers.includes(key);
+    const toggle = key => { if (EV_TYPES.includes(key)){ let ty = S.ui.agLayers.includes("events") ? S.ui.agTypes.slice() : []; ty = ty.includes(key) ? ty.filter(x => x !== key) : ty.concat(key);
+        S.ui.agTypes = ty.length ? ty : EV_TYPES.slice(); S.ui.agLayers = ty.length ? [...new Set(S.ui.agLayers.concat("events"))] : S.ui.agLayers.filter(x => x !== "events"); }
+      else S.ui.agLayers = S.ui.agLayers.includes(key) ? S.ui.agLayers.filter(x => x !== key) : S.ui.agLayers.concat(key);
+      remember(); render(); };
+    const only = key => { if (EV_TYPES.includes(key)){ S.ui.agLayers = ["events"]; S.ui.agTypes = [key]; } else { S.ui.agLayers = [key]; S.ui.agTypes = EV_TYPES.slice(); } remember(); render(); };
+    const head = el("div","ag-sh"); head.appendChild(el("b",null,"Afficher"));
     const all = S.ui.agLayers.length === allL.length && S.ui.agTypes.length === EV_TYPES.length;
-    const chip = (label, on, color, fn, cls) => { const b = el("button","ag-chip" + (on ? " on" : "") + (cls ? " " + cls : "")); b.type = "button"; b.setAttribute("aria-pressed", String(on));
-      if (color){ const d = el("span","ag-dot"); d.style.background = color; b.appendChild(d); } b.appendChild(document.createTextNode(label)); b.onclick = fn; bar.appendChild(b); return b; };
-    const apply = () => { if (!S.ui.agLayers.length){ S.ui.agLayers = allL.slice(); S.ui.agTypes = EV_TYPES.slice(); } remember(); render(); };
-    chip("Tout", all, "", () => { S.ui.agLayers = allL.slice(); S.ui.agTypes = EV_TYPES.slice(); apply(); }, "all");
-    const solo = all;   // depuis « Tout », un clic isole la catégorie ; ensuite chaque clic ajoute ou retire
-    EV_TYPES.forEach(t => { const on = !all && S.ui.agLayers.includes("events") && S.ui.agTypes.includes(t);
-      chip(t === "Tournage" ? "Tournages" : t, on, AG_CHIP[t], () => {
-        if (solo){ S.ui.agLayers = ["events"]; S.ui.agTypes = [t]; }
-        else { let ty = S.ui.agLayers.includes("events") ? S.ui.agTypes.slice() : []; ty = ty.includes(t) ? ty.filter(x => x !== t) : ty.concat(t);
-          S.ui.agTypes = ty.length ? ty : EV_TYPES.slice(); S.ui.agLayers = ty.length ? [...new Set(S.ui.agLayers.concat("events"))] : S.ui.agLayers.filter(x => x !== "events"); }
-        apply(); }); });
-    bar.appendChild(el("span","ag-sep"));
-    LAYERS.filter(x => x[0] !== "events").forEach(([k, l]) => { const on = !all && S.ui.agLayers.includes(k);
-      chip(l, on, AG_CHIP[k], () => {
-        if (solo){ S.ui.agLayers = [k]; S.ui.agTypes = EV_TYPES.slice(); }
-        else S.ui.agLayers = on ? S.ui.agLayers.filter(x => x !== k) : S.ui.agLayers.concat(k);
-        apply(); }); });
-    root.appendChild(bar); }
+    if (!all){ const r = el("button","ag-reset","Tout"); r.type = "button"; r.onclick = () => { S.ui.agLayers = allL.slice(); S.ui.agTypes = EV_TYPES.slice(); remember(); render(); }; head.appendChild(r); }
+    side.appendChild(head);
+    const row = (key, label) => { const on = isOn(key), n = nOf(key), b = el("div","ag-it" + (on ? " on" : "") + (n ? "" : " zero")); b.setAttribute("role","checkbox"); b.setAttribute("aria-checked", String(on)); b.tabIndex = 0; b.style.setProperty("--c", AG_CHIP[key]);
+      const box = el("span","ag-box"); box.innerHTML = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.2 5 8.6 9.6 3.6"/></svg>';
+      const o = el("button","ag-only","Seul"); o.type = "button"; o.title = "N’afficher que « " + label + " »"; o.onclick = e => { e.stopPropagation(); only(key); };
+      b.append(box, el("span","ag-lb",label), el("span","ag-n", n ? String(n) : ""), o);
+      b.onclick = () => toggle(key); b.onkeydown = e => { if (e.key === " " || e.key === "Enter"){ e.preventDefault(); toggle(key); } }; return b; };
+    side.appendChild(el("div","ag-grp","Événements")); EV_TYPES.forEach(t => side.appendChild(row(t, t === "Tournage" ? "Tournages" : t)));
+    side.appendChild(el("div","ag-grp","Autres")); LAYERS.filter(x => x[0] !== "events").forEach(([k, l]) => side.appendChild(row(k, l)));
+    side.appendChild(el("p","ag-per", (v === "week" ? "Nombres de la semaine" : "Nombres du mois")));
+    root = mainC; }
   const items = agendaItems(); const map = {}; items.forEach(i => (map[i.date] = map[i.date] || []).push(i));
   if (v === "month"){
     const dw = el("div","dow"); ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"].forEach(d => dw.appendChild(el("span",null,d)));

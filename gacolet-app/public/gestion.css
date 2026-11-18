@@ -2207,13 +2207,25 @@ body.kb .mtabs{display:none}
 .wk-adc.drop-on{background:rgba(198,255,51,.10)}
 @media (max-width:900px){.wk-row{grid-template-columns:40px repeat(7,minmax(90px,1fr))}.wk2{overflow-x:auto}}
 
-/* Agenda : pastilles « Afficher » */
-.ag-show{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:2px 0 16px}
-.ag-chip{display:inline-flex;align-items:center;gap:8px;padding:7px 13px;border-radius:999px;border:1px solid var(--line-2);background:rgba(255,255,255,.03);color:var(--muted);font:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s,border-color .15s,color .15s,transform .1s}
-.ag-chip:hover{color:var(--ink);border-color:rgba(255,255,255,.28)}
-.ag-chip:active{transform:scale(.96)}
-.ag-chip.on{color:var(--ink);background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.35)}
-.ag-chip.all.on{background:var(--lemon);border-color:var(--lemon);color:var(--on-lemon,#0E0E0D)}
-.ag-dot{width:9px;height:9px;border-radius:50%;flex:none;opacity:.45;transition:opacity .15s,box-shadow .15s}
-.ag-chip.on .ag-dot,.ag-chip:hover .ag-dot{opacity:1}.ag-chip.on .ag-dot{box-shadow:0 0 0 3px rgba(255,255,255,.08)}
-.ag-sep{width:1px;height:20px;background:var(--line-2);margin:0 4px}
+/* Agenda : liste « Afficher » à gauche (comme Google Agenda) */
+.ag-lay{display:grid;grid-template-columns:200px minmax(0,1fr);gap:22px;align-items:start}
+.ag-main{min-width:0}
+.ag-side{position:sticky;top:12px;display:flex;flex-direction:column;gap:2px;padding:4px 0}
+.ag-sh{display:flex;align-items:center;justify-content:space-between;margin:0 0 8px;padding:0 8px}
+.ag-sh b{font:400 22px/1 var(--display);letter-spacing:.02em;text-transform:uppercase}
+.ag-reset{background:none;border:0;color:var(--lemon);font:inherit;font-size:12px;font-weight:700;cursor:pointer;padding:2px 0}
+.ag-grp{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:12px 8px 4px}
+.ag-it{position:relative;display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:9px;cursor:pointer;color:var(--muted);font-size:13.5px;user-select:none;transition:background .12s,color .12s}
+.ag-it:hover{background:rgba(255,255,255,.05);color:var(--ink)}
+.ag-it.on{color:var(--ink)}
+.ag-it:focus-visible{outline:2px solid var(--lemon);outline-offset:-2px}
+.ag-box{width:16px;height:16px;border-radius:4px;border:2px solid var(--c);flex:none;display:flex;align-items:center;justify-content:center;transition:background .12s}
+.ag-box svg{width:11px;height:11px;fill:none;stroke:#0E0E0D;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;opacity:0}
+.ag-it.on .ag-box{background:var(--c)}.ag-it.on .ag-box svg{opacity:1}
+.ag-lb{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ag-n{font-size:12px;font-variant-numeric:tabular-nums;color:var(--muted)}
+.ag-it.zero .ag-lb{opacity:.6}
+.ag-only{display:none;position:absolute;right:6px;top:50%;transform:translateY(-50%);background:var(--card);border:1px solid var(--line-2);color:var(--ink);font:inherit;font-size:11px;font-weight:600;border-radius:6px;padding:2px 7px;cursor:pointer}
+.ag-it:hover .ag-only{display:block}.ag-it:hover .ag-n{visibility:hidden}
+.ag-per{margin:12px 8px 0;font-size:11px;color:var(--muted)}
+@media (max-width:900px){.ag-lay{grid-template-columns:minmax(0,1fr);gap:10px}.ag-side{position:static;flex-direction:row;flex-wrap:nowrap;overflow-x:auto;gap:6px;padding-bottom:4px}.ag-sh,.ag-grp,.ag-per{display:none}.ag-it{flex:none;border:1px solid var(--line-2);padding:6px 10px}.ag-only{display:none!important}.ag-it:hover .ag-n{visibility:visible}}
