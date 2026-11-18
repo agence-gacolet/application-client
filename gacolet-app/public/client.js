@@ -630,9 +630,9 @@ function ideesWords(){
   if (has(/formation|école|ecole|enseign/)) return W("une session, vos stagiaires, le terrain", "une session, vos stagiaires, un moment fort");
   if (has(/vign|vin\b|cave|domaine/)) return W("les vignes, la cave, une dégustation", "les vignes, la cave, une bouteille");
   if (has(/nettoy|ménage|menage|propreté|proprete/)) return W("un avant après, votre équipe en intervention", "un avant après, une intervention");
-  if (has(/agence|communication|conseil/)) return W("un projet, les coulisses, un client content", "un projet, les coulisses");
   if (has(/clim|maçon|macon|construct|piscine|liner|menuis|paysag|jardin|thermolaq|pare-brise|plomb|électric|electric|charpent|couvr|peint|carrel|fuite|rénov|renov|bâtiment|batiment/)) return W("des photos de chantier, un avant après, l’équipe au travail", "le chantier, un avant après, ce que vous aimeriez en faire");
-  return W("des photos de votre activité, les coulisses, un client content", "où, quand, ce que vous aimeriez en faire");
+  // Métier inconnu ou pas reconnu : texte neutre, sans exemple (on ne devine pas)
+  return { intro: "Une idée, des photos ou des vidéos : l’équipe s’en sert pour vos prochains contenus.", media: "Un mot sur ces photos ou vidéos (facultatif)", idea: "Votre idée en quelques mots, ou collez un lien qui vous plaît" };
 }
 function vIdees(root){
   const W = ideesWords();

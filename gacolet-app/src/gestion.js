@@ -1135,7 +1135,7 @@ module.exports = function (app, { db, wrap, root }) {
   const METIER_DEF = { "ar climatisation":"climatisation", "bonobo":"magasin de vêtements", "delta sud formation":"formation agricole", "domaine pagezi":"vigneron", "flora design":"paysagiste, jardins",
     "france etancheite":"piscines, pose de liner", "gaufrement bon":"food truck de gaufres", "hugo maitre nageur":"maître nageur", "kr thermolaquage":"thermolaquage", "l insolent":"bar", "insolent":"bar",
     "la vie la construction":"maçon constructeur", "le petit mas":"restaurant", "locamex":"recherche de fuites de piscine", "meyer pic":"maroquinerie", "only clean":"nettoyage",
-    "paillotte bassamoise":"restaurant", "sos pare brise":"pare-brise", "sta group":"menuiserie", "sport defense":"salle de sport", "gabriel":"agence de communication", "gabriel nicolet":"agence de communication" };
+    "paillotte bassamoise":"restaurant", "sos pare brise":"pare-brise", "sta group":"menuiserie", "sport defense":"salle de sport" };   // seulement les métiers écrits dans les fiches du Drive ; rien quand on n'est pas sûr
   async function metierOf(name) { const k = normName(name); try { for (const r of await db.all("SELECT data FROM docs WHERE col = 'clients' AND deleted = 0")) { const d = JSON.parse(r.data || "{}"); if (normName(d.name) === k && String(d.metier || "").trim()) return String(d.metier).trim().slice(0, 120); } } catch (e) {}
     return METIER_DEF[k] || ""; }
   app.get("/api/c/feed", cauth, wrap(async (req, res) => {
