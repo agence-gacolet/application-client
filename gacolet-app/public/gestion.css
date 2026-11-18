@@ -2197,7 +2197,10 @@ body.kb .mtabs{display:none}
 .wk-head{border-bottom:1px solid var(--line)}.wk-head .whead{padding:10px 8px 6px;margin:0}.wk-head .whead.today b{background:var(--lemon);color:var(--on-lemon);padding:2px 6px 0;border-radius:5px}
 .wk-ad{border-bottom:1px solid var(--line);min-height:34px}.wk-adl{font-size:11px;color:var(--muted);padding:8px 4px;text-align:right}
 .wk-adc{border-left:1px solid var(--line);padding:4px;display:flex;flex-direction:column;gap:3px;min-width:0;cursor:pointer}
-.wk-body{max-height:min(70vh,760px);overflow:auto;position:relative}
+.wk-body{max-height:min(70vh,760px);overflow:auto;position:relative;scrollbar-gutter:stable}
+/* Même réserve pour la barre de défilement en haut : les colonnes de l'en-tête tombent pile sur celles de la grille */
+.wk-head,.wk-ad{overflow-y:hidden;scrollbar-gutter:stable}
+.wk-head .whead{border-left:1px solid var(--line)}
 .wk-hours .wk-h{height:52px;font-size:11px;color:var(--muted);text-align:right;padding-right:6px;transform:translateY(-6px)}
 .wk-col{position:relative;border-left:1px solid var(--line);background-image:repeating-linear-gradient(to bottom,transparent 0,transparent 51px,var(--line) 51px,var(--line) 52px);cursor:pointer}
 .wk-col.today{background-color:rgba(198,255,51,.03)}
