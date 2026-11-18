@@ -64,12 +64,14 @@ module.exports = function gsheets({ db, put, current, stamp, bump }) {
     return camps.length ? camps : null;
   }
   // Un même tableau pour plusieurs fiches d'un client, ex. « Locamex (particuliers) » et « Locamex (piscinistes) » :
-  // chaque campagne va à la fiche dont le mot entre parenthèses figure dans son nom (6 premières lettres, sans accents ni casse).
+  // chaque campagne va à la fiche dont le mot entre parenthèses figure dans son nom (6 premières lettres, sans accents ni casse),
+  // sinon à la fiche à laquelle le tableau est relié.
   async function applyAppli(client, camps, file) {
     if (!client || !camps) return;
     const base = String(client).split(" (")[0], names = new Set();
     for (const r of await db.all("SELECT data FROM docs WHERE col = 'campaigns' AND deleted = 0")) { try { const n = JSON.parse(r.data).client; if (n && normName(String(n).split(" (")[0]) === normName(base) && /\(([^)]+)\)/.test(n)) names.add(n); } catch (e) {} }
-    if (names.size > 1) { for (const n of names) { const q = normName(n.match(/\(([^)]+)\)/)[1]).slice(0, 6), mine = camps.filter(c => normName(c.name).includes(q)); if (mine.length) await applyOne(n, mine, file); } return; }
+    if (names.size > 1) { const q = n => normName(n.match(/\(([^)]+)\)/)[1]).slice(0, 6), byName = c => [...names].find(n => normName(c.name).includes(q(n))) || client;
+      for (const n of names) { const mine = camps.filter(c => byName(c) === n); if (mine.length) await applyOne(n, mine, file); } return; }
     return applyOne(client, camps, file);
   }
   async function applyOne(client, camps, file) {
