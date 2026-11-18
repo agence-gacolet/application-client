@@ -1271,6 +1271,56 @@ module.exports = function (app, { db, wrap, root }) {
   const PUSH = require("./push")(db);
   app.get("/api/g-push/key", auth, wrap(async (req, res) => res.json({ key: await PUSH.key() })));
   app.post("/api/g-push", auth, wrap(async (req, res) => { if (req.user.preview) return res.status(403).json({ error: "Aperçu." }); await PUSH.save("g", req.user.name, (req.body || {}).sub); res.json({ ok: true }); }));
+  /* ---------- Agenda : abonnement (Google Agenda, Calendrier d'Apple), rappels et invitations par notification ---------- */
+  const ICS_KEY = () => process.env.APP_SECRET || process.env.DEPLOY_KEY || "gacolet";
+  const icsTok = name => crypto.createHmac("sha256", ICS_KEY()).update("ics:" + name).digest("hex").slice(0, 32);
+  const evAll = async () => (await db.all("SELECT id, data FROM docs WHERE col = 'events' AND deleted = 0")).map(r => { try { return Object.assign({ id: r.id }, JSON.parse(r.data || "{}")); } catch (e) { return null; } }).filter(e => e && /^\d{4}-\d{2}-\d{2}$/.test(e.date || ""));
+  app.get("/api/g-ics-url", auth, wrap(async (req, res) => { const base = (req.get("x-forwarded-proto") || req.protocol) + "://" + req.get("host");
+    res.json({ url: base + "/agenda/" + encodeURIComponent(req.user.name) + "-" + icsTok(req.user.name) + ".ics" }); }));
+  app.get("/agenda/:tok", wrap(async (req, res) => {
+    const m = String(req.params.tok).match(/^(.+)-([a-f0-9]{32})\.ics$/); if (!m) return res.status(404).end();
+    const name = decodeURIComponent(m[1]); if (!crypto.timingSafeEqual(Buffer.from(icsTok(name)), Buffer.from(m[2]))) return res.status(404).end();
+    const esc = s => String(s || "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+    const d8 = d => d.replace(/-/g, ""), t6 = t => t.replace(":", "") + "00", next = d => { const x = new Date(d + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() + 1); return x.toISOString().slice(0, 10); };
+    const stamp = new Date().toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z", L = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Agence Gacolet//Agenda//FR","CALSCALE:GREGORIAN","METHOD:PUBLISH","X-WR-CALNAME:Agence Gacolet","X-WR-TIMEZONE:Europe/Paris"];
+    for (const e of await evAll()) { if (e.status === "Annulé") continue; const tm = /^\d{2}:\d{2}/.test(e.time || "") ? e.time.slice(0, 5) : "", en = /^\d{2}:\d{2}/.test(e.end || "") && e.end > tm ? e.end.slice(0, 5) : "", last = /^\d{4}-\d{2}-\d{2}$/.test(e.endDate || "") && e.endDate > e.date ? e.endDate : e.date;
+      L.push("BEGIN:VEVENT", "UID:" + e.id + "@gacolet", "DTSTAMP:" + stamp, "SUMMARY:" + esc((e.client ? e.client + " : " : "") + (e.title || e.type || "Événement")));
+      if (tm) { L.push("DTSTART;TZID=Europe/Paris:" + d8(e.date) + "T" + t6(tm)); const eh = en || String(Math.min(23, Number(tm.slice(0, 2)) + 1)).padStart(2, "0") + tm.slice(2); L.push("DTEND;TZID=Europe/Paris:" + d8(last) + "T" + t6(eh)); }
+      else L.push("DTSTART;VALUE=DATE:" + d8(e.date), "DTEND;VALUE=DATE:" + d8(next(last)));
+      const fr = { daily: "FREQ=DAILY", weekly: "FREQ=WEEKLY", monthly: "FREQ=MONTHLY", weekdays: "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR" }[e.repeat];
+      if (fr) { L.push("RRULE:" + fr + (/^\d{4}-\d{2}-\d{2}$/.test(e.until || "") ? ";UNTIL=" + d8(e.until) + "T235959Z" : "")); (e.skip || []).forEach(k => L.push(tm ? "EXDATE;TZID=Europe/Paris:" + d8(k) + "T" + t6(tm) : "EXDATE;VALUE=DATE:" + d8(k))); }
+      if (e.place) L.push("LOCATION:" + esc(e.place));
+      L.push("DESCRIPTION:" + esc([e.type, (e.who || []).length ? "Qui : " + e.who.join(", ") : "", e.note].filter(Boolean).join("\n")), "END:VEVENT"); }
+    L.push("END:VCALENDAR"); res.set("Content-Type", "text/calendar; charset=utf-8"); res.set("Cache-Control", "no-cache"); res.send(L.map(l => l.length > 74 ? l.match(/.{1,74}/g).join("\r\n ") : l).join("\r\n") + "\r\n");
+  }));
+  // Un événement a-t-il lieu ce jour-là (répétitions comprises) ?
+  const occursOn = (e, day) => { if (e.date === day) return true; if (!e.repeat || e.repeat === "none" || day < e.date || (e.until && day > e.until) || (e.skip || []).includes(day)) return false;
+    const a = new Date(e.date + "T12:00:00Z"), b = new Date(day + "T12:00:00Z"), n = Math.round((b - a) / 864e5), wd = b.getUTCDay();
+    return e.repeat === "daily" || (e.repeat === "weekly" && n % 7 === 0) || (e.repeat === "weekdays" && wd > 0 && wd < 6) || (e.repeat === "monthly" && a.getUTCDate() === b.getUTCDate()); };
+  const parisNow = () => { const s = new Date().toLocaleString("sv-SE", { timeZone: "Europe/Paris" }); return { day: s.slice(0, 10), min: Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10), +s.slice(11, 13), +s.slice(14, 16)) / 60000 }; };
+  async function agendaTick() {
+    const now = parisNow(), tomorrow = new Date(Date.parse(now.day + "T12:00:00Z") + 864e5).toISOString().slice(0, 10), evs = await evAll();
+    for (const e of evs) {
+      const who = (e.who || []).filter(Boolean), title = (e.client ? e.client + " : " : "") + (e.title || e.type || "Événement");
+      // Rappel avant l'heure (10 min, 30 min, 1 h ou la veille), une seule fois par jour d'événement
+      const rem = Number(e.reminder || 0), tm = /^\d{2}:\d{2}/.test(e.time || "") ? e.time.slice(0, 5) : "";
+      if (rem && tm && who.length && e.status !== "Annulé") for (const day of [now.day, tomorrow]) { if (!occursOn(e, day)) continue;
+        const start = Date.UTC(+day.slice(0, 4), +day.slice(5, 7) - 1, +day.slice(8, 10), +tm.slice(0, 2), +tm.slice(3, 5)) / 60000, left = start - now.min;
+        if (left > rem || left < rem - 10 || left < 0) continue; const key = e.id + "_" + day; if (await current("_remind", key)) continue;
+        await put("_remind", key, { at: new Date().toISOString() });
+        await PUSH.send("g", who, { title: "Rappel : " + title, body: (day === now.day ? "Aujourd’hui" : "Demain") + " à " + tm.replace(":", " h ") + (e.place ? ", " + e.place : ""), url: "/gestion#agenda", tag: "ev-" + e.id }); }
+      // Invitation : chaque personne ajoutée dans « Qui » reçoit une notification (sauf celle qui a fait la modification)
+      if (!who.length || e.date < now.day && !(e.repeat && e.repeat !== "none")) continue;
+      const inv = await current("_invited", e.id), fresh = Date.now() - Date.parse(e.updatedAt || e.createdAt || 0) < 15 * 60000;
+      const done = new Set((inv && inv.names) || []), add = who.filter(n => !done.has(n));
+      if (!add.length) continue;
+      await put("_invited", e.id, { names: [...new Set([...done, ...who])] });
+      const to = add.filter(n => n !== e.updatedBy && n !== e.createdBy);
+      if (fresh && to.length) await PUSH.send("g", to, { title: "Invitation : " + title, body: new Date(e.date + "T12:00:00Z").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }) + (tm ? " à " + tm.replace(":", " h ") : "") + ". Réponds dans l’agenda.", url: "/gestion#agenda", tag: "inv-" + e.id });
+    }
+  }
+  setInterval(() => agendaTick().catch(e => console.error("Agenda", e.message)), 60000).unref();
+  setTimeout(() => agendaTick().catch(() => {}), 15000).unref();
   app.post("/api/g-push/off", auth, wrap(async (req, res) => { await PUSH.remove((req.body || {}).endpoint || ""); res.json({ ok: true }); }));
   app.post("/api/g-push/test", auth, wrap(async (req, res) => res.json({ sent: await PUSH.send("g", [req.user.name], { title: "Agence Gacolet", body: "Les notifications marchent sur cet appareil.", url: "/gestion#parametres", tag: "test" }) })));
   async function pushMsg(d, cl) {

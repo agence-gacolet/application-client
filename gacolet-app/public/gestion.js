@@ -290,9 +290,28 @@ function prepBy(e){ return isISO(e.date) ? addDays(e.date, -7*leadOf(e.client)) 
 const AG_CHIP = { "Tournage":"#C6FF33", "Éditorial":"#5AC8FA", "Maroudeur":"#C49BFF", "Rendez-vous":"#FF9F5A", tasks:"#F5D04C", relances:"#FF6B8B", cevents:"#4CD9A0", keydates:"#7AA7FF", posts:"#EEEAE2" };
 const LAYERS = [["events","Événements"],["tasks","Tâches"],["relances","Relances"],["cevents","Temps forts clients"],["keydates","Dates clés"],["posts","Com de l’agence"]];
 const AGENCE = "Agence Gacolet";
+/* Heures, durée, répétition et plusieurs jours des événements de l'agenda (comme Google Agenda) */
+const REPEAT_L = { none:"Ne se répète pas", daily:"Tous les jours", weekdays:"Du lundi au vendredi", weekly:"Chaque semaine", monthly:"Chaque mois" };
+const tmin = t => { const x = String(t || "").match(/^(\d{1,2}):(\d{2})/); return x ? Number(x[1]) * 60 + Number(x[2]) : null; };
+const tstr = n => String(Math.floor(n / 60)).padStart(2, "0") + ":" + String(n % 60).padStart(2, "0");
+function evDur(e){ const a = tmin(e.time), b = tmin(e.end); return a != null && b != null && b > a ? b - a : 60; }
+// Jours où un événement apparaît : répétitions (autour du mois affiché) et chaque jour d'un événement sur plusieurs jours
+function evOccur(e){
+  const span = isISO(e.endDate) && e.endDate > e.date ? Math.round((parseISO(e.endDate) - parseISO(e.date)) / 864e5) : 0, starts = [];
+  if (!e.repeat || e.repeat === "none") starts.push(e.date);
+  else { const c = agCursor(), lo = iso(new Date(c.getFullYear(), c.getMonth() - 1, 1)), hi = iso(new Date(c.getFullYear(), c.getMonth() + 3, 0)), until = isISO(e.until) ? e.until : "9999-12-31", d0 = parseISO(e.date);
+    let d = new Date(d0), n = 0, mo = 0;
+    while (n++ < 4000){ const k = iso(d); if (k > until || k > hi) break; if (k >= addDays(lo, -span) && !(e.skip || []).includes(k)) starts.push(k);
+      if (e.repeat === "daily") d.setDate(d.getDate() + 1); else if (e.repeat === "weekly") d.setDate(d.getDate() + 7);
+      else if (e.repeat === "weekdays"){ do d.setDate(d.getDate() + 1); while (d.getDay() === 0 || d.getDay() === 6); }
+      else if (e.repeat === "monthly"){ mo++; d = new Date(d0.getFullYear(), d0.getMonth() + mo, d0.getDate()); } else break; } }
+  const out = []; starts.forEach(st => { for (let i = 0; i <= span; i++) out.push({ date: addDays(st, i), occ: st, multi: span > 0, first: i === 0, last: i === span }); }); return out;
+}
 function agendaItems(){
   const L = new Set(S.ui.agLayers), out = [];
-  if (L.has("events")) S.d.events.forEach(e => { if (!S.ui.agTypes.includes(e.type)) return; out.push({k:"events", date:e.date, time:e.time||"", client:e.client, label:e.title||e.type, who:e.who||[], ref:e, cls:"ev t-"+e.type+" s-"+(e.status||"Prévu"), meta:[e.type, e.place, (e.files||[]).length ? plural(e.files.length,"fichier") : ""].filter(Boolean).join(", "), tag:e.status||"Prévu"}); });
+  if (L.has("events")) S.d.events.forEach(e => { if (!S.ui.agTypes.includes(e.type) || !isISO(e.date)) return; const rec = e.repeat && e.repeat !== "none";
+    evOccur(e).forEach(o => out.push({k:"events", date:o.date, occ:o.occ, multi:o.multi, time: o.multi && !o.first ? "" : e.time||"", end: o.multi ? "" : e.end||"", client:e.client, label:e.title||e.type, who:e.who||[], ref:e,
+      cls:"ev t-"+e.type+" s-"+(e.status||"Prévu")+(o.multi ? " multi"+(o.first ? " mstart" : "")+(o.last ? " mend" : "") : "")+(rec ? " rec" : ""), meta:[e.type, e.place, rec ? REPEAT_L[e.repeat] : "", (e.files||[]).length ? plural(e.files.length,"fichier") : ""].filter(Boolean).join(", "), tag:e.status||"Prévu"})); });
   if (L.has("tasks")) openTasks().forEach(t => { if (!isISO(t.date)) return; const late = lateDays(t.date) > 0; out.push({k:"tasks", date: t.date, client:t.client, label:t.title, who:[t.who], ref:t, cls:"ev k-task"+(late?" late":""), meta:"Tâche, "+t.who, tag:late ? lateDays(t.date)+" j de retard" : "Tâche"}); });
   if (L.has("relances")) S.d.commercial.filter(coMine).forEach(c => { if (!isISO(c.nextDate)) return; out.push({k:"relances", date:c.nextDate, client:c.company, label:c.nextAction||"Relance", who:[coOwner(c)], ref:c, cls:"ev k-relance", meta:"Commercial, "+(c.stage||""), tag:c.kind}); });
   if (L.has("cevents")) S.d.cevents.forEach(e => { if (!isISO(e.date)) return; out.push({k:"cevents", date:e.date, client:e.client, label:e.subject, who:["Clara"], ref:e, cls:"ev k-cevent", meta:"Temps fort, préparer avant le "+fmtD(prepBy(e)), tag:e.piste ? "Piste" : (e.done ? "Fait" : "Temps fort")}); });
@@ -340,7 +359,7 @@ function itemsToTasks(){ if (!writable()) return;
     if (list.length) act.appendChild(all); act.append(cancel); if (list.length) act.appendChild(ok); m.appendChild(act); }); }
 function openItem(i){
   ITEM_FOR_TASK = i.k !== "tasks" && i.k !== "relances" && i.k !== "edtodo" ? i : null;
-  if (i.k === "events") return openEvent(i.ref);
+  if (i.k === "events") return openEvent(i.ref, i.occ);
   if (i.k === "tasks") return openTask(i.ref);
   if (i.k === "relances") return openCommercial(i.ref);
   if (i.k === "cevents") return openCevent(i.ref);
@@ -353,21 +372,32 @@ function openItem(i){
 const clientNames = () => clientsAll().map(c => c.name);
 
 /* Événements de l'agenda */
-function openEvent(e){
-  const d = e.date;
+function openEvent(e, occ){
+  const d = occ || e.date, rec = e.repeat && e.repeat !== "none", me = S.me || "", rs = e.rsvp || {};
+  const quick = [["Passer en Fait", () => patch("events", e.id, {status:"Fait"}).then(closeModal)],["Passer en Annulé", () => patch("events", e.id, {status:"Annulé"}).then(closeModal)]];
+  // Invités : chacun répond (oui ou non), visible par toute l'équipe
+  if ((e.who || []).includes(me)) quick.unshift(["Je viens" + (rs[me] === "oui" ? " ✓" : ""), () => patch("events", e.id, { rsvp: Object.assign({}, rs, { [me]: "oui" }) }).then(closeModal)], ["Je ne viens pas" + (rs[me] === "non" ? " ✓" : ""), () => patch("events", e.id, { rsvp: Object.assign({}, rs, { [me]: "non" }) }).then(closeModal)]);
+  if (rec) quick.push(["Supprimer ce jour", () => { if (!confirm("Retirer seulement le " + fmtDL(d) + " de la série ?")) return; patch("events", e.id, { skip: [...new Set((e.skip || []).concat(d))] }).then(closeModal); }],
+    ["Supprimer la série", () => { if (!confirm("Supprimer toute la série « " + (e.title || e.type) + " » ? Elle disparaît pour toute l’équipe.")) return; remove("events", e.id).then(closeModal).catch(() => {}); }]);
+  else quick.push(["Supprimer", () => { if (!confirm("Supprimer « " + (e.title || e.type) + " » du " + fmtDL(e.date) + " ? Il disparaît pour toute l’équipe.")) return; remove("events", e.id).then(closeModal).catch(() => {}); }]);
+  const when = fmtDL(d) + " " + (d || "").slice(0, 4) + (e.time ? ", " + fmtTime(e.time) + (e.end ? " – " + fmtTime(e.end) : "") : "") + (isISO(e.endDate) && e.endDate > e.date ? ", jusqu’au " + fmtDL(e.endDate) : "");
+  const rem = { "10":"10 min avant", "30":"30 min avant", "60":"1 h avant", "1440":"La veille" }[String(e.reminder || "")] || "";
+  const answers = (e.who || []).map(n => n + " : " + (rs[n] === "oui" ? "vient" : rs[n] === "non" ? "ne vient pas" : "pas encore répondu")).join(", ");
   openFacts({ title: e.title || e.type, client: e.client,
-    facts: [["Date", fmtDL(d)+" "+(d||"").slice(0,4)+(e.time ? ", "+fmtTime(e.time) : "")],["Type", e.type],["Qui",(e.who||[]).join(", ")],["Statut", e.status||"Prévu"],["Lieu", e.place],["Note", e.note],["Fichiers", filesList(e.files)]],
-    quick: [["Passer en Fait", () => patch("events", e.id, {status:"Fait"}).then(closeModal)],["Passer en Annulé", () => patch("events", e.id, {status:"Annulé"}).then(closeModal)],
-      ["Supprimer", () => { if (!confirm("Supprimer « " + (e.title || e.type) + " » du " + fmtDL(e.date) + " ? Il disparaît pour toute l’équipe.")) return; remove("events", e.id).then(closeModal).catch(() => {}); }]],
+    facts: [["Date", when],["Répétition", rec ? REPEAT_L[e.repeat] + (isISO(e.until) ? " jusqu’au " + fmtDL(e.until) : "") : ""],["Type", e.type],["Invités", answers],["Rappel", rem],["Statut", e.status||"Prévu"],["Lieu", e.place],["Note", e.note],["Fichiers", filesList(e.files)]],
+    quick,
     onEdit: () => editEvent(e) });
 }
 function editEvent(e){
   openForm({ key:"ev", title: e.id ? "Modifier l’événement" : "Nouvel événement", values: Object.assign({type:"Tournage", status:"Prévu", who:[]}, e),
     fields: [{k:"client",label:"Client",type:"select",options:[["","Choisir un client"]].concat(clientNames().map(n=>[n,n])),half:true,req:"Choisis un client."},{k:"type",label:"Type",type:"select",options:EV_TYPES,half:true},
       {k:"title",label:"Intitulé",ph:"Ex. 3 réels chantier, soirée d’ouverture"},
-      {k:"date",label:"Date",type:"date",half:true,req:"Indique une date."},{k:"time",label:"Heure (facultatif)",type:"time",half:true},
-      {k:"who",label:"Qui",type:"who"},
+      {k:"date",label:"Date",type:"date",half:true,req:"Indique une date."},{k:"endDate",label:"Jusqu’au (sur plusieurs jours)",type:"date",half:true},
+      {k:"time",label:"Heure de début (facultatif)",type:"time",half:true},{k:"end",label:"Heure de fin",type:"time",half:true},
+      {k:"who",label:"Qui (invités : ils reçoivent une notification)",type:"who"},
       {k:"status",label:"Statut",type:"select",options:EV_STATUS,half:true},{k:"place",label:"Lieu",half:true,ph:"Adresse ou ville"},
+      {k:"repeat",label:"Répétition",type:"select",options:Object.entries(REPEAT_L),half:true},{k:"until",label:"Répéter jusqu’au (facultatif)",type:"date",half:true},
+      {k:"reminder",label:"Rappel",type:"select",options:[["","Aucun"],["10","10 min avant"],["30","30 min avant"],["60","1 h avant"],["1440","La veille"]],half:true},
       {k:"note",label:"Note",type:"textarea"},
       {k:"files",label:"Fichiers (feuille de tournage, devis, photos…)",type:"files"}],
     onCancel: () => e.id ? openEvent(e) : closeModal(),
@@ -2033,7 +2063,7 @@ function edExtras(root){
 function agCursor(){ if (!S.ui.agCursor){ const d = parseISO(S.ui.agSel || today()); S.ui.agCursor = new Date(d.getFullYear(), d.getMonth(), 1); } return S.ui.agCursor; }
 function evNode(i, compact){
   const b = el("button", i.cls); const c = colorOf(i.client); b.style.setProperty("--c", c); b.style.setProperty("--fg", fgOn(c));
-  if (i.time) b.appendChild(el("span","tm", fmtTime(i.time)));
+  if (i.time) b.appendChild(el("span","tm", fmtTime(i.time) + (i.end && tmin(i.end) > tmin(i.time) ? " – " + fmtTime(i.end) : "")));
   if (i.gl) b.appendChild(el("span","gl", i.gl));
   const who = i.client ? (compact ? shortName(i.client)+" " : "") : "";
   b.appendChild(el("span","tx", compact ? who + i.label : (i.client || i.label)));
@@ -2047,26 +2077,70 @@ function evNode(i, compact){
   return b;
 }
 const AG_MOVE = ["events","tasks","cevents","posts"]; let AGDRAG = null, AGOFF = 0;
-const WK_H0 = 7, WK_H1 = 22, WK_PX = 52;   // vue Semaine : 7 h à 22 h, 52 px par heure
-// Heure sous le pointeur dans une colonne de la semaine, au quart d'heure (off : décalage du point saisi dans l'événement)
-function wkTimeAt(col, y, off){ const r = col.getBoundingClientRect(); let m = WK_H0 * 60 + Math.round(((y - r.top - (off || 0)) / WK_PX * 60) / 15) * 15; m = Math.max(WK_H0 * 60, Math.min(WK_H1 * 60 - 15, m)); return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"); }
+const WK_H0 = 7, WK_H1 = 22, WK_PX = 52;   // grille des heures : 7 h à 22 h, 52 px par heure
+const wkMin = (col, y, off) => { const r = col.getBoundingClientRect(); return Math.max(WK_H0 * 60, Math.min(WK_H1 * 60 - 15, WK_H0 * 60 + Math.round(((y - r.top - (off || 0)) / WK_PX * 60) / 15) * 15)); };
+function wkTimeAt(col, y, off){ return tstr(wkMin(col, y, off)); }
+// Déplacement d'un élément vers un jour (et une heure) : un événement sur plusieurs jours ou répété garde sa forme, toute la série bouge
+function agMove(it, k, time){
+  const r = it.ref, base = it.occ || it.date, delta = Math.round((parseISO(k) - parseISO(base)) / 864e5), body = {};
+  if (delta){ body.date = addDays(r.date, delta); if (it.k === "events" && isISO(r.endDate)) body.endDate = addDays(r.endDate, delta); }
+  if (time && (it.k === "events" || it.k === "posts") && time !== r.time){ body.time = time; if (it.k === "events" && r.end) body.end = tstr(Math.min(23 * 60 + 45, tmin(time) + evDur(r))); }
+  if (!Object.keys(body).length) return;
+  Object.assign(r, body); render(); const rec = it.k === "events" && r.repeat && r.repeat !== "none";
+  patch(it.k, r.id, body).then(() => toast((rec ? "Toute la série déplacée" : "Déplacé") + " au " + fmtDL(k) + (body.time ? " à " + body.time.replace(":", " h ") : "") + ".")).catch(() => render());
+}
 function agDropTimed(col, k){
   let ghost = null;
-  col.addEventListener("dragover", e => { if (!AGDRAG) return; e.preventDefault(); e.dataTransfer.dropEffect = "move"; const t = wkTimeAt(col, e.clientY, AGOFF), [h, m] = t.split(":").map(Number);
-    if (!ghost){ ghost = el("div","wk-ghost"); col.appendChild(ghost); } ghost.style.top = ((h * 60 + m - WK_H0 * 60) / 60 * WK_PX) + "px"; ghost.style.height = (WK_PX - 3) + "px"; ghost.textContent = t.replace(":", " h "); });
+  col.addEventListener("dragover", e => { if (!AGDRAG) return; e.preventDefault(); e.dataTransfer.dropEffect = "move"; const m = wkMin(col, e.clientY, AGOFF), d = AGDRAG.k === "events" ? evDur(AGDRAG.ref) : 60;
+    if (!ghost){ ghost = el("div","wk-ghost"); col.appendChild(ghost); } ghost.style.top = ((m - WK_H0 * 60) / 60 * WK_PX) + "px"; ghost.style.height = (d / 60 * WK_PX - 3) + "px"; ghost.textContent = fmtTime(tstr(m)); });
   col.addEventListener("dragleave", e => { if (!col.contains(e.relatedTarget) && ghost){ ghost.remove(); ghost = null; } });
   col.addEventListener("drop", e => { if (!AGDRAG) return; e.preventDefault(); e.stopPropagation(); if (ghost){ ghost.remove(); ghost = null; }
-    const it = AGDRAG, t = wkTimeAt(col, e.clientY, AGOFF); AGDRAG = null; const withTime = it.k === "events" || it.k === "posts", body = withTime ? { date: k, time: t } : { date: k };
-    if (it.date === k && (!withTime || it.time === t)) return; it.ref.date = k; if (withTime) it.ref.time = t; render();
-    patch(it.k, it.ref.id, body).then(() => toast("Déplacé au " + fmtDL(k) + (withTime ? " à " + t.replace(":", " h ") : "") + ".")).catch(() => render()); });
+    const it = AGDRAG; AGDRAG = null; agMove(it, k, wkTimeAt(col, e.clientY, AGOFF)); });
 }
-// Une case jour (mois) ou une colonne (semaine) accepte un élément glissé : il prend cette date, l'heure ne change pas
+// Une case jour (mois) ou la rangée « Journée » accepte un élément glissé : il prend cette date, l'heure ne change pas
 function agDropTarget(node, k){
   node.addEventListener("dragover", e => { if (!AGDRAG) return; e.preventDefault(); e.dataTransfer.dropEffect = "move"; node.classList.add("drop-on"); });
   node.addEventListener("dragleave", e => { if (!node.contains(e.relatedTarget)) node.classList.remove("drop-on"); });
-  node.addEventListener("drop", e => { if (!AGDRAG) return; e.preventDefault(); e.stopPropagation(); node.classList.remove("drop-on"); const it = AGDRAG; AGDRAG = null;
-    if (it.date === k) return; it.ref.date = k; render();
-    patch(it.k, it.ref.id, { date: k }).then(() => toast("Déplacé au " + fmtDL(k) + ".")).catch(() => { render(); }); });
+  node.addEventListener("drop", e => { if (!AGDRAG) return; e.preventDefault(); e.stopPropagation(); node.classList.remove("drop-on"); const it = AGDRAG; AGDRAG = null; agMove(it, k, null); });
+}
+// Grille des heures pour la semaine (7 jours) ou un jour : durée, étirer pour changer la fin, tirer sur un créneau vide pour créer
+function agTimeGrid(root, days, map, t0){
+  const sx = el("div","tw wk2" + (days.length === 1 ? " wk-day" : "")); sx.style.borderTop = "0";
+  const cols = "52px repeat(" + days.length + ",minmax(" + (days.length === 1 ? 0 : 110) + "px,1fr))";
+  const head = el("div","wk-row wk-head"), ad = el("div","wk-row wk-ad"), body = el("div","wk-body"), grid = el("div","wk-row wk-grid"); [head, ad, grid].forEach(r => { r.style.gridTemplateColumns = cols; });
+  head.appendChild(el("div","wk-gut")); ad.appendChild(el("div","wk-gut wk-adl","Journée"));
+  const gut = el("div","wk-gut wk-hours"); for (let h = WK_H0; h < WK_H1; h++) gut.appendChild(el("div","wk-h", h + " h")); grid.appendChild(gut);
+  days.forEach(k => { const d = parseISO(k);
+    const h = el("div","whead" + (k === t0 ? " today" : "")); h.append(el("b",null,String(d.getDate())), el("span",null,DAYS[(d.getDay()+6)%7])); h.style.cursor = "pointer"; h.onclick = () => { S.ui.agSel = k; S.ui.agView = "day"; remember(); render(); }; head.appendChild(h);
+    const a = el("div","wk-adc"); a.onclick = e => { if (e.target === a) newOnDay(k); }; agDropTarget(a, k); ad.appendChild(a);
+    const col = el("div","wk-col" + (k === t0 ? " today" : "")); col.style.height = ((WK_H1 - WK_H0) * WK_PX) + "px";
+    const its = map[k] || [], timed = its.filter(it => !it.multi && tmin(it.time) != null);
+    its.filter(it => !timed.includes(it)).forEach(it => a.appendChild(evNode(it, true)));
+    // Événements qui se chevauchent : côte à côte, comme Google Agenda
+    const evs = timed.map(it => { const st = tmin(it.time); return { it, s: st, e: st + Math.max(30, it.k === "events" ? evDur(it.ref) : 60) }; }).sort((x, y) => x.s - y.s || y.e - x.e);
+    let cl = [], lanes = [], clEnd = -1; const flush = () => { cl.forEach(x => { x.n = lanes.length; }); cl = []; lanes = []; clEnd = -1; };
+    evs.forEach(x => { if (cl.length && x.s >= clEnd) flush(); let l = lanes.findIndex(end => end <= x.s); if (l < 0){ l = lanes.length; lanes.push(x.e); } else lanes[l] = x.e; x.l = l; cl.push(x); clEnd = Math.max(clEnd, x.e); }); flush();
+    evs.forEach(x => { const top = Math.max(0, x.s - WK_H0 * 60), node = evNode(x.it, false); node.classList.add("wk-ev");
+      node.style.top = (top / 60 * WK_PX) + "px"; node.style.height = Math.max(20, (x.e - Math.max(x.s, WK_H0 * 60)) / 60 * WK_PX - 3) + "px";
+      node.style.left = "calc(" + (x.l * 100 / x.n) + "% + 2px)"; node.style.width = "calc(" + (100 / x.n) + "% - 4px)";
+      // Poignée en bas : étirer pour changer l'heure de fin
+      if (x.it.k === "events" && writable()){ const rs = el("div","wk-rs"); rs.title = "Étirer pour changer l’heure de fin"; node.appendChild(rs);
+        rs.onpointerdown = e => { e.preventDefault(); e.stopPropagation(); node.draggable = false; rs.setPointerCapture(e.pointerId); const y0 = e.clientY, d0 = x.e - x.s; let end = x.e;
+          const tm = node.querySelector(".tm");
+          rs.onpointermove = ev => { end = Math.max(x.s + 15, Math.min(WK_H1 * 60, x.s + Math.round((d0 + (ev.clientY - y0) / WK_PX * 60) / 15) * 15)); node.style.height = ((end - Math.max(x.s, WK_H0 * 60)) / 60 * WK_PX - 3) + "px"; if (tm) tm.textContent = fmtTime(x.it.time) + " – " + fmtTime(tstr(end)); };
+          rs.onpointerup = () => { rs.onpointermove = rs.onpointerup = null; node.draggable = true; if (end === x.e) return; x.it.ref.end = tstr(end); patch("events", x.it.ref.id, { end: tstr(end) }).then(() => toast("Fin à " + fmtTime(tstr(end)) + ".")).catch(() => render()); }; };
+        rs.onclick = e => e.stopPropagation(); }
+      col.appendChild(node); });
+    if (k === t0){ const now = new Date(), nm = now.getHours() * 60 + now.getMinutes() - WK_H0 * 60; if (nm >= 0 && nm <= (WK_H1 - WK_H0) * 60){ const ln = el("div","wk-now"); ln.style.top = (nm / 60 * WK_PX) + "px"; col.appendChild(ln); } }
+    // Tirer sur un créneau vide : nouvel événement de cette durée (un simple clic : une heure)
+    col.onpointerdown = e => { if (e.target !== col || e.button !== 0 || !writable()) return; e.preventDefault(); col.setPointerCapture(e.pointerId);
+      const a0 = Math.floor((wkMin(col, e.clientY, 0) - 0) / 15) * 15; let b0 = a0; const g = el("div","wk-ghost wk-new"); col.appendChild(g);
+      const show = () => { const lo = Math.min(a0, b0), hi = Math.max(a0, b0) + (b0 === a0 ? 60 : 15); g.style.top = ((lo - WK_H0 * 60) / 60 * WK_PX) + "px"; g.style.height = ((hi - lo) / 60 * WK_PX - 3) + "px"; g.textContent = fmtTime(tstr(lo)) + " – " + fmtTime(tstr(hi)); };
+      show(); col.onpointermove = ev => { b0 = wkMin(col, ev.clientY, 0); show(); };
+      col.onpointerup = () => { col.onpointermove = col.onpointerup = null; g.remove(); const lo = Math.min(a0, b0), hi = Math.max(a0, b0) + (b0 === a0 ? 60 : 15); newOnDay(k, tstr(lo), tstr(Math.min(hi, 23 * 60 + 45))); }; };
+    agDropTimed(col, k); grid.appendChild(col); });
+  body.appendChild(grid); sx.append(head, ad, body); root.appendChild(sx);
+  requestAnimationFrame(() => { body.scrollTop = (8 - WK_H0) * WK_PX; });
 }
 function lrow(i){
   const r = el("button","lrow"+(i.k === "events" ? " s-"+(i.ref.status||"Prévu") : "")); r.style.setProperty("--c", i.client ? colorOf(i.client) : "var(--muted)");
@@ -2076,7 +2150,7 @@ function lrow(i){
   r.appendChild(mid); r.appendChild(el("span","pill tag", i.tag || ""));
   r.onclick = () => openItem(i); return r;
 }
-function newOnDay(k, time){ if (!writable()) return; editEvent({date:k, time: time || "", client:S.ui.agClient||"", type: S.ui.agTypes.length === 1 ? S.ui.agTypes[0] : "Tournage", who: S.ui.agWho ? [S.ui.agWho] : [], status:"Prévu"}); }
+function newOnDay(k, time, end){ if (!writable()) return; editEvent({date:k, time: time || "", end: end || "", repeat:"none", reminder:"30", client:S.ui.agClient||"", type: S.ui.agTypes.length === 1 ? S.ui.agTypes[0] : "Tournage", who: S.ui.agWho ? [S.ui.agWho] : [], status:"Prévu"}); }
 /* Calendrier éditorial d'un client en PDF : une page A4 paysage par mois, aux couleurs de l'agence (impression du navigateur > Enregistrer en PDF) */
 function edPdf(y, m){
   const client = S.ui.agClient && S.ui.agClient !== AGENCE ? S.ui.agClient : "";
@@ -2113,12 +2187,14 @@ function vAgenda(root){
   let monday, sunday;
   if (v === "week"){ const base = parseISO(S.ui.agSel); monday = new Date(base); monday.setDate(base.getDate()-((base.getDay()+6)%7)); sunday = new Date(monday); sunday.setDate(monday.getDate()+6);
     title = [monday.getDate()+(monday.getMonth() !== sunday.getMonth() ? " "+MONTHS[monday.getMonth()].slice(0,4)+"." : "")+" au "+sunday.getDate(), MONTHS[sunday.getMonth()]]; }
-  const step = dir => { if (v === "week"){ S.ui.agSel = addDays(S.ui.agSel, 7*dir); const s = parseISO(S.ui.agSel); S.ui.agCursor = new Date(s.getFullYear(), s.getMonth(), 1); } else { S.ui.agCursor = new Date(y, m+dir, 1); const s = parseISO(S.ui.agSel); if (s.getMonth() !== S.ui.agCursor.getMonth() || s.getFullYear() !== S.ui.agCursor.getFullYear()) S.ui.agSel = iso(S.ui.agCursor); } render(); };
+  if (v === "day"){ const dd0 = parseISO(S.ui.agSel); title = [DAYS[(dd0.getDay()+6)%7] + " " + dd0.getDate(), MONTHS[dd0.getMonth()]]; }
+  const step = dir => { if (v === "week" || v === "day"){ S.ui.agSel = addDays(S.ui.agSel, (v === "day" ? 1 : 7)*dir); const s = parseISO(S.ui.agSel); S.ui.agCursor = new Date(s.getFullYear(), s.getMonth(), 1); } else { S.ui.agCursor = new Date(y, m+dir, 1); const s = parseISO(S.ui.agSel); if (s.getMonth() !== S.ui.agCursor.getMonth() || s.getFullYear() !== S.ui.agCursor.getFullYear()) S.ui.agSel = iso(S.ui.agCursor); } render(); };
   const prev = btn("‹","icon", () => step(-1)); prev.setAttribute("aria-label","Période précédente");
   const next = btn("›","icon", () => step(1)); next.setAttribute("aria-label","Période suivante");
   root.appendChild(head(title, "Agenda de l’agence", [prev, btn("Aujourd’hui","", () => { S.ui.agSel = t0; S.ui.agCursor = null; render(); }), next,
-    segm([["month","Mois"],["week","Semaine"],["list","Liste"]], v, x => { S.ui.agView = x; remember(); render(); }), btn("En tâches","", itemsToTasks), btn("PDF","", () => edPdf(y, m)), addBtn("Ajouter", () => newOnDay(S.ui.agSel))]));
+    segm([["day","Jour"],["week","Semaine"],["month","Mois"],["list","Liste"]], v, x => { S.ui.agView = x; remember(); render(); }), btn("En tâches","", itemsToTasks), btn("PDF","", () => edPdf(y, m)), btn("Google Agenda","", agIcsBox), addBtn("Ajouter", () => newOnDay(S.ui.agSel))]));
   root.lastChild.classList.add("ag-head");
+  AG_KEYS.step = step; AG_KEYS.today = () => { S.ui.agSel = t0; S.ui.agCursor = null; render(); };
   /* Filtres : quatre menus déroulants */
   const f = el("div","filters ag-f");
   const dd = (id, label, opts, val, on) => { const g = el("div","fgroup"); const lb = el("label","flabel",label); lb.htmlFor = id; const s = el("select","pick"); s.id = id;
@@ -2130,7 +2206,7 @@ function vAgenda(root){
   root.appendChild(f);
   // Afficher : liste à gauche du calendrier, comme « Mes agendas » dans Google Agenda (case de couleur, nombre d'éléments sur la période)
   { const lay = el("div","ag-lay"), side = el("aside","ag-side"), mainC = el("div","ag-main"); lay.append(side, mainC); root.appendChild(lay);
-    const from = v === "week" ? iso(monday) : iso(new Date(y, m, 1)), to = v === "week" ? iso(sunday) : iso(new Date(y, m + 1, 0));
+    const from = v === "week" ? iso(monday) : v === "day" ? S.ui.agSel : iso(new Date(y, m, 1)), to = v === "week" ? iso(sunday) : v === "day" ? S.ui.agSel : iso(new Date(y, m + 1, 0));
     const keepL = S.ui.agLayers, keepT = S.ui.agTypes; S.ui.agLayers = allL.slice(); S.ui.agTypes = EV_TYPES.slice();
     const every = agendaItems().filter(i => i.date >= from && i.date <= to); S.ui.agLayers = keepL; S.ui.agTypes = keepT;
     const nOf = key => every.filter(i => EV_TYPES.includes(key) ? i.k === "events" && i.ref && i.ref.type === key : i.k === key).length;
@@ -2151,7 +2227,7 @@ function vAgenda(root){
       b.onclick = () => toggle(key); b.onkeydown = e => { if (e.key === " " || e.key === "Enter"){ e.preventDefault(); toggle(key); } }; return b; };
     side.appendChild(el("div","ag-grp","Événements")); EV_TYPES.forEach(t => side.appendChild(row(t, t === "Tournage" ? "Tournages" : t)));
     side.appendChild(el("div","ag-grp","Autres")); LAYERS.filter(x => x[0] !== "events").forEach(([k, l]) => side.appendChild(row(k, l)));
-    side.appendChild(el("p","ag-per", (v === "week" ? "Nombres de la semaine" : "Nombres du mois")));
+    side.appendChild(el("p","ag-per", (v === "week" ? "Nombres de la semaine" : v === "day" ? "Nombres du jour" : "Nombres du mois")));
     root = mainC; }
   const items = agendaItems(); const map = {}; items.forEach(i => (map[i.date] = map[i.date] || []).push(i));
   if (v === "month"){
@@ -2176,28 +2252,9 @@ function vAgenda(root){
     const p = el("section","daypanel"); p.setAttribute("aria-live","polite"); p.appendChild(el("h2",null, fmtDL(S.ui.agSel)));
     const evs = map[S.ui.agSel] || []; if (!evs.length) p.appendChild(el("p","empty","Rien de prévu ce jour-là.")); evs.forEach(i => p.appendChild(lrow(i)));
     const a = addBtn("Ajouter ce jour-là", () => newOnDay(S.ui.agSel)); a.style.marginTop = "10px"; p.appendChild(a); root.appendChild(p);
-  } else if (v === "week"){
-    // Semaine avec les heures (7 h à 22 h), comme Google Agenda : ce qui a une heure est placé sur la grille, le reste dans « Journée »
-    const sx = el("div","tw wk2"); sx.style.borderTop = "0";
-    const head = el("div","wk-row wk-head"), ad = el("div","wk-row wk-ad"), body = el("div","wk-body"), grid = el("div","wk-row wk-grid");
-    head.appendChild(el("div","wk-gut")); ad.appendChild(el("div","wk-gut wk-adl","Journée"));
-    const gut = el("div","wk-gut wk-hours"); for (let h = WK_H0; h < WK_H1; h++) gut.appendChild(el("div","wk-h", h + " h")); grid.appendChild(gut);
-    for (let i = 0; i < 7; i++){ const d = new Date(monday); d.setDate(monday.getDate()+i); const k = iso(d);
-      const h = el("div","whead" + (k === t0 ? " today" : "")); h.append(el("b",null,String(d.getDate())), el("span",null,DAYS[i])); head.appendChild(h);
-      const a = el("div","wk-adc"); a.onclick = () => newOnDay(k); agDropTarget(a, k); ad.appendChild(a);
-      const col = el("div","wk-col" + (k === t0 ? " today" : "")); col.style.height = ((WK_H1 - WK_H0) * WK_PX) + "px";
-      const its = map[k] || [], timed = its.filter(it => /^\d{1,2}:\d{2}/.test(it.time || "")), byStart = {};
-      its.filter(it => !timed.includes(it)).forEach(it => a.appendChild(evNode(it, true)));
-      timed.forEach(it => { const [hh, mm] = it.time.split(":").map(Number), min = Math.max(0, Math.min((WK_H1 - WK_H0) * 60 - 30, hh * 60 + mm - WK_H0 * 60)), slot = Math.floor(min / 60);
-        const n = byStart[slot] = (byStart[slot] || 0) + 1, same = timed.filter(x => Math.floor(Math.max(0, Number(x.time.split(":")[0]) * 60 + Number(x.time.split(":")[1]) - WK_H0 * 60) / 60) === slot).length;
-        const node = evNode(it, false); node.classList.add("wk-ev"); node.style.top = (min / 60 * WK_PX) + "px"; node.style.height = (WK_PX - 3) + "px";
-        node.style.left = "calc(" + ((n - 1) * 100 / same) + "% + 2px)"; node.style.width = "calc(" + (100 / same) + "% - 4px)"; col.appendChild(node); });
-      if (k === t0){ const now = new Date(), nm = now.getHours() * 60 + now.getMinutes() - WK_H0 * 60; if (nm >= 0 && nm <= (WK_H1 - WK_H0) * 60){ const ln = el("div","wk-now"); ln.style.top = (nm / 60 * WK_PX) + "px"; col.appendChild(ln); } }
-      // Clic sur un créneau vide : nouvel événement à cette heure ; dépôt : nouvelle date et nouvelle heure
-      col.onclick = e => { if (e.target !== col) return; newOnDay(k, wkTimeAt(col, e.clientY, 0)); };
-      agDropTimed(col, k); grid.appendChild(col); }
-    body.appendChild(grid); sx.append(head, ad, body); root.appendChild(sx);
-    requestAnimationFrame(() => { body.scrollTop = (8 - WK_H0) * WK_PX; });
+  } else if (v === "week" || v === "day"){
+    const days = v === "day" ? [S.ui.agSel] : Array.from({ length: 7 }, (_, i) => { const d = new Date(monday); d.setDate(monday.getDate() + i); return iso(d); });
+    agTimeGrid(root, days, map, t0);
   } else {
     const from = iso(new Date(y, m, 1)), to = iso(new Date(y, m+1, 0));
     const days = Object.keys(map).filter(k => k >= from && k <= to).sort();
@@ -4439,7 +4496,31 @@ render();
     }, err => { /* coupure passagère : le bandeau « Hors connexion » s'affiche et la synchro reprend seule */ });
   });
   setTimeout(() => { if (!S.ready){ S.ready = true; renderSoon(); } }, 8000);
+
 })();
+/* Agenda : raccourcis clavier comme Google Agenda (J jour, S ou W semaine, M mois, L liste, T aujourd'hui, flèches ou N/P et J/K pour avancer et reculer, C créer) */
+const AG_KEYS = {};
+document.addEventListener("keydown", e => {
+  if (S.view !== "agenda" || e.metaKey || e.ctrlKey || e.altKey || document.querySelector("#overlay.open")) return;
+  const t = e.target; if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
+  const k = e.key.toLowerCase(), view = x => { S.ui.agView = x; remember(); render(); };
+  if (k === "d") view("day"); else if (k === "w" || k === "s") view("week"); else if (k === "m") view("month"); else if (k === "l" || k === "a") view("list");
+  else if (k === "t") AG_KEYS.today && AG_KEYS.today();
+  else if (k === "n" || k === "j" || e.key === "ArrowRight") AG_KEYS.step && AG_KEYS.step(1);
+  else if (k === "p" || k === "k" || e.key === "ArrowLeft") AG_KEYS.step && AG_KEYS.step(-1);
+  else if (k === "c") newOnDay(S.ui.agSel);
+  else return; e.preventDefault();
+});
+/* Abonnement à l'agenda de l'appli dans Google Agenda (ou Calendrier d'Apple) : adresse personnelle et secrète */
+async function agIcsBox(){
+  let url = ""; try { url = (await GC.api("GET","/api/g-ics-url")).url; } catch(e){ toast(e.message); return; }
+  openModal(m => { const h = el("h3", null, "Voir l’agenda dans Google Agenda"); h.id = "mtitle"; m.appendChild(h);
+    m.appendChild(el("p","muted","Les événements de l’appli apparaissent dans ton Google Agenda (ordinateur et téléphone), avec ses rappels. Google relit l’adresse plusieurs fois par jour : un changement peut mettre quelques heures à y arriver. On modifie toujours dans l’appli."));
+    const i = el("input"); i.type = "text"; i.readOnly = true; i.value = url; i.style.width = "100%"; i.onclick = () => i.select(); m.appendChild(i);
+    const ol = el("ol","muted"); ["Copie l’adresse ci-dessus.", "Google Agenda sur ordinateur : à gauche, « Autres agendas » > « + » > « À partir de l’URL ».", "Colle l’adresse, puis « Ajouter l’agenda »."].forEach(x => ol.appendChild(el("li", null, x))); m.appendChild(ol);
+    m.appendChild(el("p","note","Adresse personnelle : ne la partage pas (elle donne à lire l’agenda de l’agence)."));
+    const a = el("div","actions"); a.append(btn("Fermer","", closeModal), btn("Copier l’adresse","lemon", async () => { try { await navigator.clipboard.writeText(url); toast("Adresse copiée."); } catch(x){ i.select(); document.execCommand("copy"); toast("Adresse copiée."); } })); m.appendChild(a); });
+}
 })();
 // Téléphone : clavier ouvert dans la messagerie, la conversation se cale sur la zone visible au-dessus du clavier (en-tête gardé, pas de vide)
 (function(){ const vv = window.visualViewport; if (!vv) return; let raf = 0;
@@ -4450,3 +4531,4 @@ render();
   const ask = () => { if (!raf) raf = requestAnimationFrame(fit); };
   vv.addEventListener("resize", ask); vv.addEventListener("scroll", ask); document.addEventListener("focusin", () => setTimeout(ask, 50)); document.addEventListener("focusout", () => setTimeout(ask, 50));
 })();
+

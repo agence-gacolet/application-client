@@ -2199,7 +2199,7 @@ body.kb .mtabs{display:none}
 .wk-adc{border-left:1px solid var(--line);padding:4px;display:flex;flex-direction:column;gap:3px;min-width:0;cursor:pointer}
 .wk-body{max-height:min(70vh,760px);overflow:auto;position:relative;scrollbar-gutter:stable}
 /* Même réserve pour la barre de défilement en haut : les colonnes de l'en-tête tombent pile sur celles de la grille */
-.wk-head,.wk-ad{overflow-y:hidden;scrollbar-gutter:stable}
+.wk-head,.wk-ad{overflow:hidden;scrollbar-gutter:stable}
 .wk-head .whead{border-left:1px solid var(--line)}
 .wk-hours .wk-h{height:52px;font-size:11px;color:var(--muted);text-align:right;padding-right:6px;transform:translateY(-6px)}
 .wk-col{position:relative;border-left:1px solid var(--line);background-image:repeating-linear-gradient(to bottom,transparent 0,transparent 51px,var(--line) 51px,var(--line) 52px);cursor:pointer}
@@ -2232,3 +2232,15 @@ body.kb .mtabs{display:none}
 .ag-it:hover .ag-only{display:block}.ag-it:hover .ag-n{visibility:hidden}
 .ag-per{margin:12px 8px 0;font-size:11px;color:var(--muted)}
 @media (max-width:900px){.ag-lay{grid-template-columns:minmax(0,1fr);gap:10px}.ag-side{position:static;flex-direction:row;flex-wrap:nowrap;overflow-x:auto;gap:6px;padding-bottom:4px}.ag-sh,.ag-grp,.ag-per{display:none}.ag-it{flex:none;border:1px solid var(--line-2);padding:6px 10px}.ag-only{display:none!important}.ag-it:hover .ag-n{visibility:visible}}
+
+/* Agenda : durée, étirement, création en glissant, plusieurs jours, répétition, vue Jour */
+.wk-rs{position:absolute;left:0;right:0;bottom:0;height:7px;cursor:ns-resize;z-index:2}
+.wk-rs::after{content:"";position:absolute;left:50%;bottom:2px;width:18px;height:3px;margin-left:-9px;border-radius:2px;background:currentColor;opacity:0;transition:opacity .12s}
+.wk-ev:hover .wk-rs::after{opacity:.5}
+.wk-new{background:rgba(198,255,51,.22);border-style:solid}
+.wk-col{touch-action:none}
+.wk-day .wk-col{background-color:transparent}
+.ev.multi{border-radius:0}.ev.multi.mstart{border-top-left-radius:6px;border-bottom-left-radius:6px}.ev.multi.mend{border-top-right-radius:6px;border-bottom-right-radius:6px}
+.ev.multi:not(.mstart){margin-left:-9px}.ev.multi:not(.mend){margin-right:-9px}
+.wk-adc .ev.multi:not(.mstart){margin-left:-5px}.wk-adc .ev.multi:not(.mend){margin-right:-5px}.ev.multi:not(.mstart) .tx,.ev.multi:not(.mstart) .tm{visibility:hidden}
+.ev.rec .tx::after{content:" ↻";opacity:.7}
