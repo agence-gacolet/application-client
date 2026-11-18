@@ -4403,6 +4403,14 @@ function editCode(x){
     const known = (S.brands || []).find(y => norm(y.name) === norm(x.name));
     const iB = fld("Marque Metricool (numéro)", Object.assign(el("input"), { value: x.metricool_blog_id || (known ? known.blog : ""), inputMode: "numeric", placeholder: "Ex. 6875110" }), true);
     { const dl = el("datalist"); dl.id = "cd-brands"; (S.brands || []).forEach(y => { const o = el("option"); o.value = y.blog; o.label = y.name; dl.appendChild(o); }); f.appendChild(dl); iB.setAttribute("list","cd-brands"); }
+    // Tableau de suivi Meta (Google Sheets) du client : choisi ici, à côté de sa marque Metricool
+    const iS = el("select"); { const o0 = el("option", null, S.gs ? "Aucun" : "Lecture des tableaux…"); o0.value = ""; iS.appendChild(o0); }
+    const fillSheets = () => { const files = Object.entries(((S.gs || {}).cfg || {}).files || {}).filter(([, v]) => !v.off).sort((a, b) => String(a[1].name).localeCompare(String(b[1].name), "fr"));
+      [...iS.options].slice(1).forEach(o => o.remove()); iS.options[0].textContent = "Aucun";
+      files.forEach(([id, v]) => { const o = el("option", null, v.name + (v.client && norm(v.client) !== norm(x.name || "") ? " (relié à " + v.client + ")" : "")); o.value = id; iS.appendChild(o); });
+      const mine = files.find(([, v]) => v.client && norm(v.client) === norm(x.name || "")); iS.value = mine ? mine[0] : ""; iS.dataset.was = iS.value; };
+    if (S.gs) fillSheets(); else GC.api("GET","/api/g-gsheets").then(r => { S.gs = r; fillSheets(); }).catch(() => {});
+    fld("Tableau de suivi Meta (Google Sheets)", iS, true);
     const iG = fld("Objectif de contacts par mois (Meta)", Object.assign(el("input"), { type: "number", min: 0, value: x.contacts_goal || "" }), true);
     const iA = el("select"); [["1","Actif"],["0","Désactivé"]].forEach(([v,l]) => { const o = el("option",null,l); o.value = v; iA.appendChild(o); }); iA.value = x.active === 0 ? "0" : "1"; if (!isNew) fld("Accès", iA, true);
     const iQ = fld("Définition écrite du contact qualifié (Meta)", Object.assign(el("textarea"), { rows: 3, value: x.qualified_definition || "" }));
@@ -4426,7 +4434,9 @@ function editCode(x){
       // Les services cochés sont repris dans la fiche du client (Tableau clients), dates « Depuis le » gardées
       if (fc && pk.join() !== Object.keys(sv0).filter(k => SV_KEYS.includes(k)).sort((a, b) => SV_KEYS.indexOf(a) - SV_KEYS.indexOf(b)).join()){
         const services = {}; pk.forEach(k => { services[k] = sv0[k] || ""; }); try { await save("clients", fc.id, { services }, { merge: true }); } catch(e){ if (e.message !== "ro") toast(e.message); } }
-      try { if (isNew){ const r = await GC.api("POST","/api/g-codes", body); toast("Code créé : " + r.code); copyCode(r.code); } else { body.active = iA.value === "1"; await GC.api("PATCH","/api/g-codes/" + x.id, body); toast("Client enregistré."); } closeModal(); reloadCodes(); loadCgroups(); S.meta = null; if (pre) setTimeout(() => espAfter(body.name, pre), 400); else S.esp = null; } catch(e){ toast(e.message); } }));
+      try { if (isNew){ const r = await GC.api("POST","/api/g-codes", body); toast("Code créé : " + r.code); copyCode(r.code); } else { body.active = iA.value === "1"; await GC.api("PATCH","/api/g-codes/" + x.id, body); toast("Client enregistré."); }
+        // Tableau de suivi : l'ancien est détaché, le nouveau relié à ce client (recopié au prochain envoi du script)
+        if (iS.value !== (iS.dataset.was || "")){ try { if (iS.dataset.was) await GC.api("PUT","/api/g-gsheets/file/" + iS.dataset.was, { client: "" }); if (iS.value) await GC.api("PUT","/api/g-gsheets/file/" + iS.value, { client: body.name }); S.gs = null; } catch(e){ toast("Tableau de suivi : " + e.message); } } closeModal(); reloadCodes(); loadCgroups(); S.meta = null; if (pre) setTimeout(() => espAfter(body.name, pre), 400); else S.esp = null; } catch(e){ toast(e.message); } }));
     m.appendChild(act);
   });
 }
