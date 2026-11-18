@@ -2187,3 +2187,6 @@ body.kb .mtabs{display:none}
 .cl-vdt{flex:1;margin:0;overflow:auto;-webkit-overflow-scrolling:touch;font-size:20px;line-height:1.5;color:var(--ink);white-space:pre-line;max-width:720px;width:100%;align-self:center}
 @keyframes cl-vd{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.cl-vdesc{animation:none}}
+
+/* Agenda : glisser un événement sur un autre jour */
+.ev[draggable=true]{cursor:grab}.ev.dragging{opacity:.4}.ag-dragging .day,.ag-dragging .wcol{transition:background .12s}.day.drop-on,.wcol.drop-on{background:rgba(198,255,51,.10)!important;outline:2px dashed rgba(198,255,51,.6);outline-offset:-3px}

@@ -355,7 +355,8 @@ function openEvent(e){
   const d = e.date;
   openFacts({ title: e.title || e.type, client: e.client,
     facts: [["Date", fmtDL(d)+" "+(d||"").slice(0,4)+(e.time ? ", "+fmtTime(e.time) : "")],["Type", e.type],["Qui",(e.who||[]).join(", ")],["Statut", e.status||"Prévu"],["Lieu", e.place],["Note", e.note],["Fichiers", filesList(e.files)]],
-    quick: [["Passer en Fait", () => patch("events", e.id, {status:"Fait"}).then(closeModal)],["Passer en Annulé", () => patch("events", e.id, {status:"Annulé"}).then(closeModal)]],
+    quick: [["Passer en Fait", () => patch("events", e.id, {status:"Fait"}).then(closeModal)],["Passer en Annulé", () => patch("events", e.id, {status:"Annulé"}).then(closeModal)],
+      ["Supprimer", () => { if (!confirm("Supprimer « " + (e.title || e.type) + " » du " + fmtDL(e.date) + " ? Il disparaît pour toute l’équipe.")) return; remove("events", e.id).then(closeModal).catch(() => {}); }]],
     onEdit: () => editEvent(e) });
 }
 function editEvent(e){
@@ -1728,10 +1729,10 @@ function prodDrop(clients, host, opts){ opts = opts || {};
   // Une fenêtre par production : ouverte depuis sa vignette, elle ne montre et n'envoie que ce fichier
   const only = opts.only || "", shown = () => only ? items.filter(x => x.id === only) : items;
   const VERB = () => ({ draft: "Mettre en brouillon", review: "Envoyer en validation", publish: "Programmer" })[mode];
-  const NETL = { instagram: "Instagram", facebook: "Facebook", tiktok: "TikTok", linkedin: "LinkedIn", youtube: "YouTube" };
+  const NETL = { instagram: "Instagram", facebook: "Facebook", tiktok: "TikTok", linkedin: "LinkedIn", youtube: "YouTube" }, ALLN = Object.keys(NETL);
   const netsFor = c => ((S.pdNets || {})[c] || []).length ? S.pdNets[c] : ["instagram","facebook"];
   let defType = ["post","reel","story"].includes(S.ui.prodType) ? S.ui.prodType : "reel", defDraw = () => {};
-  const defNets = () => { const ok = netsFor(client), saved = ((S.ui.prodNets || {})[client] || []).filter(n => ok.includes(n)); if (saved.length) return saved; const igfb = ok.filter(n => n === "instagram" || n === "facebook"); return igfb.length ? igfb : ok.slice(); };
+  const defNets = () => { const ok = netsFor(client), saved = ((S.ui.prodNets || {})[client] || S.ui.prodNetsAll || []).filter(n => ok.includes(n)); if (saved.length) return saved; const igfb = ok.filter(n => n === "instagram" || n === "facebook"); return igfb.length ? igfb : ok.slice(); };
   GC.api("GET","/api/g-prod/status").then(r => { status = r; draw(); }).catch(() => {});
   let m0; PD.redraw = () => { if (!m0 || !document.body.contains(m0)) { PD.redraw = null; return false; } draw(); return true; };
   const draw = () => { if (!m0) return; PD.save(); const body = m0.querySelector(".pd-body"); body.textContent = "";
@@ -1748,9 +1749,9 @@ function prodDrop(clients, host, opts){ opts = opts || {};
       const tsel = el("select","pd-type"); [["post","Publication"],["reel","Réel"],["story","Story"]].forEach(([v, l]) => { if (v === "reel" && it.kind !== "video") return; const o = el("option", null, l); o.value = v; tsel.appendChild(o); });
       tsel.value = it.type; tsel.onchange = () => { it.type = tsel.value; PD.save(); draw(); }; meta.appendChild(tsel);
       const NL = NETL;
-      const nw = el("div","pd-nets"); okN.forEach(n => { const off = (it.type === "story" && n !== "instagram" && n !== "facebook") || (n === "youtube" && it.kind !== "video");
+      const nw = el("div","pd-nets"); ALLN.forEach(n => { const off = !okN.includes(n) || (it.type === "story" && n !== "instagram" && n !== "facebook") || (n === "youtube" && it.kind !== "video");
         const lb = el("label","pd-net" + (off ? " off" : "")); const cb = el("input"); cb.type = "checkbox"; cb.checked = !off && it.nets.includes(n); cb.disabled = off;
-        cb.onchange = () => { it.nets = cb.checked ? [...new Set(it.nets.concat(n))] : it.nets.filter(x => x !== n); PD.save(); }; lb.append(cb, document.createTextNode(" " + NL[n])); if (off) lb.title = it.type === "story" ? "La story n’existe que sur Instagram et Facebook" : "YouTube : vidéo seulement"; nw.appendChild(lb); });
+        cb.onchange = () => { it.nets = cb.checked ? [...new Set(it.nets.concat(n))] : it.nets.filter(x => x !== n); PD.save(); }; lb.append(cb, document.createTextNode(" " + NL[n])); if (off) lb.title = !okN.includes(n) ? "Pas relié à la marque Metricool de ce client" : it.type === "story" ? "La story n’existe que sur Instagram et Facebook" : "YouTube : vidéo seulement"; nw.appendChild(lb); });
       meta.appendChild(nw);
       const del = btn("Supprimer","sm rmb", async () => { del.disabled = true; try { if (await pdDelete(client, it)) draw(); else del.disabled = false; } catch(e){ toast(e.message); del.disabled = false; } });
       del.title = "Effacer ce fichier du dépôt et du serveur"; const bb = el("div","pd-bb"); bb.append(del); meta.appendChild(bb); top.appendChild(meta); const L = el("div","pd-l"), Rr = el("div","pd-r"); c.append(L, Rr); L.appendChild(top);
@@ -1796,10 +1797,11 @@ function prodDrop(clients, host, opts){ opts = opts || {};
       const tseg = segm([["post","Publication"],["reel","Réel"],["story","Story"]], defType, v => { defType = v; S.ui.prodType = v; remember();
         shown().forEach(x => { x.type = v === "reel" && x.kind !== "video" ? "post" : v; }); defDraw(); draw(); }); tl.appendChild(tseg);
       tl.appendChild(el("div","flabel pd-defn","Réseaux"));
-      if (!client){ tl.appendChild(el("p","note","Choisis d’abord le client : les réseaux reliés à sa marque Metricool s’affichent ici.")); return; }
-      const okN = netsFor(client), cur = defNets(), nw = el("div","pd-nets");
-      okN.forEach(n => { const off = defType === "story" && n !== "instagram" && n !== "facebook"; const lb = el("label","pd-net" + (off ? " off" : "")); const cb = el("input"); cb.type = "checkbox"; cb.checked = !off && cur.includes(n); cb.disabled = off;
-        cb.onchange = () => { const next = cb.checked ? [...new Set(cur.concat(n))] : cur.filter(x => x !== n); S.ui.prodNets = Object.assign({}, S.ui.prodNets, { [client]: next }); remember(); shown().forEach(x => { x.nets = next.slice(); }); defDraw(); draw(); };
+      // Tous les réseaux toujours affichés ; ceux qui ne sont pas reliés à la marque du client sont grisés
+      const okN = client ? netsFor(client) : ALLN, cur = client ? defNets() : (S.ui.prodNetsAll || ["instagram","facebook"]), nw = el("div","pd-nets");
+      ALLN.forEach(n => { const nolink = !okN.includes(n), off = nolink || (defType === "story" && n !== "instagram" && n !== "facebook"); const lb = el("label","pd-net" + (off ? " off" : "")); const cb = el("input"); cb.type = "checkbox"; cb.checked = !off && cur.includes(n); cb.disabled = off;
+        if (off) lb.title = nolink ? "Pas relié à la marque Metricool de ce client" : "La story n’existe que sur Instagram et Facebook";
+        cb.onchange = () => { const next = cb.checked ? [...new Set(cur.concat(n))] : cur.filter(x => x !== n); if (client) S.ui.prodNets = Object.assign({}, S.ui.prodNets, { [client]: next }); else S.ui.prodNetsAll = next; remember(); shown().forEach(x => { x.nets = next.slice(); }); defDraw(); draw(); };
         lb.append(cb, document.createTextNode(" " + NETL[n])); nw.appendChild(lb); });
       tl.appendChild(nw); if (defType === "story") tl.appendChild(el("p","note","Story : Instagram et Facebook seulement, publiée sans texte.")); };
     defDraw();
@@ -2036,7 +2038,20 @@ function evNode(i, compact){
   if (!compact && i.client) b.appendChild(el("span","tx", i.label));
   b.title = [i.client, i.label, i.meta, i.who.join(", ")].filter(Boolean).join("\n");
   b.onclick = e => { e.stopPropagation(); openItem(i); };
+  // Glisser-déposer sur un autre jour (comme Google Agenda) : événements, tâches, temps forts, posts de l'agence
+  if (AG_MOVE.includes(i.k) && i.ref && i.ref.id && writable()){ b.draggable = true;
+    b.ondragstart = e => { AGDRAG = i; e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", i.ref.id); } catch(x){} b.classList.add("dragging"); document.body.classList.add("ag-dragging"); };
+    b.ondragend = () => { AGDRAG = null; b.classList.remove("dragging"); document.body.classList.remove("ag-dragging"); document.querySelectorAll(".drop-on").forEach(x => x.classList.remove("drop-on")); }; }
   return b;
+}
+const AG_MOVE = ["events","tasks","cevents","posts"]; let AGDRAG = null;
+// Une case jour (mois) ou une colonne (semaine) accepte un élément glissé : il prend cette date, l'heure ne change pas
+function agDropTarget(node, k){
+  node.addEventListener("dragover", e => { if (!AGDRAG) return; e.preventDefault(); e.dataTransfer.dropEffect = "move"; node.classList.add("drop-on"); });
+  node.addEventListener("dragleave", e => { if (!node.contains(e.relatedTarget)) node.classList.remove("drop-on"); });
+  node.addEventListener("drop", e => { if (!AGDRAG) return; e.preventDefault(); e.stopPropagation(); node.classList.remove("drop-on"); const it = AGDRAG; AGDRAG = null;
+    if (it.date === k) return; it.ref.date = k; render();
+    patch(it.k, it.ref.id, { date: k }).then(() => toast("Déplacé au " + fmtDL(k) + ".")).catch(() => { render(); }); });
 }
 function lrow(i){
   const r = el("button","lrow"+(i.k === "events" ? " s-"+(i.ref.status||"Prévu") : "")); r.style.setProperty("--c", i.client ? colorOf(i.client) : "var(--muted)");
@@ -2129,7 +2144,7 @@ function vAgenda(root){
       const dots = el("div","dots"); evs.forEach(i => { const dt = el("span","dot"); dt.style.setProperty("--c", i.client ? colorOf(i.client) : "var(--muted)"); dots.appendChild(dt); }); cell.appendChild(dots);
       const pick = () => { if (window.matchMedia("(max-width:760px)").matches){ S.ui.agSel = k; render(); } else newOnDay(k); };
       cell.onclick = pick; cell.onkeydown = e => { if (e.key === "Enter" || e.key === " "){ e.preventDefault(); pick(); } };
-      g.appendChild(cell);
+      agDropTarget(cell, k); g.appendChild(cell);
     }
     root.append(dw, g);
     const p = el("section","daypanel"); p.setAttribute("aria-live","polite"); p.appendChild(el("h2",null, fmtDL(S.ui.agSel)));
@@ -2140,7 +2155,7 @@ function vAgenda(root){
     for (let i = 0; i < 7; i++){ const d = new Date(monday); d.setDate(monday.getDate()+i); const k = iso(d);
       const col = el("div","wcol"); if (k === t0) col.classList.add("today");
       const h = el("div","whead"); h.append(el("b",null,String(d.getDate())), el("span",null,DAYS[i])); col.appendChild(h);
-      (map[k]||[]).forEach(it => col.appendChild(evNode(it, false))); col.onclick = () => newOnDay(k); w.appendChild(col); }
+      (map[k]||[]).forEach(it => col.appendChild(evNode(it, false))); col.onclick = () => newOnDay(k); agDropTarget(col, k); w.appendChild(col); }
     sx.appendChild(w); root.appendChild(sx);
   } else {
     const from = iso(new Date(y, m, 1)), to = iso(new Date(y, m+1, 0));
