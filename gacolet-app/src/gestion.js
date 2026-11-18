@@ -1041,11 +1041,15 @@ module.exports = function (app, { db, wrap, root }) {
   // Le fichier n'est rendu qu'une fois tous les morceaux arrivés. Plusieurs fois plus rapide qu'un morceau après l'autre sur une connexion lente.
   const gotOf = id => path.join(DIR, id + ".got");
   const readGot = id => { try { return JSON.parse(fs.readFileSync(gotOf(id), "utf8")); } catch (e) { return null; } };
-  app.get("/api/g-upload-par/:id", auth, (req, res) => {
+  function parGot(req, res) {
     const id = String(req.params.id); if (!/^[a-f0-9]{32}$/.test(id)) return res.status(400).json({ error: "Envoi inconnu." });
     const g = readGot(id); res.json({ parts: g ? Object.keys(g.parts).map(Number) : [] });
-  });
-  app.post("/api/g-upload-par/:id", auth, (req, res, next) => { UPLOADS++; let d = false; const end = () => { if (!d) { d = true; UPLOADS--; } }; res.on("finish", end); res.on("close", end); next(); }, rawBody, (req, res) => {
+  }
+  function parCount(req, res, next) { UPLOADS++; let d = false; const end = () => { if (!d) { d = true; UPLOADS--; } }; res.on("finish", end); res.on("close", end); next(); }
+  app.get("/api/g-upload-par/:id", auth, parGot);
+  app.post("/api/g-upload-par/:id", auth, parCount, rawBody, parPut);
+  // Mêmes envois par morceaux pour l'espace client (photos et vidéos d'origine, jusqu'à 2 Go) : routes /api/c/upload-par plus bas
+  function parPut(req, res) {
     const id = String(req.params.id), off = Number(req.query.off), total = Number(req.query.total);
     const ext = String(req.query.ext || "").toLowerCase().replace(/[^.a-z0-9]/g, "").slice(0, 8), type = String(req.query.type || "").slice(0, 100);
     if (!/^[a-f0-9]{32}$/.test(id) || !Number.isInteger(off) || off < 0 || !Number.isInteger(total) || total <= 0 || total > 2 * 1024 * 1024 * 1024 || !Buffer.isBuffer(req.body) || off + req.body.length > total) return res.status(400).json({ error: "Morceau invalide." });
@@ -1059,8 +1063,8 @@ module.exports = function (app, { db, wrap, root }) {
     let at = 0; for (const o of Object.keys(g.parts).map(Number).sort((x, y) => x - y)) { if (o !== at) return res.status(409).json({ error: "Morceau manquant.", got }); at += g.parts[o]; }
     if (at !== total) return res.status(409).json({ error: "Morceau manquant.", got });
     const name = id + (ext && ext !== "." ? ext : ""); fs.renameSync(f, path.join(DIR, name)); try { fs.unlinkSync(gotOf(id)); } catch (e) {}
-    res.json({ got, id: name, url: "/f/" + name, contentType: type, sizeBytes: total });
-  });
+    res.json({ got, id: name, url: "/f/" + name, contentType: type, sizeBytes: total, name: String(req.query.name || "").slice(0, 160), type, size: total });
+  }
   // Morceaux abandonnés depuis plus de 2 jours : supprimés
   setInterval(() => { try { const lim = Date.now() - 2 * 86400000; fs.readdirSync(DIR).filter(n => n.endsWith(".part") || n.endsWith(".got")).forEach(n => { const p = path.join(DIR, n); if (fs.statSync(p).mtimeMs < lim) fs.unlinkSync(p); }); } catch (e) {} }, 6 * 3600000).unref();
   app.get("/f/:name", (req, res) => {
@@ -1407,6 +1411,8 @@ module.exports = function (app, { db, wrap, root }) {
     await db.run("UPDATE docs SET deleted = 1, data = '{}', updated_at = ? WHERE col = ? AND id = ?", [stamp(), "idees", id]);
     res.json({ ok: true });
   }));
+  app.get("/api/c/upload-par/:id", cauth, parGot);
+  app.post("/api/c/upload-par/:id", cauth, parCount, rawBody, parPut);
   app.post("/api/c/upload", cauth, up.single("file"), (req, res) => {
     const f = req.file;
     if (!f) return res.status(400).json({ error: "Aucun fichier reçu." });

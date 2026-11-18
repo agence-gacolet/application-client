@@ -2425,7 +2425,7 @@ async function addFiles(ch, list){
   if (!S.assets){ toast("Envoi de fichiers indisponible."); return; }
   if (PENDING.ch !== ch) PENDING = { ch, files: [], busy: 0 };
   for (const file of list){
-    if (file.size > 300 * 1048576){ toast(file.name + " dépasse 300 Mo."); continue; }
+    if (file.size > 2048 * 1048576){ toast(file.name + " dépasse 2 Go."); continue; }
     const item = { name: file.name, type: file.type, size: file.size, url: "", local: (isImg(file) ? URL.createObjectURL(file) : "") };
     PENDING.files.push(item); PENDING.busy++; render();
     try { const r = await S.assets.upload(file); item.url = r.url; item.type = r.contentType || file.type; item.size = r.sizeBytes || file.size; }

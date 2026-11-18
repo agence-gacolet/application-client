@@ -88,14 +88,31 @@ async function api(path, opt = {}){
   if (!r.ok) throw new Error(j.error || "Une erreur est survenue.");
   return j;
 }
+// Envoi d'un fichier tel quel (aucune recompression, qualité d'origine) ; au-delà de 8 Mo : morceaux de 8 Mo, 4 à la fois,
+// chaque morceau renvoyé seul si la connexion coupe (jusqu'à 2 Go)
 function uploadFile(file, onProgress){
-  return new Promise((res, rej) => {
+  const SZ = 8 * 1024 * 1024;
+  if (file.size > 2 * 1024 * 1024 * 1024) return Promise.reject(new Error("Fichier trop lourd (2 Go au plus)."));
+  if (file.size <= SZ) return new Promise((res, rej) => {
     const x = new XMLHttpRequest(); x.open("POST", "/api/c/upload"); if (TOKEN) x.setRequestHeader("Authorization", "Bearer " + TOKEN);
     x.upload.onprogress = e => { if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total); };
     x.onload = () => { let j = {}; try { j = JSON.parse(x.responseText); } catch(e){} x.status === 200 ? res(j) : rej(new Error(j.error || "Envoi impossible.")); };
     x.onerror = () => rej(new Error("Envoi impossible : vérifiez la connexion."));
     const fd = new FormData(); fd.append("file", file); x.send(fd);
   });
+  const id = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, "0")).join("");
+  const ext = ((file.name.match(/\.[a-z0-9]{1,7}$/i) || [""])[0]).toLowerCase(), q = "&total=" + file.size + "&ext=" + encodeURIComponent(ext) + "&type=" + encodeURIComponent(file.type || "") + "&name=" + encodeURIComponent(file.name || "");
+  const offs = []; for (let o = 0; o < file.size; o += SZ) offs.push(o);
+  const loaded = {}, prog = () => { if (onProgress) onProgress(Math.min(0.999, Object.values(loaded).reduce((a, n) => a + n, 0) / file.size)); };
+  const part = off => new Promise((res, rej) => { const x = new XMLHttpRequest(); x.open("POST", "/api/c/upload-par/" + id + "?off=" + off + q); if (TOKEN) x.setRequestHeader("Authorization", "Bearer " + TOKEN);
+    x.upload.onprogress = e => { loaded[off] = e.loaded; prog(); };
+    x.onload = () => { let j = {}; try { j = JSON.parse(x.responseText); } catch(e){} if (x.status === 200){ loaded[off] = Math.min(SZ, file.size - off); prog(); res(j); } else rej(Object.assign(new Error(j.error || "Envoi impossible."), { status: x.status })); };
+    x.onerror = () => rej(new Error("Connexion coupée.")); x.send(file.slice(off, off + SZ)); });
+  let result = null, fatal = null; const todo = offs.slice();
+  const one = async off => { for (let fails = 0; ; ){ try { const r = await part(off); if (r.url) result = r; return; } catch(e){ if (e.status === 400 || e.status === 401 || ++fails > 30) throw e; loaded[off] = 0; await new Promise(ok => setTimeout(ok, Math.min(30000, 1500 * fails))); } } };
+  const worker = async () => { while (todo.length && !fatal){ const off = todo.shift(); try { await one(off); } catch(e){ fatal = e; } } };
+  return Promise.all([worker(), worker(), worker(), worker()]).then(() => { if (fatal) throw fatal; if (!result) throw new Error("Envoi incomplet, recommencez."); if (onProgress) onProgress(1);
+    return { url: result.url, name: file.name, type: file.type || result.contentType, size: file.size }; });
 }
 
 /* ---------- État ---------- */
@@ -410,7 +427,7 @@ function attachEl(f){
 }
 function addFiles(slot, list){
   [...list].forEach(file => {
-    if (file.size > 300 * 1024 * 1024){ toast(file.name + " dépasse 300 Mo."); return; }
+    if (file.size > 2 * 1024 * 1024 * 1024){ toast(file.name + " dépasse 2 Go."); return; }
     const it = { name: file.name, type: file.type, size: file.size, pct: 0, local: isImg(file) ? URL.createObjectURL(file) : "" };
     S.pend[slot].push(it); render();
     uploadFile(file, p => { it.pct = p; const b = document.querySelector('[data-up="' + slot + S.pend[slot].indexOf(it) + '"]'); if (b) b.textContent = Math.round(p * 100) + " %"; })
@@ -560,7 +577,7 @@ function vIdees(root){
   const fi = el("input"); fi.type = "file"; fi.multiple = true; fi.hidden = true; fi.accept = "image/*,video/*"; fi.onchange = () => { addFiles("idee", fi.files); fi.value = ""; };
   const zone = el("button","cl-zone"); zone.type = "button";
   zone.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V5M7.5 9.5 12 5l4.5 4.5M5 15v3.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V15"/></svg>';
-  zone.appendChild(el("span",null,"Ajouter des photos ou des vidéos")); zone.appendChild(el("small",null,"Ou glissez-les ici, jusqu’à 300 Mo par fichier"));
+  zone.appendChild(el("span",null,"Ajouter des photos ou des vidéos")); zone.appendChild(el("small",null,"Ou glissez-les ici, jusqu’à 2 Go par fichier, en qualité d’origine"));
   zone.onclick = () => fi.click();
   card.ondragover = e => { e.preventDefault(); card.classList.add("drop"); };
   card.ondragleave = () => card.classList.remove("drop");
