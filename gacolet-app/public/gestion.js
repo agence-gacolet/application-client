@@ -3595,7 +3595,8 @@ function tgPdf(s, preview){
   const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${E(s.client)} · Feuille de tournage ${E(s.num || "")}</title><style>
 @font-face{font-family:"Bebas Neue";src:url("${O}/fonts/bebas-neue.woff2") format("woff2")}
 @font-face{font-family:"Inter";src:url("${O}/fonts/inter.woff2") format("woff2");font-weight:100 900}
-@page{size:A4;margin:0}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+@page{size:A4;margin:14mm 0 16mm;@bottom-left{content:"${String(s.client || "").replace(/[\\"<]/g, "")} · Feuille de tournage";font:8pt Inter,system-ui,sans-serif;color:#8A8A85;padding-left:16mm}@bottom-right{content:"Agence Gacolet";font:8pt Inter,system-ui,sans-serif;color:#8A8A85;padding-right:16mm}}
+@page:first{margin-top:0}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 body{margin:0;font:400 11pt/1.4 Inter,system-ui,sans-serif;color:#1D1D1B;background:#fff}
 .pg{width:210mm;min-height:297mm;padding:0 0 14mm}
 .hd{background:#1D1D1B;color:#F4F4F2;padding:12mm 16mm 9mm}
@@ -3611,7 +3612,9 @@ h2{font:400 19pt/1 "Bebas Neue";margin:6mm 0 2mm;padding-bottom:1.5mm;border-bot
 .ti{font-weight:650;font-size:11.5pt}.ln{color:#4A4A46;font-size:10pt}.lk{color:#6B6B66;font-size:8.5pt;word-break:break-all;margin-top:.5mm}
 .box{margin-top:6mm;background:#1D1D1B;color:#F4F4F2;border-radius:3mm;padding:4mm 6mm;break-inside:avoid}.box b{color:#C6FF33;font:400 14pt/1 "Bebas Neue";letter-spacing:.4px;display:block;margin-bottom:1.5mm}
 .box div{font-size:10pt;padding:.6mm 0}
-.ft{position:fixed;bottom:6mm;left:16mm;right:16mm;display:flex;justify-content:space-between;font-size:8pt;color:#8A8A85}
+h2{break-after:avoid}.hd,.info{break-inside:avoid}
+.ft{display:flex;justify-content:space-between;font-size:8pt;color:#8A8A85;padding:0 16mm}
+@media print{.pg{width:auto;min-height:0;padding:0}.ft{display:none}}
 </style></head><body><div class="pg">
 <div class="hd"><div class="ag">AGENCE GACOLET</div><h1>${E(s.client)}<br><span>Feuille de tournage</span></h1><div class="sub">${E(s.num || "")}</div></div>
 <div class="info">${info.map(([k, v]) => `<div><b>${k}</b>${E(v)}</div>`).join("")}</div>
