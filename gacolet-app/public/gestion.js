@@ -4173,7 +4173,7 @@ function pmNotif(w){
 
 /* Espace client : ce que chaque client voit selon son pack. Même principe que l’accès par prénom de l’équipe :
    un tableau pages × packs, puis des exceptions client par client. Le serveur applique les mêmes règles aux données. */
-const ESP_PAGES = { valider:"À valider", tournages:"Tournages", stats:"Statistiques", bilans:"Bilans", meta:"Publicité Meta", messagerie:"Messagerie", visio:"Visio", idees:"Mes idées", prel:"Prélèvements" };
+const ESP_PAGES = { valider:"À valider", tournages:"Tournages", stats:"Statistiques", bilans:"Bilans", meta:"Publicité Meta", messagerie:"Messagerie", visio:"Visio", idees:"Photos et vidéos", prel:"Prélèvements" };
 const ESP_WHAT = { valider:"les publications à valider avant leur sortie", tournages:"les feuilles de tournage à valider", stats:"vues et abonnés, mois après mois", bilans:"les bilans mensuels envoyés par l’agence", meta:"le nombre de contacts reçus dans le mois", messagerie:"le groupe avec l’agence", visio:"la salle de visio avec l’agence", idees:"ses idées de contenus et ses médias", prel:"ses prélèvements et factures" };
 const ESP_PACKS = { gestion:"Gestion", perf:"Performance", perfplus:"Performance +", meta:"Pack Meta", sur:"Sur mesure" };
 const ESP_ST = { on:"Ouvert", discover:"À découvrir", off:"Caché" };

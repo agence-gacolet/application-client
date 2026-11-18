@@ -88,4 +88,26 @@ async function tick() {
   catch (e) { log("file illisible :", e.message); }
   setTimeout(tick, EVERY);
 }
-log("démarrage, serveur", BASE); tick();
+// ---------- Médias reçus des clients : rangés dans le Drive, dossier du client > 20_PRODUCTION > Reçus du client ----------
+const DRIVE = process.env.GACOLET_DRIVE_CLIENTS || path.join(os.homedir(), "Library/CloudStorage/GoogleDrive-agencegacolet@gmail.com/Mon Drive/GACOLET/02_CLIENTS");
+const clean = s => String(s || "").normalize("NFC").replace(/[\/:*?"<>|\u0000-\u001f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 100);
+async function mediaTick() {
+  try {
+    if (!fs.existsSync(DRIVE)) { log("Drive introuvable :", DRIVE); return; }
+    const q = await api("GET", "/api/g-media/inbox");
+    for (const it of q.items || []) {
+      try {
+        const dir = path.join(DRIVE, clean(it.client) || "Client inconnu", "20_PRODUCTION", "Reçus du client"); fs.mkdirSync(dir, { recursive: true });
+        const day = String(it.at || new Date().toISOString()).slice(0, 10), base = day + "_" + clean(String(it.who || "").split(" ")[0] || "client") + "_" + clean(it.name || "fichier");
+        let dest = path.join(dir, base), n = 2; const ext = path.extname(base), stem = base.slice(0, base.length - ext.length);
+        while (fs.existsSync(dest)) dest = path.join(dir, stem + " (" + n++ + ")" + ext);
+        const tmp = path.join(os.tmpdir(), "gacolet-media-" + Date.now() + ext); await download(BASE + it.url, tmp);
+        fs.copyFileSync(tmp, dest); fs.rmSync(tmp, { force: true });
+        await api("POST", "/api/g-media/inbox/" + encodeURIComponent(it.key), { path: path.relative(DRIVE, dest) });
+        log("média rangé :", path.relative(DRIVE, dest));
+      } catch (e) { log("média non rangé", it.key, e.message); }
+    }
+  } catch (e) { log("médias illisibles :", e.message); }
+  finally { setTimeout(mediaTick, 60000); }
+}
+log("démarrage, serveur", BASE); tick(); setTimeout(mediaTick, 5000);

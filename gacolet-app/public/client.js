@@ -88,6 +88,50 @@ async function api(path, opt = {}){
   if (!r.ok) throw new Error(j.error || "Une erreur est survenue.");
   return j;
 }
+/* ---------- Messages vocaux (comme l'appli de l'équipe) : enregistrer, envoyer, écouter avec la forme du son ---------- */
+let CREC = null; const VOICE_EL = new Map();
+const fmtS = s => Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0");
+function wavePeaks(buf, n){ const d = buf.getChannelData(0), step = Math.max(1, Math.floor(d.length / n)), out = [];
+  for (let i = 0; i < n; i++){ let s = 0; for (let j = i * step; j < (i + 1) * step && j < d.length; j++) s += d[j] * d[j]; out.push(Math.sqrt(s / step)); }
+  const mx = Math.max(...out) || 1; return out.map(v => Math.round(v / mx * 100) / 100); }
+async function peaksOf(src){ const ab = src instanceof Blob ? await src.arrayBuffer() : await (await fetch(src)).arrayBuffer(); const C = window.AudioContext || window.webkitAudioContext, ctx = new C();
+  try { const buf = await new Promise((res, rej) => ctx.decodeAudioData(ab, res, rej)); return wavePeaks(buf, 40); } finally { try { ctx.close(); } catch(e){} } }
+async function crecStart(ch){
+  if (S.f && S.f.preview){ toast("Aperçu de l’agence : rien n’est envoyé."); return; }
+  if (!navigator.mediaDevices || !window.MediaRecorder){ toast("Le micro n’est pas disponible sur cet appareil."); return; }
+  let stream; try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); } catch(e){ toast("Accès au micro refusé : autorisez-le dans les réglages du téléphone."); return; }
+  // MP4 (AAC) en priorité : lisible partout, iPhone compris ; sinon WebM, converti en M4A par le serveur
+  const type = ["audio/mp4","audio/webm;codecs=opus","audio/webm"].find(t => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || "";
+  const mr = new MediaRecorder(stream, type ? { mimeType: type } : undefined), r = { mr, chunks: [], start: Date.now(), ch, stream, cancel: false };
+  mr.ondataavailable = e => { if (e.data && e.data.size) r.chunks.push(e.data); };
+  mr.onstop = async () => { clearInterval(r.timer); r.stream.getTracks().forEach(t => t.stop()); CREC = null; render();
+    const dur = Math.round((Date.now() - r.start) / 1000); if (r.cancel || !r.chunks.length || dur < 1) return;
+    const mime = (r.mr.mimeType || "audio/webm").split(";")[0], file = new File(r.chunks, "vocal" + (mime.includes("mp4") ? ".m4a" : ".webm"), { type: mime });
+    let wave = null; try { wave = await peaksOf(file); } catch(e){}
+    try { toast("Envoi du vocal…"); const up = await uploadFile(file); await api("/api/c/msg", { body: Object.assign({ ch: r.ch, text: "", audio: up.url, dur }, wave ? { wave } : {}) }); await loadFeed(); }
+    catch(e){ toast("Le vocal n’a pas pu être envoyé."); } };
+  CREC = r; mr.start(1000);
+  r.timer = setInterval(() => { const t = document.getElementById("crec-time"); if (t) t.textContent = fmtS((Date.now() - r.start) / 1000); if (Date.now() - r.start > 5 * 60000) crecStop(false); }, 250);
+  render();
+}
+function crecStop(cancel){ if (!CREC) return; CREC.cancel = !!cancel; try { CREC.mr.stop(); } catch(e){} }
+function voicePlayer(m){
+  let w = VOICE_EL.get(m.id || m.audio); if (w) return w;
+  const N = 40, PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>', PAUSE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>';
+  w = el("div","vw"); const a = document.createElement("audio"); a.preload = "metadata"; a.src = m.audio; a.setAttribute("playsinline", "");
+  const play = el("button","vw-play"); play.type = "button"; play.setAttribute("aria-label","Écouter le vocal"); play.innerHTML = PLAY;
+  const bars = el("div","vw-bars"); for (let i = 0; i < N; i++) bars.appendChild(el("span"));
+  const tm = el("span","vw-time", fmtS(m.dur || 0)), total = () => isFinite(a.duration) && a.duration > 0 ? a.duration : (m.dur || 1);
+  const setPeaks = pk => [...bars.children].forEach((b, i) => { b.style.height = (4 + Math.round((pk[i] == null ? .1 : pk[i]) * 26)) + "px"; });
+  setPeaks(m.wave || Array(N).fill(.15)); if (!m.wave) peaksOf(m.audio).then(setPeaks).catch(() => {});
+  let raf; const draw = () => { const k = Math.round(Math.min(1, a.currentTime / total()) * N); [...bars.children].forEach((b, i) => b.classList.toggle("on", i < k));
+    tm.textContent = fmtS(a.paused && a.currentTime === 0 ? (m.dur || 0) : a.currentTime); if (!a.paused) raf = requestAnimationFrame(draw); };
+  play.onclick = () => { if (a.paused){ document.querySelectorAll(".vw audio").forEach(x => { if (x !== a) x.pause(); }); a.play().catch(() => toast("Lecture impossible sur cet appareil.")); } else a.pause(); };
+  a.onplay = () => { play.innerHTML = PAUSE; w.classList.add("playing"); draw(); }; a.onpause = () => { play.innerHTML = PLAY; w.classList.remove("playing"); cancelAnimationFrame(raf); draw(); };
+  a.onended = () => { try { a.currentTime = 0; } catch(e){} draw(); };
+  bars.onclick = e => { const rc = bars.getBoundingClientRect(); try { a.currentTime = Math.max(0, Math.min(1, (e.clientX - rc.left) / rc.width)) * total(); } catch(_){} draw(); };
+  w.append(play, bars, tm, a); VOICE_EL.set(m.id || m.audio, w); return w;
+}
 // Envoi d'un fichier tel quel (aucune recompression, qualité d'origine) ; au-delà de 8 Mo : morceaux de 8 Mo, 4 à la fois,
 // chaque morceau renvoyé seul si la connexion coupe (jusqu'à 2 Go)
 function uploadFile(file, onProgress){
@@ -130,7 +174,7 @@ const myName = () => (S.f && S.f.me.name) || "";
 const unread = () => S.f ? [...new Set(S.f.messages.map(m => m.ch))].reduce((n, k) => n + unreadIn(k), 0) : 0;
 
 /* ---------- Navigation ---------- */
-const VIEWS = [["accueil","Accueil"],["valider","À valider"],["tournages","Tournages"],["stats","Statistiques"],["bilans","Bilans"],["meta","Meta"],["messagerie","Messagerie"],["visio","Visio"],["idees","Mes idées"],["prel","Prélèvements"],["parametres","Paramètres"]];
+const VIEWS = [["accueil","Accueil"],["valider","À valider"],["tournages","Tournages"],["stats","Statistiques"],["bilans","Bilans"],["meta","Meta"],["messagerie","Messagerie"],["visio","Visio"],["idees","Photos et vidéos"],["prel","Prélèvements"],["parametres","Paramètres"]];
 const MOBILE = ["accueil","valider","tournages","messagerie"];
 const ICONS = {
   accueil:'<path d="M4 11.2 12 4.8l8 6.4V20h-5.6v-5.2H9.6V20H4z"/>',
@@ -508,7 +552,7 @@ function vMessagerie(root){
     const bub = el("div","wa-bub");
     if (!mine && !grouped && !isDm){ const nm = el("b","wa-name",m.who || ""); nm.style.color = avColor(m.who); bub.appendChild(nm); }
     (m.files || []).forEach(f => bub.appendChild(attachEl(f)));
-    if (m.audio) { const au = document.createElement("audio"); au.controls = true; au.src = m.audio; au.preload = "none"; bub.appendChild(au); }
+    if (m.audio) bub.appendChild(voicePlayer(m));
     if (m.text) bub.appendChild(el("div","wa-txt",m.text));
     bub.appendChild(el("span","wa-time",hm(md)));
     const col = el("div","wa-col"); col.appendChild(bub); line.appendChild(col);
@@ -527,17 +571,28 @@ function vMessagerie(root){
   clip.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5 12.4 19a5 5 0 0 1-7.1-7.1l8-8a3.4 3.4 0 0 1 4.8 4.8l-8 8a1.7 1.7 0 0 1-2.4-2.4l7.3-7.3"/></svg>'; clip.onclick = () => fi.click();
   const ta = el("textarea"); ta.id = "chat-input"; ta.rows = 1; ta.placeholder = isDm ? "Écrire à " + other : "Écrire à l’agence"; ta.value = S.draft;
   const go2 = el("button","wa-send"); go2.type = "submit"; go2.setAttribute("aria-label","Envoyer"); go2.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12 20 4l-4 16-4-6.5z"/><path d="M12 13.5 20 4"/></svg>';
-  ta.oninput = () => { S.draft = ta.value; ta.style.height = "auto"; ta.style.height = Math.min(140, ta.scrollHeight) + "px"; };
+  // Bouton à droite : micro quand rien n'est écrit (message vocal), flèche sinon, comme WhatsApp
+  const SEND = go2.innerHTML, MIC = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
+  const ready = () => !!ta.value.trim() || readyFiles("chat").length > 0;
+  const setBtn = () => { const r = ready(); go2.innerHTML = r ? SEND : MIC; go2.setAttribute("aria-label", r ? "Envoyer" : "Enregistrer un message vocal"); go2.dataset.mode = r ? "send" : "mic"; };
+  ta.oninput = () => { S.draft = ta.value; ta.style.height = "auto"; ta.style.height = Math.min(140, ta.scrollHeight) + "px"; setBtn(); };
   const send = async () => {
     if (S.f.preview){ toast("Aperçu de l’agence : rien n’est envoyé."); return; }
     if (busy("chat")){ toast("Attendez la fin de l’envoi des fichiers."); return; }
-    const t = ta.value.trim(), files = readyFiles("chat"); if (!t && !files.length) return;
+    const t = ta.value.trim(), files = readyFiles("chat"); if (!t && !files.length){ crecStart(ch); return; }
     S.draft = ""; S.pend.chat = []; go2.disabled = true;
     try { await api("/api/c/msg", { body: { ch, text: t, files } }); await loadFeed(); } catch(e){ S.draft = t; toast(e.message); render(); }
   };
   ta.onkeydown = e => { if (e.key === "Enter" && !e.shiftKey && !window.matchMedia("(max-width:640px)").matches){ e.preventDefault(); send(); } };
   form.onsubmit = e => { e.preventDefault(); send(); };
-  bar.append(fi, clip, ta, go2); form.appendChild(bar);
+  if (CREC && CREC.ch === ch){
+    const rb = el("div","rec"), tm = el("b",null,fmtS((Date.now() - CREC.start) / 1000)); tm.id = "crec-time"; rb.append(el("span","rec-dot"), el("span",null,"Enregistrement"), tm);
+    const cb = el("button","btn","Annuler"); cb.type = "button"; cb.onclick = () => crecStop(true);
+    const ok = el("button","btn lemon","Envoyer le vocal"); ok.type = "button"; ok.onclick = () => crecStop(false);
+    form.onsubmit = e => { e.preventDefault(); crecStop(false); };
+    bar.append(rb, cb, ok);
+  } else { setBtn(); bar.append(fi, clip, ta, go2); }
+  form.appendChild(bar);
   main.ondragover = e => { e.preventDefault(); main.classList.add("drop"); };
   main.ondragleave = () => main.classList.remove("drop");
   main.ondrop = e => { e.preventDefault(); main.classList.remove("drop"); if (e.dataTransfer.files.length) addFiles("chat", e.dataTransfer.files); };
@@ -566,7 +621,7 @@ function vVisio(root){
 /* ---------- Mes idées : idées, photos, vidéos pour les prochains contenus ---------- */
 const KINDS = [["Idée","Idée"],["Photos","Photos"],["Vidéos","Vidéos"],["Inspiration","Inspiration"]];
 function vIdees(root){
-  root.appendChild(head(["Mes", "idées"], "Une idée, des photos de chantier, une vidéo prise sur le vif : l’équipe s’en sert pour vos prochains contenus."));
+  root.appendChild(head(["Photos", "et vidéos"], "Envoyez-nous vos photos, vidéos et idées en qualité d’origine (jusqu’à 2 Go par fichier) : elles arrivent directement dans votre dossier à l’agence."));
   const card = el("form","cl-drop");
   card.appendChild(segm(KINDS, S.kind, v => { S.kind = v; render(); }));
   const ta = el("textarea"); ta.rows = 3; ta.id = "idee-input"; ta.value = S.idDraft;

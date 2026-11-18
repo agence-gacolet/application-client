@@ -1012,11 +1012,22 @@ module.exports = function (app, { db, wrap, root }) {
   let UPLOADS = 0;
   app.use("/api/g-upload", (req, res, next) => { UPLOADS++; let d = false; const end = () => { if (!d) { d = true; UPLOADS--; } }; res.on("finish", end); res.on("close", end); next(); });
   global.gcUploads = () => UPLOADS;
-  app.post("/api/g-upload", auth, up.single("file"), (req, res) => {
-    const f = req.file;
+  // Vocaux : un enregistrement WebM (Chrome, Android) est converti en M4A (AAC), que tous les iPhone lisent
+  let FFMPEG = null; for (const get of [() => require("@ffmpeg-installer/ffmpeg").path, () => require("ffmpeg-static")]) { try { const p = get(); if (p && fs.existsSync(p)) { FFMPEG = p; break; } } catch (e) {} }
+  if (!FFMPEG) { try { require("child_process").execFileSync("ffmpeg", ["-version"], { stdio: "ignore" }); FFMPEG = "ffmpeg"; } catch (e) {} }
+  function toM4a(f) { return new Promise(ok => {
+    if (!FFMPEG || !/^audio\//.test(f.mimetype || "") || !/\.(webm|ogg|oga|opus|weba)$/i.test(f.filename) || f.size > 40 * 1024 * 1024) return ok(f);
+    const name = f.filename.replace(/\.[a-z0-9]+$/i, ".m4a"), out = path.join(DIR, name);
+    const p = require("child_process").spawn(FFMPEG, ["-v", "error", "-y", "-i", path.join(DIR, f.filename), "-vn", "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", out]);
+    const t = setTimeout(() => p.kill("SIGKILL"), 60000);
+    p.on("close", code => { clearTimeout(t); try { if (code === 0 && fs.statSync(out).size > 0) { fs.unlinkSync(path.join(DIR, f.filename)); return ok({ filename: name, mimetype: "audio/mp4", size: fs.statSync(out).size, originalname: String(f.originalname || "vocal").replace(/\.[a-z0-9]+$/i, ".m4a") }); } } catch (e) {} try { fs.unlinkSync(out); } catch (e) {} ok(f); });
+    p.on("error", () => { clearTimeout(t); ok(f); }); }); }
+  app.post("/api/g-upload", auth, up.single("file"), wrap(async (req, res) => {
+    let f = req.file;
     if (!f) return res.status(400).json({ error: "Aucun fichier reçu." });
+    f = await toM4a(f);
     res.json({ id: f.filename, url: "/f/" + f.filename, contentType: f.mimetype, sizeBytes: f.size });
-  });
+  }));
   // Envoi en morceaux (8 Mo) : chaque morceau est ajouté au fichier en cours ; un envoi coupé reprend là où il s'était arrêté
   const rawBody = require("express").raw({ type: () => true, limit: "12mb" });
   const partOf = id => path.join(DIR, id + ".part");
@@ -1380,11 +1391,14 @@ module.exports = function (app, { db, wrap, root }) {
   }));
   app.post("/api/c/msg", cauth, wrap(async (req, res) => {
     const b = req.body || {}, text = String(b.text || "").trim().slice(0, 4000), files = cleanFiles(b.files);
-    if (!text && !files.length) return res.status(400).json({ error: "Message vide." });
+    // Message vocal du client : fichier déposé sur ce serveur, durée et forme du son (pour le lecteur)
+    const audio = /^\/f\/[a-f0-9]{32}\.(m4a|mp4|webm|ogg|mp3|aac)$/.test(String(b.audio || "")) ? String(b.audio) : "";
+    if (!text && !files.length && !audio) return res.status(400).json({ error: "Message vide." });
     const ch = b.ch ? String(b.ch) : cgOf(req.cl);
     if (!await clientChOk(req.cl, ch)) return res.status(403).json({ error: "Conversation inconnue." });
     const id = newId();
-    const msg = Object.assign({ ch, text, who: req.cname, ext: 1, at: new Date().toISOString() }, files.length ? { files } : {});
+    const wave = Array.isArray(b.wave) ? b.wave.slice(0, 60).map(v => Math.max(0, Math.min(1, Number(v) || 0))) : null;
+    const msg = Object.assign({ ch, text, who: req.cname, ext: 1, at: new Date().toISOString() }, files.length ? { files } : {}, audio ? { audio, dur: Math.max(0, Math.min(600, Math.round(Number(b.dur) || 0))) } : {}, audio && wave ? { wave } : {});
     await put("messages", id, msg);
     res.json({ ok: true, id });
     pushMsg(msg, req.cl).catch(() => {});
@@ -1413,11 +1427,12 @@ module.exports = function (app, { db, wrap, root }) {
   }));
   app.get("/api/c/upload-par/:id", cauth, parGot);
   app.post("/api/c/upload-par/:id", cauth, parCount, rawBody, parPut);
-  app.post("/api/c/upload", cauth, up.single("file"), (req, res) => {
-    const f = req.file;
+  app.post("/api/c/upload", cauth, up.single("file"), wrap(async (req, res) => {
+    let f = req.file;
     if (!f) return res.status(400).json({ error: "Aucun fichier reçu." });
+    f = await toM4a(f);
     res.json({ url: "/f/" + f.filename, name: String(f.originalname || "").slice(0, 160), type: f.mimetype, size: f.size });
-  });
+  }));
   // Liste des groupes clients pour la messagerie de l’équipe
   app.get("/api/g-cgroups", auth, wrap(async (req, res) => {
     const cl = await db.all("SELECT id, name FROM clients WHERE active = 1 ORDER BY name");
@@ -1429,6 +1444,22 @@ module.exports = function (app, { db, wrap, root }) {
     const cfgH = await cgmCfg(); out.forEach(x => { const hd = (cfgH[String(x.id)] || {}).hidden || {}; x.hidden = { main: !!hd.main && !((lastAt[x.ch] || "") > hd.main), shoot: !!hd.shoot && !((lastAt["tg:" + x.ch] || "") > hd.shoot) }; });
     for (let k = out.length - 1; k >= 0; k--) { const x = out[k], inn = { main: cgInSync(req.user.name, x.ch), shoot: cgInSync(req.user.name, "tg:" + x.ch) }; x.in = inn; if (!inn.main && !inn.shoot && req.user.role !== "owner") out.splice(k, 1); }
     res.json({ groups: out });
+  }));
+  // Médias envoyés par les clients (messagerie et « Mes idées ») : liste pour le Mac mini, qui les range dans le Drive du client
+  const macOk = req => { const k = String(req.get("x-desc-key") || ""), want = process.env.DESC_KEY || ""; return want.length >= 32 && k.length === want.length && crypto.timingSafeEqual(Buffer.from(k), Buffer.from(want)); };
+  app.get("/api/g-media/inbox", wrap(async (req, res) => {
+    if (!macOk(req)) return res.status(401).json({ error: "Clé du Mac refusée." });
+    const done = new Set((await db.all("SELECT id FROM docs WHERE col = '_mediacopy' AND deleted = 0")).map(r => r.id)), out = [];
+    const cls = await db.all("SELECT id, name FROM clients"), nameOf = id => (cls.find(c => c.id === Number(id)) || {}).name || "";
+    const add = (key, client, who, at, f, from) => { if (!client || done.has(key) || !/^\/f\/[a-f0-9]{32}/.test(f.url || "")) return; out.push({ key, client, who, at, name: String(f.name || "fichier").slice(0, 120), url: f.url, type: f.type || "", from }); };
+    for (const r of await db.all("SELECT id, data FROM docs WHERE col = 'idees' AND deleted = 0")) { try { const d = JSON.parse(r.data || "{}"); (d.files || []).forEach((f, i) => add("i_" + r.id + "_" + i, d.client || nameOf(d.cid), d.who, d.at, f, "Mes idées")); } catch (e) {} }
+    for (const r of await db.all("SELECT id, data FROM docs WHERE col = 'messages' AND deleted = 0")) { try { const d = JSON.parse(r.data || "{}"); if (!d.ext || !d.files) continue; const m = String(d.ch || "").match(/^(?:tg:)?(?:cg|cdm):(\d+)/); if (!m) continue;
+      d.files.forEach((f, i) => add("m_" + r.id + "_" + i, nameOf(m[1]), d.who, d.at, f, "Messagerie")); } catch (e) {} }
+    res.json({ items: out.slice(0, 50) });
+  }));
+  app.post("/api/g-media/inbox/:key", wrap(async (req, res) => {
+    if (!macOk(req)) return res.status(401).json({ error: "Clé du Mac refusée." });
+    const key = String(req.params.key).slice(0, 110); await put("_mediacopy", key, { at: new Date().toISOString(), path: String((req.body || {}).path || "").slice(0, 300) }); res.json({ ok: true });
   }));
   // Supprimer un groupe client (principal ou tournage) : ses messages sont effacés, il disparaît de la liste de l'équipe jusqu'au prochain message
   app.post("/api/g-cgroups/delete", auth, ownerOnly, wrap(async (req, res) => {
