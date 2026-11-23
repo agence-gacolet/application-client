@@ -2509,15 +2509,27 @@ function msgPreview(m){
   if (f.length && !m.text) return f.length > 1 ? f.length + " fichiers" : isImg(f[0]) ? "Photo" : isVid(f[0]) ? "Vidéo" : f[0].name;
   return String(m.text || "");
 }
-function attachEl(f){
-  if (isImg(f)){ const a = el("a","wa-img"); a.href = f.url; a.target = "_blank"; a.rel = "noopener"; const i = document.createElement("img"); i.src = f.url; i.alt = f.name || "Photo"; i.loading = "lazy"; a.appendChild(i); return a; }
-  if (isVid(f)){ const v = document.createElement("video"); v.className = "wa-vid"; v.src = f.url; v.controls = true; v.preload = "metadata"; v.playsInline = true; return v; }
+// Médias du fil gardés d'un rendu à l'autre : le GIF ou la photo n'est pas rechargé, ne repart pas de zéro et ne fait plus sauter le fil.
+let MEDIA_KEEP = new Map(), MEDIA_NEXT = null; const MEDIA_DIM = {};
+function mediaSize(n, f){ const d = (f.w && f.h) ? f.w + "/" + f.h : MEDIA_DIM[f.url]; if (d) n.style.aspectRatio = d;
+  const k = () => { const w = n.naturalWidth || n.videoWidth, h = n.naturalHeight || n.videoHeight; if (w && h){ MEDIA_DIM[f.url] = w + "/" + h; n.style.aspectRatio = MEDIA_DIM[f.url]; } };
+  n.addEventListener(n.tagName === "IMG" ? "load" : "loadedmetadata", k, { once: true }); }
+function mediaKeep(key, make){ let n = key ? MEDIA_KEEP.get(key) : null; if (!n) n = make(); if (key && MEDIA_NEXT) MEDIA_NEXT.set(key, n); return n; }
+function mediaBegin(){ MEDIA_NEXT = new Map(); }
+function mediaEnd(){ if (MEDIA_NEXT){ MEDIA_KEEP = MEDIA_NEXT; MEDIA_NEXT = null; } }
+// Une image qui finit de charger ne ramène en bas que si on y était déjà
+function mediaStick(list){ list.querySelectorAll("img,video").forEach(x => { if (x.tagName === "IMG" ? x.complete : x.readyState >= 1) return;
+  x.addEventListener(x.tagName === "IMG" ? "load" : "loadedmetadata", () => { if (list.scrollHeight - list.scrollTop - list.clientHeight - x.offsetHeight < 160) list.scrollTop = list.scrollHeight; }, { once: true }); }); }
+function attachEl(f, key){
+  if (isImg(f)){ const a = el("a","wa-img"); a.href = f.url; a.target = "_blank"; a.rel = "noopener";
+    a.appendChild(mediaKeep(key, () => { const i = document.createElement("img"); i.src = f.url; i.alt = f.name || "Photo"; i.decoding = "async"; mediaSize(i, f); return i; })); return a; }
+  if (isVid(f)) return mediaKeep(key, () => { const v = document.createElement("video"); v.className = "wa-vid"; v.src = f.url; v.controls = true; v.preload = "metadata"; v.playsInline = true; mediaSize(v, f); return v; });
   const a = el("a","wa-file"); a.href = f.url; a.target = "_blank"; a.rel = "noopener"; a.setAttribute("download", f.name || "");
   const ic = el("span","wa-fic", (String(f.name || "").split(".").pop() || "").slice(0, 4).toUpperCase() || "FICHIER");
   const tx = el("span","wa-ftx"); tx.append(el("b",null,f.name || "Fichier"), el("small",null,(f.size ? fmtSize(f.size) : "") + (f.size ? ", " : "") + "Télécharger"));
   a.append(ic, tx); return a;
 }
-let PENDING = { ch: "", files: [], busy: 0 };
+let CHAT_PREV = null; let PENDING = { ch: "", files: [], busy: 0 };
 async function addFiles(ch, list){
   if (!S.assets){ toast("Envoi de fichiers indisponible."); return; }
   if (PENDING.ch !== ch) PENDING = { ch, files: [], busy: 0 };
@@ -2701,7 +2713,7 @@ function gifPicker(ch, me){
       try { const r = await GC.api("GET","/api/g-gifs?q=" + encodeURIComponent(q.value.trim())); if (my !== seq) return; grid.textContent = "";
         if (!r.gifs.length) grid.appendChild(el("p","muted","Aucun GIF trouvé."));
         r.gifs.forEach(g => { const b = el("button","gif-it"); b.type = "button"; b.title = g.title || "GIF"; const i = document.createElement("img"); i.src = g.small || g.url; i.alt = g.title || "GIF"; i.loading = "lazy"; b.appendChild(i);
-          b.onclick = async () => { closeModal(); try { await save("messages", null, { ch, who: me, text: "", at: new Date().toISOString(), files: [{ url: g.url, name: "GIF", type: "image/gif", gif: true }] }); } catch(e){} };
+          b.onclick = async () => { closeModal(); try { await save("messages", null, { ch, who: me, text: "", at: new Date().toISOString(), files: [Object.assign({ url: g.url, name: "GIF", type: "image/gif", gif: true }, g.w && g.h ? { w: g.w, h: g.h } : {})] }); } catch(e){} };
           grid.appendChild(b); }); }
       catch(x){ if (my !== seq) return; grid.textContent = ""; grid.appendChild(el("p","muted", x.message)); } };
     q.oninput = () => { clearTimeout(tm); tm = setTimeout(load, 350); };
@@ -3004,9 +3016,9 @@ function liveFill(){
 window.addEventListener("gc-live", () => { if (S.view === "messagerie") liveFill(); if (S.ready && !vcIsFull()) { try { renderTabs(); syncBadge(); } catch(e){} } });
 function vMessagerie(root){
   const me = S.me || "Gabriel";
-  const OLD = document.getElementById("chat-list"), OLD_IN = document.getElementById("chat-input");
-  const keep = OLD ? { ch: OLD.dataset.ch, top: OLD.scrollTop, bottom: OLD.scrollHeight - OLD.scrollTop - OLD.clientHeight < 80 } : null;
-  const keepIn = OLD_IN && document.activeElement === OLD_IN ? { a: OLD_IN.selectionStart, b: OLD_IN.selectionEnd } : null;
+  const OLD = document.getElementById("chat-list"), OLD_IN = document.getElementById("chat-input"), P = CHAT_PREV; CHAT_PREV = null;
+  const keep = OLD ? { ch: OLD.dataset.ch, top: OLD.scrollTop, bottom: OLD.scrollHeight - OLD.scrollTop - OLD.clientHeight < 80 } : P;
+  const keepIn = OLD_IN && document.activeElement === OLD_IN ? { a: OLD_IN.selectionStart, b: OLD_IN.selectionEnd } : (P && P.inp);
   const mode = S.ui.msgMode || "main";
   const pre = mode === "shoot" ? "tg:" : "";
   let ch = mode === "shoot" ? (S.ui.msgShoot || "") : (S.ui.msgCh || "general");
@@ -3054,7 +3066,7 @@ function vMessagerie(root){
   }   // membres, message privé, médias : dans les infos (clic sur le logo ou le nom), comme WhatsApp
   main.appendChild(hd);
   const list = el("div","wa-msgs"); list.id = "chat-list"; list.dataset.ch = ch;
-  const msgs = S.d.messages.filter(m => m.ch === ch).sort((a,b) => (a.at||"").localeCompare(b.at||""));
+  mediaBegin(); const msgs = S.d.messages.filter(m => m.ch === ch).sort((a,b) => (a.at||"").localeCompare(b.at||""));
   const firstPaint = MSG_CH !== ch; MSG_CH = ch; const lastMine = [...msgs].reverse().find(m => m.who === me);
   if (!msgs.length) list.appendChild(el("p","wa-empty","Aucun message ici pour l’instant. Écris le premier."));
   let prev = null;
@@ -3072,7 +3084,7 @@ function vMessagerie(root){
     if (m.fwd) bub.appendChild(el("span","wa-fwd","Transféré"));
     if (m.rep){ const q = el("button","wa-quote"); q.type = "button"; q.append(el("b",null,m.rep.who === me ? "Vous" : m.rep.who), el("span",null,m.rep.text || ""));
       q.onclick = e => { e.stopPropagation(); const t = document.getElementById("m-" + m.rep.id); if (t){ t.scrollIntoView({ block: "center", behavior: "smooth" }); t.classList.remove("flash"); void t.offsetWidth; t.classList.add("flash"); } }; bub.appendChild(q); }
-    (m.files || []).forEach(f => bub.appendChild(attachEl(f)));
+    (m.files || []).forEach((f, fx) => bub.appendChild(attachEl(f, m.id + ":" + fx)));
     if (m.audio) bub.appendChild(audioFor(m));
     if (m.text) bub.appendChild(linkify(el("div","wa-txt"), m.text));
     if (m.task){ const gt = el("button","btn sm wa-task","Aller à la tâche"); gt.type = "button"; gt.onclick = e => { e.stopPropagation(); goTask(m.task); }; bub.appendChild(gt); }
@@ -3152,7 +3164,7 @@ function vMessagerie(root){
   main.ondrop = e => { e.preventDefault(); main.classList.remove("drop"); if (e.dataTransfer.files.length) addFiles(ch, [...e.dataTransfer.files]); };
   main.appendChild(form);
   wrap.append(side, main); root.appendChild(wrap);
-  list.querySelectorAll("img,video").forEach(x => x.addEventListener(x.tagName === "IMG" ? "load" : "loadedmetadata", () => { list.scrollTop = list.scrollHeight; }, { once: true }));
+  mediaEnd(); mediaStick(list);
   const same = keep && keep.ch === ch;
   if (same && !keep.bottom) list.scrollTop = keep.top; else list.scrollTop = list.scrollHeight;
   requestAnimationFrame(() => { const l = document.getElementById("chat-list");
@@ -3906,6 +3918,9 @@ function render(){
   renderTabs();
   const root = $("#app");
   const focusId = document.activeElement && document.activeElement.id; const caret = focusId && document.activeElement.selectionStart;
+  // Position du fil et du curseur relevées AVANT d'effacer la page (sinon le fil retombe en bas à chaque rafraîchissement)
+  { const ol = document.getElementById("chat-list"), oi = document.getElementById("chat-input");
+    CHAT_PREV = ol ? { ch: ol.dataset.ch, top: ol.scrollTop, bottom: ol.scrollHeight - ol.scrollTop - ol.clientHeight < 80, inp: oi && document.activeElement === oi ? { a: oi.selectionStart, b: oi.selectionEnd } : null } : null; }
   root.textContent = "";
   { const chat = S.view === "messagerie" && !S.failed && !!S.ready; if (chat && !document.body.classList.contains("chat-full")) window.scrollTo(0, 0); /* sinon l’iPhone garde le décalage et la barre du bas remonte */
     document.body.classList.toggle("chat-full", chat); }

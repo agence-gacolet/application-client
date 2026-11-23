@@ -477,9 +477,21 @@ function vValider(root){
 }
 
 /* ---------- Pièces jointes ---------- */
-function attachEl(f){
-  if (isImg(f)){ const a = el("a","wa-img"); a.href = f.url; a.target = "_blank"; a.rel = "noopener"; const i = document.createElement("img"); i.src = f.url; i.alt = f.name || "Photo"; i.loading = "lazy"; a.appendChild(i); return a; }
-  if (isVid(f)){ const v = document.createElement("video"); v.className = "wa-vid"; v.src = vsrc(f.url); v.controls = true; v.preload = "metadata"; v.playsInline = true; return v; }
+// Médias du fil gardés d'un rendu à l'autre : le GIF ou la photo n'est pas rechargé, ne repart pas de zéro et ne fait plus sauter le fil.
+let MEDIA_KEEP = new Map(), MEDIA_NEXT = null; const MEDIA_DIM = {};
+function mediaSize(n, f){ const d = (f.w && f.h) ? f.w + "/" + f.h : MEDIA_DIM[f.url]; if (d) n.style.aspectRatio = d;
+  const k = () => { const w = n.naturalWidth || n.videoWidth, h = n.naturalHeight || n.videoHeight; if (w && h){ MEDIA_DIM[f.url] = w + "/" + h; n.style.aspectRatio = MEDIA_DIM[f.url]; } };
+  n.addEventListener(n.tagName === "IMG" ? "load" : "loadedmetadata", k, { once: true }); }
+function mediaKeep(key, make){ let n = key ? MEDIA_KEEP.get(key) : null; if (!n) n = make(); if (key && MEDIA_NEXT) MEDIA_NEXT.set(key, n); return n; }
+function mediaBegin(){ MEDIA_NEXT = new Map(); }
+function mediaEnd(){ if (MEDIA_NEXT){ MEDIA_KEEP = MEDIA_NEXT; MEDIA_NEXT = null; } }
+// Une image qui finit de charger ne ramène en bas que si on y était déjà
+function mediaStick(list){ list.querySelectorAll("img,video").forEach(x => { if (x.tagName === "IMG" ? x.complete : x.readyState >= 1) return;
+  x.addEventListener(x.tagName === "IMG" ? "load" : "loadedmetadata", () => { if (list.scrollHeight - list.scrollTop - list.clientHeight - x.offsetHeight < 160) list.scrollTop = list.scrollHeight; }, { once: true }); }); }
+function attachEl(f, key){
+  if (isImg(f)){ const a = el("a","wa-img"); a.href = f.url; a.target = "_blank"; a.rel = "noopener";
+    a.appendChild(mediaKeep(key, () => { const i = document.createElement("img"); i.src = f.url; i.alt = f.name || "Photo"; i.decoding = "async"; mediaSize(i, f); return i; })); return a; }
+  if (isVid(f)) return mediaKeep(key, () => { const v = document.createElement("video"); v.className = "wa-vid"; v.src = vsrc(f.url); v.controls = true; v.preload = "metadata"; v.playsInline = true; mediaSize(v, f); return v; });
   const a = el("a","wa-file"); a.href = f.url; a.target = "_blank"; a.rel = "noopener"; a.setAttribute("download", f.name || "");
   const ic = el("span","wa-fic", (String(f.name || "").split(".").pop() || "").slice(0, 4).toUpperCase() || "FICHIER");
   const tx = el("span","wa-ftx"); tx.append(el("b",null,f.name || "Fichier"), el("small",null,(f.size ? fmtSize(f.size) + ", " : "") + "Télécharger"));
@@ -554,9 +566,10 @@ function vMessagerie(root){
   const tm = team.find(t => t.name === other);
   ht.append(el("b",null, isDm ? other : S.mmode === "shoot" ? "Tournages avec l’agence" : "Agence Gacolet"), el("small",null, isDm ? (tm && tm.poste ? tm.poste + ", " : "") + "conversation privée" : (S.mmode === "shoot" ? "Organisation des tournages avec " : "Votre groupe avec ") + grpTeam().join(", ")));
   hd.append(back, isDm ? avatarEl(other, 40) : avatarEl("Agence Gacolet", 40, { logo: true }), ht); main.appendChild(hd);
-  const list = el("div","wa-msgs"); list.id = "chat-list";
+  const OLDL = document.getElementById("chat-list"), stay = OLDL && OLDL.dataset.ch === String(ch) && OLDL.scrollHeight - OLDL.scrollTop - OLDL.clientHeight > 80 ? OLDL.scrollTop : -1;
+  const list = el("div","wa-msgs"); list.id = "chat-list"; list.dataset.ch = String(ch);
   if (!msgs.length) list.appendChild(el("p","wa-empty", isDm ? "Écrivez à " + other + " : seul " + other + " verra ces messages." : S.mmode === "shoot" ? "Tout ce qui concerne les tournages : dates, lieux, matériel, personnes à filmer." : "Écrivez à l’agence : une question, une précision, un retour. L’équipe répond ici."));
-  let prev = null, lastLine = null;
+  let prev = null, lastLine = null; mediaBegin();
   msgs.forEach(m => {
     const md = new Date(m.at || 0), d = iso(md);
     if (!prev || iso(new Date(prev.at || 0)) !== d){ const dl = fmtDL(d); list.appendChild(el("div","wa-day", d === today() ? "Aujourd’hui" : d === addDays(today(), -1) ? "Hier" : dl.charAt(0).toUpperCase() + dl.slice(1))); prev = null; }
@@ -567,7 +580,7 @@ function vMessagerie(root){
     if (!mine) line.appendChild(avatarEl(m.who, 30));
     const bub = el("div","wa-bub");
     if (!mine && !grouped && !isDm){ const nm = el("b","wa-name",m.who || ""); nm.style.color = avColor(m.who); bub.appendChild(nm); }
-    (m.files || []).forEach(f => bub.appendChild(attachEl(f)));
+    (m.files || []).forEach((f, fx) => bub.appendChild(attachEl(f, m.id + ":" + fx)));
     if (m.audio) bub.appendChild(voicePlayer(m));
     if (m.text) bub.appendChild(el("div","wa-txt",m.text));
     bub.appendChild(el("span","wa-time",hm(md)));
@@ -613,8 +626,8 @@ function vMessagerie(root){
   main.ondragleave = () => main.classList.remove("drop");
   main.ondrop = e => { e.preventDefault(); main.classList.remove("drop"); if (e.dataTransfer.files.length) addFiles("chat", e.dataTransfer.files); };
   main.appendChild(form); wrap.append(side, main); root.appendChild(wrap);
-  list.querySelectorAll("img,video").forEach(x => x.addEventListener(x.tagName === "IMG" ? "load" : "loadedmetadata", () => { list.scrollTop = list.scrollHeight; }, { once: true }));
-  requestAnimationFrame(() => { list.scrollTop = list.scrollHeight; if (ta.value){ ta.style.height = "auto"; ta.style.height = Math.min(140, ta.scrollHeight) + "px"; } });
+  mediaEnd(); mediaStick(list);
+  requestAnimationFrame(() => { list.scrollTop = stay >= 0 ? stay : list.scrollHeight; if (ta.value){ ta.style.height = "auto"; ta.style.height = Math.min(140, ta.scrollHeight) + "px"; } });
 }
 
 /* ---------- Visio mensuelle avec l’agence ---------- */

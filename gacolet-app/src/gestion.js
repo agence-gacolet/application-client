@@ -654,7 +654,7 @@ module.exports = function (app, { db, wrap, root }) {
                   : "https://api.giphy.com/v1/gifs/trending?api_key=" + encodeURIComponent(key) + "&limit=24&rating=pg-13";
     const r = await fetch(url); if (!r.ok) return res.status(502).json({ error: "GIPHY ne répond pas pour l’instant." });
     const j = await r.json();
-    res.json({ gifs: (j.data || []).map(g => ({ id: g.id, title: g.title || "", url: g.images && g.images.fixed_height ? g.images.fixed_height.url : "", small: g.images && g.images.fixed_height_small ? g.images.fixed_height_small.url : "" })).filter(g => g.url) });
+    res.json({ gifs: (j.data || []).map(g => ({ id: g.id, title: g.title || "", url: g.images && g.images.fixed_height ? g.images.fixed_height.url : "", w: g.images && g.images.fixed_height ? Number(g.images.fixed_height.width) || 0 : 0, h: g.images && g.images.fixed_height ? Number(g.images.fixed_height.height) || 0 : 0, small: g.images && g.images.fixed_height_small ? g.images.fixed_height_small.url : "" })).filter(g => g.url) });
   }));
 
   // ---------- Temps réel : la page attend le prochain changement (attente longue), comme une messagerie ----------
