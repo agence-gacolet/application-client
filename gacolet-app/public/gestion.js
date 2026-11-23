@@ -3057,7 +3057,7 @@ function vMessagerie(root){
   wrap.append(side, main); root.appendChild(wrap);
   list.querySelectorAll("img,video").forEach(x => x.addEventListener(x.tagName === "IMG" ? "load" : "loadedmetadata", () => { list.scrollTop = list.scrollHeight; }, { once: true }));
   const same = keep && keep.ch === ch;
-  if (same && !keep.bottom) list.scrollTop = keep.top;
+  if (same && !keep.bottom) list.scrollTop = keep.top; else list.scrollTop = list.scrollHeight;
   requestAnimationFrame(() => { const l = document.getElementById("chat-list");
     if (l){ if (!same || keep.bottom) l.scrollTo({ top: l.scrollHeight, behavior: "auto" }); else l.scrollTop = keep.top; }
     if (ta.value){ ta.style.height = "auto"; ta.style.height = Math.min(140, ta.scrollHeight) + "px"; }
