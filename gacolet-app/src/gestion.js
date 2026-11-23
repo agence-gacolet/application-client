@@ -646,7 +646,7 @@ module.exports = function (app, { db, wrap, root }) {
   app.get(["/visio", "/visio/"], (req, res) => res.sendFile(path.join(root, "public", "visio.html")));
 
   // ---------- GIF (GIPHY) ----------
-  app.get("/api/g-gifs", auth, wrap(async (req, res) => {
+  const gifsRoute = wrap(async (req, res) => {
     const key = process.env.GIPHY_KEY;
     if (!key) return res.status(503).json({ error: "Les GIF ne sont pas encore activés : il manque la clé GIPHY sur le serveur." });
     const q = String(req.query.q || "").trim().slice(0, 60);
@@ -655,7 +655,9 @@ module.exports = function (app, { db, wrap, root }) {
     const r = await fetch(url); if (!r.ok) return res.status(502).json({ error: "GIPHY ne répond pas pour l’instant." });
     const j = await r.json();
     res.json({ gifs: (j.data || []).map(g => ({ id: g.id, title: g.title || "", url: g.images && g.images.fixed_height ? g.images.fixed_height.url : "", w: g.images && g.images.fixed_height ? Number(g.images.fixed_height.width) || 0 : 0, h: g.images && g.images.fixed_height ? Number(g.images.fixed_height.height) || 0 : 0, small: g.images && g.images.fixed_height_small ? g.images.fixed_height_small.url : "" })).filter(g => g.url) });
-  }));
+  });
+  app.get("/api/g-gifs", auth, gifsRoute);
+  app.get("/api/c/gifs", (req, res, next) => cauth(req, res, next), gifsRoute);
 
   // ---------- Temps réel : la page attend le prochain changement (attente longue), comme une messagerie ----------
   // « en train d’écrire » et « vu » restent en mémoire : ils n’ont de sens que sur le moment.
@@ -1125,8 +1127,9 @@ module.exports = function (app, { db, wrap, root }) {
     const m = ch.match(/^cdm:(\d+)\|(.{1,80})$/);
     return !!(m && Number(m[1]) === c.id && await db.one("SELECT id FROM gusers WHERE name = ? AND disabled = 0", [m[2]]));
   }
-  const cleanFiles = a => (Array.isArray(a) ? a : []).slice(0, 10).filter(f => f && /^\/f\/[a-f0-9]{32}(\.[a-z0-9]{1,7})?$/.test(String(f.url || "")))
-    .map(f => ({ url: String(f.url), name: String(f.name || "").slice(0, 160), type: String(f.type || "").slice(0, 80), size: Number(f.size) || 0 }));
+  const GIPHY_URL = /^https:\/\/media[0-9]?\.giphy\.com\/media\/[A-Za-z0-9._\/?=&-]{1,300}$/;
+  const cleanFiles = a => (Array.isArray(a) ? a : []).slice(0, 10).filter(f => f && (/^\/f\/[a-f0-9]{32}(\.[a-z0-9]{1,7})?$/.test(String(f.url || "")) || GIPHY_URL.test(String(f.url || ""))))
+    .map(f => Object.assign({ url: String(f.url), name: String(f.name || "").slice(0, 160), type: String(f.type || "").slice(0, 80), size: Number(f.size) || 0 }, GIPHY_URL.test(String(f.url)) ? { type: "image/gif", gif: true, w: Math.max(0, Math.min(2000, Number(f.w) || 0)), h: Math.max(0, Math.min(2000, Number(f.h) || 0)) } : {}));
   async function docsLike(col, needle) {
     const rows = await db.all("SELECT id, data FROM docs WHERE col = ? AND deleted = 0 AND data LIKE ?", [col, "%" + needle + "%"]);
     return rows.map(r => { let d = {}; try { d = JSON.parse(r.data || "{}"); } catch (e) {} return Object.assign({ id: r.id }, d); });
@@ -1717,6 +1720,11 @@ module.exports = function (app, { db, wrap, root }) {
   }));
   const deployAuth = (req, res, next) => deployKeyOk(req) ? (req.user = { name: "Matis (Mac)", role: "owner" }, next()) : auth(req, res, () => onlyMatis(req, res, next));
   const onlyMatis = (req, res, next) => req.user && req.user.role === "owner" && req.user.name === "Matis" ? next() : res.status(403).json({ error: "Réservé à Matis." });
+  // Clé GIPHY (compte développeur de l'agence) : posée depuis le Mac avec la clé de mise en ligne
+  app.put("/api/g-keys/giphy", deployAuth, wrap(async (req, res) => {
+    const k = String((req.body || {}).key || "").trim(); if (!/^[A-Za-z0-9]{20,64}$/.test(k)) return res.status(400).json({ error: "Clé invalide." });
+    persistKey("GIPHY_KEY", k); res.json({ ok: true });
+  }));
   // Enregistre la clé de mise en ligne dans le .env du serveur (accès complet, une fois)
   app.put("/api/g-keys/deploy", auth, ownerOnly, wrap(async (req, res) => {
     const k = String((req.body || {}).key || "").trim(); if (!/^[A-Za-z0-9_-]{32,128}$/.test(k)) return res.status(400).json({ error: "Clé invalide." });

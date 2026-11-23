@@ -488,6 +488,27 @@ function mediaEnd(){ if (MEDIA_NEXT){ MEDIA_KEEP = MEDIA_NEXT; MEDIA_NEXT = null
 // Une image qui finit de charger ne ramène en bas que si on y était déjà
 function mediaStick(list){ list.querySelectorAll("img,video").forEach(x => { if (x.tagName === "IMG" ? x.complete : x.readyState >= 1) return;
   x.addEventListener(x.tagName === "IMG" ? "load" : "loadedmetadata", () => { if (list.scrollHeight - list.scrollTop - list.clientHeight - x.offsetHeight < 160) list.scrollTop = list.scrollHeight; }, { once: true }); }); }
+// GIF (GIPHY), comme côté équipe : recherche, clic = envoi
+function gifPicker(ch){
+  if (S.f && S.f.preview){ toast("Aperçu de l’agence : rien n’est envoyé."); return; }
+  openModal(m => {
+    m.classList.add("gif-modal");
+    const t = el("h3",null,"GIF"); t.id = "mtitle"; m.appendChild(t);
+    const q = el("input","gif-q"); q.type = "search"; q.placeholder = "Rechercher un GIF"; m.appendChild(q);
+    const grid = el("div","gif-grid"); m.appendChild(grid);
+    m.appendChild(el("p","gif-by","Propulsé par GIPHY"));
+    let tm = 0, seq = 0;
+    const load = async () => { const my = ++seq; grid.textContent = ""; grid.appendChild(el("p","muted","Chargement…"));
+      try { const r = await api("/api/c/gifs?q=" + encodeURIComponent(q.value.trim())); if (my !== seq) return; grid.textContent = "";
+        if (!r.gifs.length) grid.appendChild(el("p","muted","Aucun GIF trouvé."));
+        r.gifs.forEach(g => { const b = el("button","gif-it"); b.type = "button"; b.title = g.title || "GIF"; const i = document.createElement("img"); i.src = g.small || g.url; i.alt = g.title || "GIF"; i.loading = "lazy"; b.appendChild(i);
+          b.onclick = async () => { closeModal(); try { await api("/api/c/msg", { body: { ch, text: "", files: [{ url: g.url, name: "GIF", type: "image/gif", w: g.w, h: g.h }] } }); await loadFeed(); } catch(e){ toast(e.message); } };
+          grid.appendChild(b); });
+      } catch(e){ if (my === seq){ grid.textContent = ""; grid.appendChild(el("p","muted",e.message)); } } };
+    q.oninput = () => { clearTimeout(tm); tm = setTimeout(load, 350); };
+    load(); setTimeout(() => q.focus(), 50);
+  });
+}
 function attachEl(f, key){
   if (isImg(f)){ const a = el("a","wa-img"); a.href = f.url; a.target = "_blank"; a.rel = "noopener";
     a.appendChild(mediaKeep(key, () => { const i = document.createElement("img"); i.src = f.url; i.alt = f.name || "Photo"; i.decoding = "async"; mediaSize(i, f); return i; })); return a; }
@@ -620,7 +641,7 @@ function vMessagerie(root){
     const ok = el("button","btn lemon","Envoyer le vocal"); ok.type = "button"; ok.onclick = () => crecStop(false);
     form.onsubmit = e => { e.preventDefault(); crecStop(false); };
     bar.append(rb, cb, ok);
-  } else { setBtn(); bar.append(fi, clip, ta, go2); }
+  } else { setBtn(); const gif = el("button","wa-ic wa-gif","GIF"); gif.type = "button"; gif.title = "Envoyer un GIF"; gif.setAttribute("aria-label", gif.title); gif.onclick = () => gifPicker(ch); bar.append(fi, clip, gif, ta, go2); }
   form.appendChild(bar);
   main.ondragover = e => { e.preventDefault(); main.classList.add("drop"); };
   main.ondragleave = () => main.classList.remove("drop");
