@@ -1514,6 +1514,8 @@ module.exports = function (app, { db, wrap, root }) {
     txt = txt.split("\n").filter(l => l && !l.startsWith(name + "=")).join("\n") + "\n" + name + "='" + val + "'\n"; fs.writeFileSync(ENV, txt.replace(/^\n+/, ""), { mode: 0o600 }); process.env[name] = val; };
   require("./production")({ app, auth, wrap, db, current, put, pubPlan: PUB_PLAN, persistKey, upDir: DIR, macAuth: (req, res, next) => descKeyOk(req) ? (req.user = { name: "Mac des descriptions", role: "owner" }, next()) : deployAuth(req, res, next) });
   require("./metaads")({ app, auth, ownerOnly, wrap, db, put, current, persistKey });
+  app.post("/api/g-pubkind", auth, wrap(async (req, res) => { const b = req.body || {}, id = String(b.id || "").replace(/[^0-9A-Za-z_-]/g, "").slice(0, 40); if (!id) return res.status(400).json({ error: "Publication inconnue." });
+    await put("_pubkind", id, { sub: b.sub === "bio" ? "bio" : "parle", by: (req.user && req.user.name) || "", at: new Date().toISOString() }); pubCache.clear(); res.json({ ok: true }); }));
   app.get("/api/g-pubs", auth, wrap(async (req, res) => {
     const mk = /^\d{4}-\d{2}$/.test(String(req.query.month || "")) ? req.query.month : new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Paris" }).slice(0, 7);
     const plan = PUB_PLAN.map(([client, blogId, stat, video]) => ({ client, blogId, stat, video }));
@@ -1535,12 +1537,15 @@ module.exports = function (app, { db, wrap, root }) {
           // Étiquette Metricool « Paul Audio » (ou « PA ») : si le client en utilise, seules les vidéos étiquetées comptent comme vidéos Paul Audio
           if (vid) done ? out.vidDone++ : out.vidSched++; else done ? out.statDone++ : out.statSched++;
           // Détail pour la fiche récap du client (Publications) : date, type, état Metricool, début du texte, lien publié
-          out.items.push({ d: (p.publicationDate && p.publicationDate.dateTime) || "", vid, st: done ? "done" : /ERROR|FAIL/i.test(prov.status || "") ? "err" : "sched", net: prov.network || main,
+          const nImg = (Array.isArray(p.media) ? p.media : []).filter(u => !/\.(mp4|mov|webm|pdf)(\?|$)/i.test(u)).length;
+          out.items.push({ id: String(p.id || ""), kind: vid ? "reel" : nImg > 1 ? "carrousel" : "statique", nImg, d: (p.publicationDate && p.publicationDate.dateTime) || "", vid, st: done ? "done" : /ERROR|FAIL/i.test(prov.status || "") ? "err" : "sched", net: prov.network || main,
             text: String(p.text || "").replace(/\s+/g, " ").trim().slice(0, 140), url: prov.publicUrl || prov.link || "", img: (Array.isArray(p.media) ? p.media : []).find(u => /\.(jpe?g|png|webp)(\?|$)/i.test(u)) || "" });
           if (!done && d >= today && (!out.next || d < out.next)) out.next = d; });
       } catch (e) { out.err = "Metricool injoignable"; }
       return out; };
     const rows = await Promise.all(plan.map(one));
+    // Type de réel (parlé ou « lire la bio ») : Metricool ne le sait pas, il est choisi dans l'appli et gardé ici
+    await Promise.all(rows.flatMap(r => r.items.filter(x => x.kind === "reel" && x.id).map(async x => { try { const k = await current("_pubkind", x.id); x.sub = k && k.sub === "bio" ? "bio" : "parle"; } catch (e) { x.sub = "parle"; } })));
     // Décisions du client dans son espace (validée, modification demandée, refusée), dernière par publication
     for (const r of rows) { try { const c = r.blogId ? await db.one("SELECT id FROM clients WHERE metricool_blog_id = ?", [r.blogId]) : null; if (!c) continue;
       const ds = await db.all("SELECT d.post_id, d.post_title, d.post_date, d.status, d.note, d.created_at, u.prenom FROM decisions d LEFT JOIN users u ON u.id = d.user_id WHERE d.client_id = ? AND d.post_date LIKE ? ORDER BY d.id", [c.id, mk + "%"]);

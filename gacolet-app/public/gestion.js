@@ -1882,6 +1882,10 @@ function pubRecap(r, mk, ok){
     const k = el("div","pr-kpis"); [[n(x => x.st === "done"), "postées"], [n(x => x.st === "sched"), "programmées"], [refused.length, "refusées"], [mods.length, "à modifier"]].concat(n(x => x.st === "err") ? [[n(x => x.st === "err"), "en erreur"]] : [])
       .forEach(([v, l]) => { const c = el("div","pr-kpi"); c.append(el("b", null, String(v)), el("span", null, l)); k.appendChild(c); }); m.appendChild(k);
     { const pl = (Number(r.stat) || 0) + (Number(r.video) || 0), dn = (r.statDone || 0) + (r.vidDone || 0); m.appendChild(el("p","muted", "Prévu au mois : " + pl + " post" + (pl > 1 ? "s" : "") + ". Publié" + (dn > 1 ? "s" : "") + " : " + dn + ".")); }
+    { const KL = { carrousel: "Carrousel", parle: "Réel parlé", bio: "Réel lire la bio", statique: "Post statique" }, kOf = x => x.kind === "reel" ? (x.sub === "bio" ? "bio" : "parle") : x.kind || (x.vid ? "parle" : "statique");
+      const posted = items.filter(x => x.st === "done"); m.appendChild(el("h4","pr-h","Posts déjà publiés, par type"));
+      const kt = el("div","pr-kpis"); Object.keys(KL).forEach(k => { const c = el("div","pr-kpi"); c.append(el("b", null, String(posted.filter(x => kOf(x) === k).length)), el("span", null, KL[k])); kt.appendChild(c); }); m.appendChild(kt);
+      m.__kOf = kOf; m.__KL = KL; }
     if (decs.length){ m.appendChild(el("h4","pr-h","Retours du client dans son espace"));
       const ul = el("ul","pr-list"); decs.slice().sort((a, b) => (a.date || "").localeCompare(b.date || "")).forEach(d => { const li = el("li");
         li.append(el("span","pill " + (d.status === "ok" ? "ok" : d.status === "mod" ? "l2" : d.status === "no" ? "l3" : "l1"), { ok: "Validée", mod: "À modifier", no: "Refusée", wait: "À valider" }[d.status] || d.status));
@@ -1893,7 +1897,11 @@ function pubRecap(r, mk, ok){
     else if (!items.length) m.appendChild(el("p","empty","Rien de posté ni de programmé ce mois-ci."));
     else { const ul = el("ul","pr-list"); items.forEach(x => { const li = el("li");
         li.append(el("span","pill " + (x.st === "done" ? "ok" : x.st === "err" ? "l3" : "l1"), x.st === "done" ? "Postée" : x.st === "err" ? "Erreur" : "Programmée"));
-        const tx = el("div"); tx.append(el("b", null, (x.d ? fmtFR(x.d.slice(0, 10)) + " à " + x.d.slice(11, 16).replace(":", " h ") : "")), el("div","note", x.text || "(sans texte)")); li.appendChild(tx);
+        if (x.img){ const im = el("img","pr-th"); im.src = x.img; im.alt = ""; im.loading = "lazy"; li.appendChild(im); } else li.appendChild(el("span","pr-th pr-th-v", x.vid ? "▶" : ""));
+        const k = m.__kOf(x), kp = el(x.kind === "reel" && x.id ? "button" : "span","pr-kind" + (k === "bio" ? " bio" : ""), m.__KL[k] + (x.kind === "carrousel" && x.nImg ? ", " + x.nImg + " visuels" : ""));
+        if (kp.tagName === "BUTTON"){ kp.type = "button"; kp.title = "Cliquer pour passer en " + (k === "bio" ? "réel parlé" : "réel lire la bio");
+          kp.onclick = async () => { const sub = x.sub === "bio" ? "parle" : "bio"; try { await GC.api("POST","/api/g-pubkind",{ id: x.id, sub }); x.sub = sub; closeModal(); pubRecap(r, mk, ok); loadPubs(mk, true); } catch(e){ toast(e.message); } }; }
+        const tx = el("div"); tx.append(kp, el("b", null, (x.d ? fmtFR(x.d.slice(0, 10)) + " à " + x.d.slice(11, 16).replace(":", " h ") : "")), el("div","note", x.text || "(sans texte)")); li.appendChild(tx);
         if (x.url){ const a = el("a","pr-lnk","Voir"); a.href = x.url; a.target = "_blank"; a.rel = "noopener"; li.appendChild(a); }
         ul.appendChild(li); }); m.appendChild(ul); }
     const act = el("div","actions");
@@ -1902,7 +1910,7 @@ function pubRecap(r, mk, ok){
   });
 }
 (function(){ const st = document.createElement("style"); st.textContent = ".pr-modal{max-width:640px}.pr-kpis{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}.pr-kpi{flex:1;min-width:90px;background:var(--card-2,rgba(255,255,255,.04));border:1px solid var(--line-2);border-radius:12px;padding:10px 12px}.pr-kpi b{display:block;font-size:22px}.pr-kpi span{font-size:12px;color:var(--muted,#9a9a94)}"
-  + ".pr-h{margin:16px 0 6px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#9a9a94)}.pr-list{list-style:none;margin:0;padding:0;display:grid;gap:8px;max-height:44vh;overflow:auto}.pr-list li{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line-2)}.pr-list li > div{flex:1;min-width:0}.pr-list .note{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pr-lnk{font-size:13px;color:#C6FF33;white-space:nowrap}"; document.head.appendChild(st); })();
+  + ".pr-h{margin:16px 0 6px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#9a9a94)}.pr-list{list-style:none;margin:0;padding:0;display:grid;gap:8px;max-height:44vh;overflow:auto}.pr-list li{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line-2)}.pr-list li > div{flex:1;min-width:0}.pr-list .note{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pr-lnk{font-size:13px;color:#C6FF33;white-space:nowrap}.pr-th{width:44px;height:55px;object-fit:cover;border-radius:6px;flex:none;background:var(--line-2);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--muted,#9a9a94)}.pr-kind{display:inline-block;margin:0 8px 2px 0;padding:1px 8px;border-radius:999px;font-size:12px;border:1px solid var(--line-2);background:transparent;color:inherit;font:inherit;font-size:12px}button.pr-kind{cursor:pointer}button.pr-kind:hover{border-color:#C6FF33}.pr-kind.bio{border-color:#C6FF33;color:#C6FF33}"; document.head.appendChild(st); })();
 /* Publications : chaque client face à ce qui est prévu au mois (statiques et vidéos Paul Audio), lu en direct dans Metricool */
 let pubAt = {}; function loadPubs(mk, force){ if (!force && Date.now() - (pubAt[mk] || 0) < 3 * 60000) return; pubAt[mk] = Date.now();
   GC.api("GET", "/api/g-pubs?month=" + mk + (force ? "&fresh=1" : "")).then(r => { S.pubs = Object.assign({}, S.pubs, { [mk]: r }); renderSoon(); }).catch(() => {}); }
@@ -3031,7 +3039,9 @@ function vMessagerie(root){
   const go2 = el("button","wa-send"); go2.type = "submit";
   const ready = () => !!ta.value.trim() || (PENDING.ch === ch && PENDING.files.some(f => f.url));
   const setBtn = () => { const r = ready(); go2.innerHTML = r ? SEND : MIC; go2.setAttribute("aria-label", r ? "Envoyer" : "Enregistrer un message vocal"); go2.dataset.mode = r ? "send" : "mic"; };
-  ta.oninput = () => { S.ui.msgDraft = ta.value; ta.style.height = "auto"; ta.style.height = Math.min(140, ta.scrollHeight) + "px"; setBtn(); if (ta.value.trim()) typingPing(ch); };
+  // Hauteur = contenu + bordures (sinon le champ perd 2 px à la première lettre et la barre descend)
+  const fit = () => { ta.style.height = "auto"; if (!ta.value) return; ta.style.height = Math.min(140, ta.scrollHeight + ta.offsetHeight - ta.clientHeight) + "px"; };
+  ta.oninput = () => { S.ui.msgDraft = ta.value; fit(); setBtn(); if (ta.value.trim()) typingPing(ch); };
   const send = async () => {
     if (PENDING.ch === ch && PENDING.busy){ toast("Attends la fin de l’envoi des fichiers."); return; }
     const t = ta.value.trim(), files = PENDING.ch === ch ? PENDING.files.filter(f => f.url).map(f => ({ url: f.url, name: f.name, type: f.type, size: f.size })) : [];
@@ -3060,7 +3070,7 @@ function vMessagerie(root){
   if (same && !keep.bottom) list.scrollTop = keep.top; else list.scrollTop = list.scrollHeight;
   requestAnimationFrame(() => { const l = document.getElementById("chat-list");
     if (l){ if (!same || keep.bottom) l.scrollTo({ top: l.scrollHeight, behavior: "auto" }); else l.scrollTop = keep.top; }
-    if (ta.value){ ta.style.height = "auto"; ta.style.height = Math.min(140, ta.scrollHeight) + "px"; }
+    if (ta.value) fit();
     if (keepIn && same){ ta.focus({ preventScroll: true }); try { ta.setSelectionRange(keepIn.a, keepIn.b); } catch(e){} }
     liveFill(); });
   const last = msgs[msgs.length - 1];
