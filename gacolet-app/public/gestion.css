@@ -2328,3 +2328,8 @@ button.wi-p{cursor:pointer}button.wi-p:hover .wi-pt b{color:var(--lemon)}
 .emo-pan button{border:0;background:none;font-size:24px;line-height:1;padding:6px 0;border-radius:8px;cursor:pointer}
 .emo-pan button:hover{background:rgba(255,255,255,.1)}
 @media (hover:none){ .wa-bub{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none} }
+/* Salons privés en grands rectangles (23/11/2026) */
+.vx-hero + .vx-hero{margin-top:14px}
+.vx-del{align-self:center;padding:6px 12px}
+.vx-del.armed{border-color:#ff6b6b;color:#ff6b6b}
+.vx-hero:has(.vx-menu){z-index:20}

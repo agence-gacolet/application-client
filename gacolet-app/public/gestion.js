@@ -2938,21 +2938,30 @@ function vcChat(){ const box = document.getElementById("vc-msgs"); if (!box) ret
 function vVocal(root){
   root.appendChild(head("Vocal", "La salle de réunion de l’agence : micro, caméra et partage d’écran, sans rien installer."));
   if (VC.room){ const st = el("section","vc-stage"); st.id = "vc-stage"; root.appendChild(st); setTimeout(vcStage, 0); }
-  /* Seule la salle Réunion reste affichée ; les autres salons et les visios s’ouvrent avec le bouton + */
-  { const here = voiceHere("reunion"), mine = VC.room === "reunion";
+  /* Réunion puis un grand rectangle par salon privé ; visios clients et prospects restent dans le + */
+  const me0 = S.me || "Gabriel";
+  const hero = (room, name, idle, menu, del) => { const here = voiceHere(room), mine = VC.room === room;
     const h = el("section","vx-hero" + (here.length ? " live" : "") + (mine ? " mine" : ""));
     const orb = el("div","vx-orb"); const ic = el("span","vx-oic"); ic.innerHTML = HEADSET; orb.appendChild(ic);
     if (here.length){ const ring = el("div","vx-ring"); here.slice(0, 6).forEach(n => { const av = avatarEl(n, 34); av.title = n; ring.appendChild(av); }); orb.appendChild(ring); }
     const tx = el("div","vx-htx");
-    tx.append(el("span","vx-st", here.length ? "En direct" : "Libre"), el("h2", null, "Réunion"),
-      el("p","muted", here.length ? (here.length === 1 ? here[0] + " est dans la salle" : here.slice(0, -1).join(", ") + " et " + here[here.length - 1] + " sont dans la salle") : "Points d’équipe et réunions avec un client. Personne pour l’instant."));
+    tx.append(el("span","vx-st", here.length ? "En direct" : "Libre"), el("h2", null, name),
+      el("p","muted", here.length ? (here.length === 1 ? here[0] + " est dans la salle" : here.slice(0, -1).join(", ") + " et " + here[here.length - 1] + " sont dans la salle") : idle));
     const a = el("div","vx-hact");
-    a.appendChild(mine ? btn("Quitter la réunion","vx-leave", () => vcLeave()) : btn(VC.room ? "Passer en réunion" : "Rejoindre la réunion","lemon vx-join", () => vcJoin("reunion", "Réunion")));
-    const more = el("button","vx-more" + (VX_MENU ? " on" : "")); more.type = "button"; more.setAttribute("aria-haspopup","menu"); more.setAttribute("aria-expanded", String(VX_MENU)); more.setAttribute("aria-label","Choisir un autre salon ou une visio"); more.title = "Choisir un autre salon ou une visio"; more.textContent = "+";
-    more.onclick = e => { e.stopPropagation(); VX_MENU = !VX_MENU; if (VX_MENU && (S.role === "owner" || canSee("commercial")) && !S.invites && !S.invLoading){ S.invLoading = true; GC.api("GET","/api/rtc/invites").then(r => { S.invites = r.invites; }).catch(() => { S.invites = []; }).finally(() => { S.invLoading = false; render(); }); } render(); };
-    const wrapM = el("div","vx-mw"); wrapM.appendChild(more); if (VX_MENU) wrapM.appendChild(vxMenu()); a.appendChild(wrapM);
-    tx.appendChild(a); h.append(orb, tx); root.appendChild(h);
-    const others = [].concat((S.d.vrooms || []).filter(r => (r.members || []).includes(S.me || "Gabriel")).map(r => [r.room, r.name])).concat((S.cgroups || []).filter(x => cgIn(x.ch, "main")).map(x => [x.room, "Visio, " + x.name])).concat((S.invites || []).map(x => [x.room, x.label])).filter(([k]) => voiceHere(k).length && VC.room !== k);
+    const R = room === "reunion"; a.appendChild(mine ? btn(R ? "Quitter la réunion" : "Quitter le salon","vx-leave", () => vcLeave()) : btn(VC.room ? (R ? "Passer en réunion" : "Passer dans ce salon") : (R ? "Rejoindre la réunion" : "Rejoindre le salon"),"lemon vx-join", () => vcJoin(room, name)));
+    if (menu){
+      const more = el("button","vx-more" + (VX_MENU ? " on" : "")); more.type = "button"; more.setAttribute("aria-haspopup","menu"); more.setAttribute("aria-expanded", String(VX_MENU)); more.setAttribute("aria-label","Créer un salon ou ouvrir une visio"); more.title = "Créer un salon ou ouvrir une visio"; more.textContent = "+";
+      more.onclick = e => { e.stopPropagation(); VX_MENU = !VX_MENU; if (VX_MENU && (S.role === "owner" || canSee("commercial")) && !S.invites && !S.invLoading){ S.invLoading = true; GC.api("GET","/api/rtc/invites").then(r => { S.invites = r.invites; }).catch(() => { S.invites = []; }).finally(() => { S.invLoading = false; render(); }); } render(); };
+      const wrapM = el("div","vx-mw"); wrapM.appendChild(more); if (VX_MENU) wrapM.appendChild(vxMenu()); a.appendChild(wrapM);
+    }
+    if (del) a.appendChild(del);
+    tx.appendChild(a); h.append(orb, tx); root.appendChild(h); };
+  hero("reunion", "Réunion", "Points d’équipe et réunions avec un client. Personne pour l’instant.", true);
+  (S.d.vrooms || []).filter(r => (r.members || []).includes(me0)).sort((x, y) => (x.at || "").localeCompare(y.at || "")).forEach(r => {
+    const others = (r.members || []).filter(n => n !== me0); let x = null;
+    if (r.by === me0){ x = el("button","vx-cp vx-del","Supprimer"); x.type = "button"; x.onclick = e => { e.stopPropagation(); if (x.dataset.armed){ remove("vrooms", r.id).then(() => toast("Salon « " + r.name + " » supprimé.")); return; } x.dataset.armed = "1"; x.textContent = "Confirmer la suppression"; x.classList.add("armed"); }; }
+    hero(r.room, r.name, "Salon privé avec " + (others.length ? others.join(", ") : "toi seul") + ". Personne pour l’instant.", false, x); });
+  { const others = [].concat((S.cgroups || []).filter(x => cgIn(x.ch, "main")).map(x => [x.room, "Visio, " + x.name])).concat((S.invites || []).map(x => [x.room, x.label])).filter(([k]) => voiceHere(k).length && VC.room !== k);
     if (others.length){ const lv = el("div","vx-live"); others.forEach(([k, l]) => { const c = el("button","vx-chip"); c.type = "button"; c.append(el("i"), el("span", null, l + " : " + voiceHere(k).join(", "))); c.onclick = () => vcJoin(k, l); lv.appendChild(c); }); root.appendChild(lv); }
   }
   root.appendChild(el("p","status","Le son et l’image passent directement d’un ordinateur à l’autre. On peut changer d’onglet pendant un appel : une barre reste en bas de l’écran."));
@@ -2969,11 +2978,7 @@ function vxMenu(){
     if (extra) b.appendChild(extra);
     b.onclick = () => { VX_MENU = false; if (mine) render(); else vcJoin(room, title || label); }; m.appendChild(b); };
   const sec = t => m.appendChild(el("div","vx-ms", t));
-  const me = S.me || "Gabriel", priv = (S.d.vrooms || []).filter(r => (r.members || []).includes(me)).sort((a, b) => (a.name || "").localeCompare(b.name || "", "fr"));
-  sec("Mes salons privés");
-  priv.forEach(r => { const others = (r.members || []).filter(n => n !== me); let x = null;
-    if (r.by === me){ x = el("span","vx-cp","Supprimer"); x.onclick = e => { e.stopPropagation(); if (x.dataset.armed){ remove("vrooms", r.id).then(() => toast("Salon « " + r.name + " » supprimé.")); VX_MENU = false; render(); return; } x.dataset.armed = "1"; x.textContent = "Confirmer"; x.classList.add("armed"); }; }
-    item(r.name, "Avec " + (others.length ? others.join(", ") : "toi seul"), r.room, r.name, x); });
+  sec("Salons privés");
   const nr = el("button","vx-mi vx-new"); nr.type = "button"; nr.setAttribute("role","menuitem"); nr.append(el("span","vx-plus","+"), el("b", null, "Créer un salon")); nr.onclick = () => { VX_MENU = false; render(); newVroom(); }; m.appendChild(nr);
   const cv = (S.cgroups || []).filter(x => (x.people || []).length);
   if (cv.length){ sec("Visios clients"); cv.forEach(x => item(x.name, "Le client la rejoint depuis son espace", x.room, "Visio, " + x.name)); }
