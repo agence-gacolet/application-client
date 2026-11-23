@@ -464,10 +464,10 @@ function editTask(t){
 function openCommercial(c){
   const late = lateDays(c.nextDate);
   openFacts({ title: c.company,
-    facts: [["Type", c.kind],["Provenance", c.source],["Étape", c.stage],["Prochaine action", c.nextAction],["Date", c.nextDate ? fmtDL(c.nextDate)+(late ? ", "+late+" j de retard" : "") : ""],["Dernier contact", c.lastContact],["J0", fmtFR(c.j0)],["Relance", c.relance],["Contact", c.contact],["Compte rendu", c.report],["Notes", c.notes]],
+    facts: [["Type", c.kind]].concat(c.hold ? [["En attente", c.holdCat + " (depuis le " + fmtFR(c.holdSince) + ")"],["Raison", c.holdReason]] : []).concat([["Provenance", c.source],["Étape", c.stage],["Prochaine action", c.nextAction],["Date", c.nextDate ? fmtDL(c.nextDate)+(late ? ", "+late+" j de retard" : "") : ""],["Dernier contact", c.lastContact],["J0", fmtFR(c.j0)],["Relance", c.relance],["Contact", c.contact],["Compte rendu", c.report],["Notes", c.notes]]),
     quick: [["Pas de réponse", () => applyCo(c, coNoAnswer(c), "Relance programmée.")],["Devis envoyé", () => applyCo(c, coQuote(c), "Relance 1 dans 3 jours.")],
             ["Date donnée", () => editCoDate(c)],["Pas intéressé", () => applyCo(c, coNotInterested(c), "Reprise de contact dans 6 mois.")],["Signé", () => applyCo(c, coSigned(c), "Signé : démarrage le prochain jour ouvré.")],
-            ["Compte rendu", () => editCoReport(c)]],
+            ["Compte rendu", () => editCoReport(c)], c.hold ? ["Reprendre", () => applyCo(c, coResume(c), c.company + " sort de l’attente : à rappeler aujourd’hui.")] : ["En attente", () => editCoHold(c)]],
     onEdit: () => editCommercial(c) });
 }
 function applyCo(c, body, msg){ return patch("commercial", c.id, body).then(() => { closeModal(); toast(msg); }); }
@@ -477,6 +477,16 @@ function editCoDate(c){
     onCancel: () => openCommercial(c),
     onSave: o => patch("commercial", c.id, {nextDate:o.nextDate, nextAction:o.nextAction, lastContact: stamp(o.txt || "date donnée par le prospect")}) });
 }
+/* Mise en attente : raison obligatoire + catégorie ; la ligne passe dans la bande EN ATTENTE de sa catégorie. */
+const CO_HOLD = ["Budget","Pas le bon moment","Décision à prendre en interne","A déjà un prestataire","Ne répond plus","Autre"];
+function editCoHold(c){
+  openForm({ key:"coh", title:"Mettre en attente, "+c.company, intro:"La ligne sort du suivi actif et se range dans la catégorie choisie. Elle revient dans les actions dues à la date de reprise.", values:{cat:"", reason:"", nextDate:addMonths(today(),1)},
+    fields:[{k:"cat",label:"Catégorie",type:"select",options:[["","À choisir"]].concat(CO_HOLD),req:"Choisis une catégorie."},{k:"reason",label:"Raison",type:"textarea",rows:3,req:"Écris la raison de la mise en attente.",ph:"Ex. attend son bilan de fin d’année pour décider"},{k:"nextDate",label:"Refaire le point le",type:"date",req:"Indique la date de reprise."}],
+    onCancel: () => openCommercial(c),
+    onSave: o => { if (!String(o.cat||"").trim()) { toast("Choisis une catégorie."); throw new Error("cat"); } if (!String(o.reason||"").trim()) { toast("Écris la raison."); throw new Error("reason"); }
+      return patch("commercial", c.id, { hold:true, holdCat:o.cat, holdReason:o.reason.trim(), holdSince:today(), holdStage:c.stage||"", stage:"en attente", nextAction:"Refaire le point", nextDate:o.nextDate, lastContact:stamp("mis en attente ("+o.cat.toLowerCase()+") : "+o.reason.trim()) }).then(() => toast(c.company+" en attente, catégorie "+o.cat+".")); } });
+}
+function coResume(c){ return { hold:false, holdCat:"", holdReason:"", holdSince:"", stage:c.holdStage && c.holdStage !== "en attente" ? c.holdStage : "à rappeler", nextAction:"Reprendre contact", nextDate:today(), lastContact:stamp("sorti de l’attente ("+(c.holdCat||"")+" : "+(c.holdReason||"")+")") }; }
 function editCoReport(c){
   openForm({ key:"cor", title:"Compte rendu, "+c.company, intro:"Note l’échange. Utilise ensuite les boutons pour programmer la suite.", values:{txt:""},
     fields:[{k:"txt",label:"Échange",type:"textarea",rows:4,req:"Écris le compte rendu."}],
@@ -1180,7 +1190,7 @@ function vCommercial(root){
     if (full){ const cnt = Object.fromEntries(SALES.map(p => [p, S.d.commercial.filter(c => c.kind === "Appel" && coOwner(c) === p).length])); cnt.Tous = S.d.commercial.filter(c => c.kind === "Appel").length; f0.appendChild(chipBar(SALES.concat(["Tous"]).map(p => [p, p]), who, v => { S.ui.coWho = v; remember(); render(); }, cnt)); }
     f0.appendChild(segm([["Tous","Tous"],["Clients","Clients"],["Prospects","Prospects"],["Appels","Listes d’appels"]], S.ui.coKind, v => { S.ui.coKind = v; remember(); render(); })); root.appendChild(f0);
     return vCalls(root, base.filter(c => c.kind === "Appel"), who, full); }
-  const all = base.filter(c => c.kind !== "Appel" && (S.ui.coKind === "Tous" || c.kind === (S.ui.coKind === "Clients" ? "Client" : "Prospect")) && (!q || norm([c.company,c.stage,c.notes,c.contact,c.nextAction].join(" ")).includes(q)));
+  const all = base.filter(c => c.kind !== "Appel" && (S.ui.coKind === "Tous" || c.kind === (S.ui.coKind === "Clients" ? "Client" : "Prospect")) && (!q || norm([c.company,c.stage,c.notes,c.contact,c.nextAction,c.holdCat,c.holdReason].join(" ")).includes(q)));
   const due = base.filter(c => isISO(c.nextDate) && c.nextDate <= today()).length;
   root.appendChild(head(full ? "Commercial" : "Mes prospects", plural(due,"action due","actions dues")+" aujourd’hui ou en retard, rythme de relance J+3, J+7, J+14, J+30", [addBtn("Nouveau prospect", () => editCommercial({}))]));
   const f = el("div","filters");
@@ -1192,17 +1202,18 @@ function vCommercial(root){
   const showWho = full && who === "Tous";
   const {w, tb} = table(["Entreprise","~Étape","Prochaine action","Date","~Retard","~Dernier contact","~Relance"].concat(showWho ? ["Commercial"] : []));
   const RS = c => c.kind === "Prospect" && c.source === "Réseaux sociaux";
-  [["Abonnement","ABONNEMENT"],["Meta","META"],["Prestation unique","PRESTATION UNIQUE"],["?","À CLASSER"],["Réseaux","PROSPECTS RÉSEAUX"],["Prospect","PROSPECTS"]].forEach(([k, label]) => {
-    const rows = all.filter(c => k === "Réseaux" ? RS(c) : k === "Prospect" ? c.kind === "Prospect" && !RS(c) : c.kind === "Client" && (coCat(c) || "?") === k).sort((a,b) => (a.nextDate||"9999").localeCompare(b.nextDate||"9999"));
+  const holdCat = c => CO_HOLD.includes(c.holdCat) ? c.holdCat : "Autre";
+  [["Abonnement","ABONNEMENT"],["Meta","META"],["Prestation unique","PRESTATION UNIQUE"],["?","À CLASSER"],["Réseaux","PROSPECTS RÉSEAUX"],["Prospect","PROSPECTS"]].concat(CO_HOLD.map(h => ["H:"+h, "EN ATTENTE · "+h.toUpperCase()])).forEach(([k, label]) => {
+    const rows = all.filter(c => k.startsWith("H:") ? c.hold && holdCat(c) === k.slice(2) : c.hold ? false : k === "Réseaux" ? RS(c) : k === "Prospect" ? c.kind === "Prospect" && !RS(c) : c.kind === "Client" && (coCat(c) || "?") === k).sort((a,b) => (a.nextDate||"9999").localeCompare(b.nextDate||"9999"));
     if (!rows.length) return; band(tb, label, rows.length, showWho ? 8 : 7);
     rows.forEach(c => { const n = lateDays(c.nextDate); const tr = el("tr","row"+(lateClass(n) ? " r"+lateClass(n) : "")); tr.onclick = () => openCommercial(c);
-      mo(td(tr, c.company,"ttl w"), c.stage); td(tr, el("div","note",c.stage),"hm"); td(tr, el("div","note",c.nextAction)); td(tr, fmtD(c.nextDate),"nw"); td(tr, n ? n+" j" : "","nw hm"); td(tr, el("div","note",c.lastContact),"hm"); td(tr, c.relance,"nw hm");
+      mo(td(tr, c.company,"ttl w"), c.stage); td(tr, el("div","note",c.hold ? "En attente : " + (c.holdReason||"") : c.stage),"hm"); td(tr, el("div","note",c.nextAction)); td(tr, fmtD(c.nextDate),"nw"); td(tr, n ? n+" j" : "","nw hm"); td(tr, el("div","note",c.lastContact),"hm"); td(tr, c.relance,"nw hm");
       if (showWho){ const sel = el("select","inl"); SALES.forEach(x => { const o = el("option",null,x); o.value = x; sel.appendChild(o); }); sel.value = coOwner(c); sel.disabled = !writable(); sel.onclick = e => e.stopPropagation(); sel.onchange = () => patch("commercial", c.id, {owner: sel.value}).then(() => toast(c.company + " attribué à " + sel.value + ".")); td(tr, sel, "nw"); }
       tb.appendChild(tr); });
   });
   if (!all.length) root.appendChild(el("p","empty", S.ui.coQ ? "Aucune entreprise ne correspond." : "Aucune fiche pour l’instant."));
   else root.appendChild(w);
-  root.appendChild(el("p","status","Ouvre une ligne pour appliquer un compte rendu : pas de réponse, devis envoyé, date donnée, pas intéressé ou signé."));
+  root.appendChild(el("p","status","Ouvre une ligne pour appliquer un compte rendu : pas de réponse, devis envoyé, date donnée, pas intéressé, signé ou en attente."));
 }
 
 /* ---------- Listes d'appels ----------
