@@ -2333,8 +2333,11 @@ button.wi-p{cursor:pointer}button.wi-p:hover .wi-pt b{color:var(--lemon)}
 .vx-del{align-self:center;padding:6px 12px}
 .vx-del.armed{border-color:#ff6b6b;color:#ff6b6b}
 .vx-hero:has(.vx-menu){z-index:20}
-/* Heure et ⋯ alignés sur la bulle (en bas), l'heure juste après les points (23/11/2026) */
-.wa-line .wa-dots{align-self:flex-end!important;margin-bottom:2px}
-.wa-line:hover .wa-time{top:auto!important;bottom:9px!important;transform:none!important;line-height:14px}
-.wa-line:not(.mine):hover .wa-time{left:calc(100% + 4px)!important;right:auto!important}
-.wa-line.mine:hover .wa-time{right:calc(100% + 4px)!important;left:auto!important}
+/* Heure et ⋯ collés à la bulle, centrés sur elle, l'heure juste après les points (23/11/2026) */
+.wa-brow{display:flex;align-items:center;gap:2px;min-width:0;max-width:100%}
+.wa-line.mine .wa-brow{flex-direction:row-reverse}
+.wa-brow .wa-dots{align-self:center!important;margin:0!important;order:0!important}
+.wa-stime{display:none;font-size:11px;color:#8E8E93;white-space:nowrap;font-variant-numeric:tabular-nums}
+.wa-line:hover .wa-stime{display:inline}
+.wa-line:hover .wa-time{display:none!important}
+@media (hover:none){ .wa-stime{display:none!important} }

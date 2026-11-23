@@ -3123,7 +3123,7 @@ function vMessagerie(root){
     const tm = el("span","wa-time", hhmm(md));
     if (mine){ const tk = el("span","wa-tk"); tk.dataset.at = m.at || ""; tk.innerHTML = '<svg viewBox="0 0 18 12" aria-hidden="true"><path d="M1 6.5 4.5 10 11 2.5M7 9.5l.5.5L14 2.5"/></svg>'; tk.title = "Envoyé"; tm.appendChild(tk); }
     bub.appendChild(tm);
-    const col = el("div","wa-col"); if (nm) col.appendChild(nm); col.appendChild(bub);
+    const col = el("div","wa-col"), brow = el("div","wa-brow"); if (nm) col.appendChild(nm); brow.appendChild(bub); col.appendChild(brow);
     const rk = Object.keys(m.re || {}).filter(k => (m.re[k] || []).length);
     if (rk.length){ const rr = el("div","wa-re"); rk.forEach(k => { const b = el("button", (m.re[k].includes(me) ? "on" : null)); b.type = "button"; b.title = m.re[k].join(", "); b.append(document.createTextNode(k), el("span",null,String(m.re[k].length))); b.onclick = e => { e.stopPropagation(); react(m, k); }; rr.appendChild(b); }); col.appendChild(rr); }
     if (lastMine && m.id === lastMine.id){ const sv = el("span","wa-seen","Distribué"); sv.id = "wa-seen"; sv.dataset.at = m.at || ""; col.appendChild(sv); }
@@ -3143,7 +3143,7 @@ function vMessagerie(root){
     const dots = el("button","wa-dots"); dots.type = "button"; dots.title = "Plus d’options"; dots.setAttribute("aria-label", dots.title);
     dots.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>';
     dots.onclick = e => { e.stopPropagation(); msgMenu(dots, m, ch, mine); };
-    line.appendChild(dots);
+    brow.append(dots, el("span","wa-stime", hhmm(md)));
     list.appendChild(line); prev = m;
   });
   const ls = [...list.querySelectorAll(".wa-line")]; ls.forEach((l, i) => { const n = ls[i + 1]; if (!n || !n.classList.contains("cont") || n.previousElementSibling !== l) l.classList.add("tail"); });
