@@ -92,7 +92,12 @@ module.exports = function production({ app, auth, wrap, db, current, put, pubPla
 
   // Sans clé Claude : la demande part dans une file (_descq) ; Claude Code, sur le Mac de l'agence, la relève chaque minute (tâche planifiée « gacolet-descriptions »)
   // avec l'abonnement Claude (rien à payer en plus), puis renvoie les trois propositions.
-  const RULES = "Règles : français, au ton du client, deux émojis au plus, pas de tiret long, pas de formule toute faite ni de marque d'écriture automatique, pas de superlatif non sourcé, pas de prénom de l'équipe de l'agence, aucun chiffre sans source. Disposition habituelle de l'agence, à respecter exactement, blocs séparés par une ligne vide : 1) une accroche d'une ligne, sans émoji ; ligne vide ; 2) un paragraphe de 2 à 4 phrases qui reprend ce que dit la vidéo (tutoiement si le client tutoie) ; ligne vide ; 3) une ligne d'invitation à agir signée par le client (ex. « Maître nageur à Lunel, je réponds à tes questions : écris-moi en message privé. »), avec au plus un émoji, à la fin de la ligne ; ligne vide ; 4) une ligne de 4 à 6 mots-dièse écrits avec une majuscule à chaque mot (#StageDeNatation), le premier au nom du client (ex. #HugoMaitreNageur), sans accents. Trois descriptions aux angles différents.";
+  const RULES = "Règles : français, au ton du client, deux émojis au plus, pas de tiret long, pas de formule toute faite ni de marque d'écriture automatique, pas de superlatif non sourcé, pas de prénom de l'équipe de l'agence, aucun chiffre sans source. Disposition habituelle de l'agence, à respecter exactement, blocs séparés par une ligne vide : 1) une accroche d'une ligne, sans émoji ; ligne vide ; 2) un paragraphe de 2 à 4 phrases qui reprend ce que dit la vidéo (tutoiement si le client tutoie) ; ligne vide ; 3) une ligne d'invitation à agir signée par le client (ex. « Maître nageur à Lunel, je réponds à tes questions : écris-moi en message privé. »), avec au plus un émoji, à la fin de la ligne ; ligne vide ; 4) une ligne de 4 à 6 mots-dièse écrits avec une majuscule à chaque mot (#StageDeNatation), le premier au nom du client (ex. #HugoMaitreNageur), sans accents. Trois descriptions aux angles différents. N'écris pas le téléphone, l'adresse ni le courriel du client : l'appli les ajoute elle-même avant les mots-dièse.";
+  // Coordonnées du client (fiche du Tableau clients) ajoutées à chaque description du Dépôt, juste avant la ligne de mots-dièse (demande de Matis du 23/11/2026)
+  const contactBlock = f => [f.tel && "Téléphone : " + String(f.tel).trim(), f.address && "Adresse : " + String(f.address).trim(), f.email && "Courriel : " + String(f.email).trim()].filter(Boolean).join("\n");
+  const withContacts = (props, f) => { const blk = contactBlock(f || {}); if (!blk) return props;
+    return props.map(t => { t = String(t).replace(/\n*(Téléphone|Adresse|Courriel) : [^\n]*/g, "").trim(); const lines = t.split("\n"); const last = lines[lines.length - 1] || "";
+      return /^\s*#/.test(last) ? lines.slice(0, -1).join("\n").trim() + "\n\n" + blk + "\n\n" + last.trim() : t + "\n\n" + blk; }); };
   app.get("/api/g-prod/describe/:id", auth, wrap(async (req, res) => { const q = await current("_descq", String(req.params.id)); if (!q) return res.status(404).json({ error: "Demande introuvable." }); res.json({ status: q.status, propositions: q.propositions || [], transcript: q.transcript || "", error: q.error || "" }); }));
   app.get("/api/g-prod/queue", macAuth, wrap(async (req, res) => {
     const base = (req.get("x-forwarded-proto") || req.protocol) + "://" + req.get("host");
@@ -114,7 +119,8 @@ module.exports = function production({ app, auth, wrap, db, current, put, pubPla
     if ((req.body || {}).error) { await put("_descq", id, Object.assign(q, { status: "error", error: String(req.body.error).slice(0, 300) })); return res.json({ ok: true }); }
     const props = (Array.isArray((req.body || {}).propositions) ? req.body.propositions : []).map(x => String(x).trim().slice(0, 2200)).filter(Boolean).slice(0, 3);
     if (!props.length) return res.status(400).json({ error: "Aucune proposition." });
-    await put("_descq", id, Object.assign(q, { status: "done", propositions: props, transcript: String((req.body || {}).transcript || "").trim().slice(0, 12000), doneAt: new Date().toISOString() })); res.json({ ok: true });
+    const withC = withContacts(props, (await clientContext(q.client)).fiche);
+    await put("_descq", id, Object.assign(q, { status: "done", propositions: withC, transcript: String((req.body || {}).transcript || "").trim().slice(0, 12000), doneAt: new Date().toISOString() })); res.json({ ok: true });
   }));
   // Trois propositions de description, au ton du client, d'après sa fiche et sa stratégie
   app.post("/api/g-prod/describe", auth, wrap(async (req, res) => {
@@ -138,7 +144,7 @@ module.exports = function production({ app, auth, wrap, db, current, put, pubPla
     if (r.stop_reason === "refusal") return res.status(422).json({ error: "Claude a refusé cette demande." });
     const txt = (r.content || []).filter(x => x.type === "text").map(x => x.text).join("");
     let props = []; try { props = JSON.parse(txt).propositions || []; } catch (e) { props = [txt]; }
-    res.json({ propositions: props.slice(0, 3).map(x => String(x).trim()).filter(Boolean) });
+    res.json({ propositions: withContacts(props.slice(0, 3).map(x => String(x).trim()).filter(Boolean), fiche) });
   }));
 
   // Dépôts en cours, gardés sur le serveur (et plus dans le navigateur) : les mêmes sur tous les appareils, rien ne disparaît en fermant une fenêtre
