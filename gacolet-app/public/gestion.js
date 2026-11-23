@@ -3234,6 +3234,8 @@ function vMessagerie(root){
   main.ondragleave = () => main.classList.remove("drop");
   main.ondrop = e => { e.preventDefault(); main.classList.remove("drop"); if (e.dataTransfer.files.length) addFiles(ch, [...e.dataTransfer.files]); };
   main.appendChild(form);
+  /* Flèche « derniers messages » toujours 12 px au-dessus de la saisie, quelle que soit sa hauteur (téléphone, réponse, pièces jointes) */
+  const placeDown = () => { down.style.bottom = (form.offsetHeight + 12) + "px"; }; placeDown(); if (window.ResizeObserver) new ResizeObserver(placeDown).observe(form);
   wrap.append(side, main); root.appendChild(wrap);
   mediaEnd(); mediaStick(list);
   const same = keep && keep.ch === ch;
