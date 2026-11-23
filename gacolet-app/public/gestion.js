@@ -3022,6 +3022,33 @@ const MSG_SHOWN = new Set(); let MSG_CH = "", SEEN_SENT = "", TYPING_AT = 0;
 async function react(m, e){ const me = S.me || "Gabriel"; const re = Object.assign({}, m.re || {}); const had = (re[e] || []).includes(me);
   Object.keys(re).forEach(k => { re[k] = (re[k] || []).filter(n => n !== me); if (!re[k].length) delete re[k]; }); if (!had) re[e] = (re[e] || []).concat(me);
   m.re = re; render(); try { await GC.api("POST","/api/g-react", { id: m.id, e }); } catch(x){ toast(x.message); } }
+// Qui a réagi : fenêtre façon WhatsApp (onglets Tous / par émoji, photo + nom, toucher sa ligne pour retirer)
+function reactSheet(m, start){
+  document.querySelectorAll(".rx-ov").forEach(x => x.remove());
+  const me = S.me || "Gabriel", ov = el("div","rx-ov"), sh = el("div","rx-sheet"); sh.setAttribute("role","dialog"); sh.setAttribute("aria-label","Réactions");
+  const grip = el("div","rx-grip"), tabs = el("div","rx-tabs"), list = el("div","rx-list"); let cur = start && (m.re || {})[start] ? start : "";
+  let LID = 0; const esc = e => { if (e.key === "Escape") close(); };
+  function close(){ document.removeEventListener("keydown", esc); sh.classList.add("out"); ov.classList.add("out"); setTimeout(() => ov.remove(), 160); if (LID){ const id = LID; LID = 0; layerClose(id); } }
+  function draw(){
+    const re = m.re || {}, ks = Object.keys(re).filter(k => (re[k] || []).length);
+    if (!ks.length) return close();
+    if (cur && !ks.includes(cur)) cur = "";
+    const all = []; ks.forEach(k => re[k].forEach(n => all.push([n, k]))); all.sort((a, b) => (a[0] === me ? -1 : b[0] === me ? 1 : 0));
+    tabs.textContent = "";
+    [["", "Tous", all.length]].concat(ks.map(k => [k, k, re[k].length])).forEach(([k, lab, n]) => { const b = el("button", k ? "emo" : null); b.type = "button"; b.setAttribute("aria-pressed", String(cur === k)); b.append(document.createTextNode(lab), el("span",null,String(n))); b.onclick = () => { cur = k; draw(); }; tabs.appendChild(b); });
+    list.textContent = "";
+    all.filter(x => !cur || x[1] === cur).forEach(([n, k]) => { const mine = n === me, r = el(mine ? "button" : "div","rx-row" + (mine ? " mine" : "")); if (mine) r.type = "button";
+      const t = el("div","rx-t"); t.append(el("b",null, mine ? "Vous" : n)); if (mine) t.append(el("span",null,"Toucher pour retirer"));
+      r.append(avatarEl(n, 40), t, el("span","rx-e",k));
+      if (mine) r.onclick = () => { react(m, k); draw(); };
+      list.appendChild(r); });
+  }
+  sh.append(grip, tabs, list); ov.appendChild(sh); draw();
+  ov.onclick = e => { if (e.target === ov) close(); }; document.addEventListener("keydown", esc);
+  let y0 = null; grip.onpointerdown = e => { y0 = e.clientY; grip.setPointerCapture(e.pointerId); }; grip.onpointermove = e => { if (y0 != null) sh.style.transform = "translateY(" + Math.max(0, e.clientY - y0) + "px)"; };
+  grip.onpointerup = e => { const d = y0 == null ? 0 : e.clientY - y0; y0 = null; sh.style.transform = ""; if (d > 70) close(); };
+  document.body.appendChild(ov); LID = layerOpen(() => { LID = 0; close(); });
+}
 function linkify(node, text){ const re = /\b((?:https?:\/\/|www\.)[^\s<>"]+)/gi; let i = 0, mm; text = String(text || "");
   while ((mm = re.exec(text))){ let u = mm[1]; const trail = (u.match(/[).,;:!?»"']+$/) || [""])[0]; if (trail) u = u.slice(0, -trail.length);
     if (mm.index > i) node.appendChild(document.createTextNode(text.slice(i, mm.index)));
@@ -3125,7 +3152,7 @@ function vMessagerie(root){
     bub.appendChild(tm);
     const col = el("div","wa-col"), brow = el("div","wa-brow"); if (nm) col.appendChild(nm); brow.appendChild(bub); col.appendChild(brow);
     const rk = Object.keys(m.re || {}).filter(k => (m.re[k] || []).length);
-    if (rk.length){ const rr = el("div","wa-re"); rk.forEach(k => { const b = el("button", (m.re[k].includes(me) ? "on" : null)); b.type = "button"; b.title = m.re[k].join(", "); b.append(document.createTextNode(k), el("span",null,String(m.re[k].length))); b.onclick = e => { e.stopPropagation(); react(m, k); }; rr.appendChild(b); }); col.appendChild(rr); }
+    if (rk.length){ const rr = el("div","wa-re"); rk.forEach(k => { const b = el("button", (m.re[k].includes(me) ? "on" : null)); b.type = "button"; b.title = m.re[k].join(", "); b.append(document.createTextNode(k), el("span",null,String(m.re[k].length))); b.onclick = e => { e.stopPropagation(); reactSheet(m, k); }; rr.appendChild(b); }); col.appendChild(rr); }
     if (lastMine && m.id === lastMine.id){ const sv = el("span","wa-seen","Distribué"); sv.id = "wa-seen"; sv.dataset.at = m.at || ""; col.appendChild(sv); }
     bub.title = hhmm(md);
     line.appendChild(col);
