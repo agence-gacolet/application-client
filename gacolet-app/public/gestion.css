@@ -1338,7 +1338,10 @@ html{-webkit-tap-highlight-color:transparent}
 @media (hover:none){ .wa-dots{display:none} }
 .wa-typing{border-bottom-left-radius:5px;margin-left:34px}
 .wa-typing i{background:rgba(235,235,245,.5)}
-.wa-typing span{display:inline;margin-left:6px;font-size:12px;color:rgba(235,235,245,.65);white-space:nowrap}
+.wa-typing>span:not(.wa-ty-av){display:none}
+.wa-typing{position:relative}
+.wa-ty-av{position:absolute;left:-32px;bottom:0;display:flex;margin:0!important}
+.wa-ty-av>*+*{margin-left:-10px}
 .wa-form{-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px)}
 .wa-bar textarea{color:#fff;font-family:inherit}
 .wa-bar textarea::placeholder{color:rgba(235,235,245,.35)}
