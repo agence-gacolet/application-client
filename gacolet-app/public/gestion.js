@@ -905,7 +905,7 @@ function item(a, b, sub, c, onClick, color){
 function vAccueil(root){
   const me = S.me || "Gabriel", t0 = today(), now = new Date(), hr = now.getHours(), wd = now.getDay(), t1 = addDays(t0, 1);
   const weekend = wd === 0 || wd === 6, evening = hr >= 18;
-  const evOf = d => S.d.events.filter(e => e.date === d && e.status !== "Annulé" && (!(e.who||[]).length || (e.who||[]).includes(me))).sort((a,b) => (a.time||"99").localeCompare(b.time||"99"));
+  const evOf = d => S.d.events.filter(e => e.date === d && e.status !== "Annulé" && e.type !== "Éditorial" && (!(e.who||[]).length || (e.who||[]).includes(me))).sort((a,b) => (a.time||"99").localeCompare(b.time||"99"));
   const evs = evening || weekend ? evOf(t1) : evOf(t0);
   const hello = hr < 5 ? "Bonne nuit" : hr < 12 ? "Bonjour" : hr < 14 ? "Bon appétit" : hr < 18 ? "Bon après-midi" : "Bonsoir";
   let say;
