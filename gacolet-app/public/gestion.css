@@ -1338,7 +1338,7 @@ html{-webkit-tap-highlight-color:transparent}
 @media (hover:none){ .wa-dots{display:none} }
 .wa-typing{border-bottom-left-radius:5px;margin-left:34px}
 .wa-typing i{background:rgba(235,235,245,.5)}
-.wa-typing span{display:none}
+.wa-typing span{display:inline;margin-left:6px;font-size:12px;color:rgba(235,235,245,.65);white-space:nowrap}
 .wa-form{-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px)}
 .wa-bar textarea{color:#fff;font-family:inherit}
 .wa-bar textarea::placeholder{color:rgba(235,235,245,.35)}
