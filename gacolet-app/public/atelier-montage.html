@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Atelier Gacolet</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Mise en page : une table de montage. Le circuit est une séquence Premiere, chaque étape prend la couleur d'étiquette du kit. */
+:root{
+  --bg:#F4F5F8; --panel:#FFFFFF; --ink:#14161B; --muted:#5A6170; --line:#DCE0E7; --accent:#4B57D1; --accent-ink:#FFFFFF;
+  --ok:#1F8A52; --ok-bg:#E3F4EA; --info:#2C6FC9; --info-bg:#E4EEFA; --warn:#A8670B; --warn-bg:#FBF0DC; --dead:#B23A3A; --dead-bg:#F8E5E5; --gray:#6B7280; --gray-bg:#ECEEF1;
+  --l-iris:#6C74E0; --l-sarcelle:#1E9AA6; --l-vert:#3E9E4F; --l-jaune:#C9A21A; --l-rose:#D85C9A; --l-violet:#8A5CD6; --l-magenta:#C23DB0; --l-caramel:#B7743A; --l-gris:#8A909C;
+  --f-disp:"Archivo",system-ui,sans-serif; --f-body:"Inter",system-ui,sans-serif; --f-mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#101217; --panel:#181B22; --ink:#ECEEF3; --muted:#9BA2B0; --line:#2A2F3B; --accent:#8F99F4; --accent-ink:#0E1016;
+  --ok:#5CCB8A; --ok-bg:#163223; --info:#7DB0F2; --info-bg:#172A40; --warn:#E8B55A; --warn-bg:#382A12; --dead:#EE8B8B; --dead-bg:#3A1C1C; --gray:#A3A9B5; --gray-bg:#252A33; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#101217; --panel:#181B22; --ink:#ECEEF3; --muted:#9BA2B0; --line:#2A2F3B; --accent:#8F99F4; --accent-ink:#0E1016;
+  --ok:#5CCB8A; --ok-bg:#163223; --info:#7DB0F2; --info-bg:#172A40; --warn:#E8B55A; --warn-bg:#382A12; --dead:#EE8B8B; --dead-bg:#3A1C1C; --gray:#A3A9B5; --gray-bg:#252A33; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 var(--f-body);margin:0}
+.wrap{max-width:1180px;margin:0 auto;padding-block:28px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:28px}
+h1,h2,h3{font-family:var(--f-disp);text-wrap:balance;margin:0;letter-spacing:-.01em}
+h1{font-size:clamp(30px,5vw,46px);font-weight:800}
+h2{font-size:22px;font-weight:700}
+h3{font-size:16px;font-weight:700}
+.eyebrow{font:600 12px/1 var(--f-mono);text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.lead{color:var(--muted);max-width:70ch;margin:8px 0 0}
+header{display:flex;flex-direction:column;gap:10px}
+.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.kpi{background:var(--panel);padding:14px 16px;display:flex;flex-direction:column;gap:2px}
+.kpi b{font:700 26px/1.1 var(--f-disp);font-variant-numeric:tabular-nums}
+.kpi span{font-size:13px;color:var(--muted)}
+nav.tabs{display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:10px;position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);z-index:5;padding-top:8px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+nav.tabs a{font:600 14px/1 var(--f-body);color:var(--muted);text-decoration:none;padding:9px 14px;border-radius:999px;border:1px solid transparent}
+nav.tabs a:hover{color:var(--ink);border-color:var(--line)}
+nav.tabs a[aria-current="page"]{background:var(--ink);color:var(--bg)}
+a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+section.vue{display:flex;flex-direction:column;gap:18px}
+/* Circuit = séquence */
+.seq{border:1px solid var(--line);border-radius:12px;background:var(--panel);overflow-x:auto}
+.ruler{display:grid;grid-template-columns:repeat(8,minmax(118px,1fr));min-width:944px;border-bottom:1px solid var(--line);font:500 11px/1 var(--f-mono);color:var(--muted)}
+.ruler div{padding:8px 10px;border-left:1px solid var(--line)}
+.ruler div:first-child{border-left:0}
+.track{display:grid;grid-template-columns:repeat(8,minmax(118px,1fr));min-width:944px;gap:6px;padding:10px}
+.trk-label{font:600 11px/1 var(--f-mono);color:var(--muted);padding:10px 10px 0;min-width:944px}
+.clip{border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:6px;border:1px solid color-mix(in srgb,var(--c) 55%,transparent);background:color-mix(in srgb,var(--c) 14%,var(--panel));min-height:118px}
+.clip.humain{background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--c) 10%,var(--panel)) 0 8px,var(--panel) 8px 16px)}
+.clip .t{font:700 14px/1.25 var(--f-disp)}
+.clip .who{font:600 11px/1 var(--f-mono);text-transform:uppercase;letter-spacing:.06em;color:var(--c)}
+.clip .ag{display:flex;flex-wrap:wrap;gap:4px}
+.chip{font:500 11.5px/1 var(--f-mono);padding:4px 7px;border-radius:999px;background:var(--gray-bg);color:var(--ink);white-space:nowrap}
+.clip button{margin-top:auto;align-self:flex-start;font:600 12px/1 var(--f-body);background:none;border:0;color:var(--ink);padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.stops{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.note{border:1px solid var(--line);border-radius:10px;padding:14px 16px;background:var(--panel)}
+.note p{margin:6px 0 0;color:var(--muted)}
+/* Outils */
+.filters{display:flex;flex-direction:column;gap:10px}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.f{font:500 13px/1 var(--f-body);padding:8px 11px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.f[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.f i{display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--c)}
+.f em{font-style:normal;font-variant-numeric:tabular-nums;opacity:.7}
+input#q{font:15px var(--f-body);padding:10px 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);width:min(420px,100%)}
+.count{font:500 13px var(--f-mono);color:var(--muted)}
+.list{border:1px solid var(--line);border-radius:12px;background:var(--panel);overflow:hidden}
+.it{display:grid;grid-template-columns:6px 118px minmax(0,220px) minmax(0,1fr) 96px;gap:14px;align-items:start;padding:11px 14px 11px 0;border-top:1px solid var(--line)}
+.it:first-child{border-top:0}
+.it .bar{align-self:stretch;background:var(--c);border-radius:0 3px 3px 0}
+.it code{font:600 13px/1.35 var(--f-mono);word-break:break-word}
+.it .r{color:var(--muted);font-size:14px;min-width:0}
+.it .d{font:500 12px/1.3 var(--f-mono);color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
+.pill{font:600 11px/1 var(--f-mono);padding:5px 8px;border-radius:999px;white-space:nowrap;justify-self:start}
+.s-ok{color:var(--ok);background:var(--ok-bg)} .s-info{color:var(--info);background:var(--info-bg)} .s-warn{color:var(--warn);background:var(--warn-bg)} .s-dead{color:var(--dead);background:var(--dead-bg)} .s-gray{color:var(--gray);background:var(--gray-bg)}
+/* Agents */
+.agents{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.agent{border:1px solid var(--line);border-left:4px solid var(--c);border-radius:10px;background:var(--panel);padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.agent .top{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.agent code{font:700 15px var(--f-mono)}
+.agent p{margin:0;color:var(--muted);font-size:14px}
+.agent .meta{display:flex;flex-wrap:wrap;gap:6px}
+/* Feuille de route */
+.road{display:flex;flex-direction:column;gap:0;border-left:2px solid var(--line);margin-left:9px}
+.step{position:relative;padding:0 0 22px 26px}
+.step::before{content:"";position:absolute;left:-9px;top:2px;width:16px;height:16px;border-radius:50%;background:var(--panel);border:2px solid var(--line)}
+.step.encours::before{border-color:var(--accent);background:var(--accent)}
+.step.pret::before{border-color:var(--accent)}
+.step h3{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.step p{margin:4px 0 0;color:var(--muted);max-width:75ch}
+/* Mesures */
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.metric{border:1px dashed var(--line);border-radius:10px;padding:16px;background:var(--panel);display:flex;flex-direction:column;gap:6px}
+.metric b{font:800 34px/1 var(--f-disp);color:var(--muted)}
+.metric small{color:var(--muted)}
+footer{color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:14px}
+.it.rg{grid-template-columns:6px minmax(0,300px) minmax(0,1fr)}
+.step a{color:var(--accent)}
+@media (max-width:720px){
+  .kpis{grid-template-columns:repeat(3,1fr)}
+  .it,.it.rg{grid-template-columns:6px minmax(0,1fr);row-gap:6px}
+  .it>*:not(.bar){grid-column:2}
+  .it .bar{grid-row:1 / span 4}
+  .it .d{text-align:left}
+}
+@media (prefers-reduced-motion:no-preference){.clip,.agent,.f{transition:transform .15s ease,background .15s ease}.clip:hover{transform:translateY(-2px)}}
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">Agence Gacolet · pôle montage</span>
+    <h1>Atelier Gacolet</h1>
+    <p class="lead">La meilleure qualité possible, dans le temps le plus court. Le circuit d'un réel, les outils du kit, les agents Claude et la feuille de route, au même endroit.</p>
+    <div class="kpis" aria-label="L'atelier en chiffres">
+      <div class="kpi"><b>8</b><span>étapes par réel</span></div>
+      <div class="kpi"><b>11</b><span>agents Claude</span></div>
+      <div class="kpi"><b id="k-outils">173</b><span>outils dans le kit</span></div>
+      <div class="kpi"><b id="k-service">133</b><span>outils en service</span></div>
+      <div class="kpi"><b>11</b><span>fiches de règles</span></div>
+      <div class="kpi"><b>3</b><span>gestes du monteur</span></div>
+    </div>
+  </header>
+
+  <nav class="tabs" aria-label="Vues">
+    <a href="#demarrer">Démarrer</a><a href="#rangement">Où c'est rangé</a><a href="#circuit">Circuit</a><a href="#outils">Outils</a><a href="#agents">Agents</a><a href="#signature">Signature</a><a href="#feuille">Feuille de route</a><a href="#mesures">Mesures</a>
+  </nav>
+
+  <section class="vue" id="v-demarrer" hidden>
+    <div><h2>Installer un poste de montage</h2><p class="lead">Pour un nouveau monteur ou un nouvel ordinateur. Compter 45 min, surtout des téléchargements. Guide complet : <code>20_PRODUCTION/Module Claude/AGENCE_PosteMontage_Guide_MD_v01_20261123.md</code>.</p></div>
+    <div class="road">
+      <div class="step pret"><h3>1. Les applications, à la main</h3>
+        <p><a href="https://claude.ai/download">Claude</a> (se connecter avec le compte de l'équipe) · <a href="https://www.google.com/drive/download/">Google Drive</a> (compte de l'agence, dossier <code>04_CLAUDE - NE PAS TOUCHER</code> disponible hors connexion) · <a href="https://www.google.com/chrome/">Chrome</a> + <a href="https://claude.ai/chrome">Claude pour Chrome</a> · <a href="https://creativecloud.adobe.com/apps/download/creative-cloud">Creative Cloud</a> (Premiere, After Effects, Media Encoder) · <a href="https://brew.sh">Homebrew</a> si node ou ffmpeg manquent · <a href="https://www.autocut.com">AutoCut</a> (facultatif).</p></div>
+      <div class="step pret"><h3>2. Le reste, automatique</h3>
+        <p>Dans le Terminal : <code>sh ~/Library/CloudStorage/GoogleDrive-*/*/GACOLET/"04_CLAUDE - NE PAS TOUCHER"/20_PRODUCTION/"Module Claude"/poste.sh installe</code>. Il installe Python, la transcription, le pont Premiere, les polices et les réglages de l'ordinateur, puis vérifie tout le poste. Ensuite : quitter puis rouvrir Claude.</p></div>
+      <div class="step pret"><h3>3. Une fois dans Premiere</h3>
+        <p>Importer les préréglages du kit, rechoisir la LUT DJI du gabarit, ouvrir le panneau Fenêtre › Extensions › MCP Bridge (CEP) et le laisser ouvert.</p></div>
+      <div class="step pret"><h3>4. Le module de l'équipe</h3>
+        <p><a href="https://claude.ai/customize/plugins/plugin_01EMxaBCiqQ1ChvnL9Lu7B35">Installer gacolet-montage</a> : agents, circuit et garde-fous. Inutile s'il est imposé par l'administrateur.</p></div>
+      <div class="step"><h3>Vérifier à tout moment</h3><p>Dire à Claude « vérifie le poste », ou lancer <code>poste.sh</code> sans argument : chaque élément s'affiche ✅ ou ❌, avec le lien qui manque.</p></div>
+    </div>
+  </section>
+
+  <section class="vue" id="v-rangement" hidden>
+    <div><h2>Où c'est rangé</h2><p class="lead">Une seule source : le Drive de l'agence, dossier <code>GACOLET/04_CLAUDE - NE PAS TOUCHER/20_PRODUCTION/</code>. Synchronisé sur chaque poste. Rushs et masters sur le disque central ; réels finis en transit dans l'appli.</p></div>
+    <div class="list" id="rangement"></div>
+  </section>
+
+  <section class="vue" id="v-signature" hidden>
+    <div><h2>Signature Gacolet</h2><p class="lead">Ce que les réels validés de l'agence ont en commun, mesuré sur 10 réels de communication et 5 pubs Meta. Chaque nouveau réel y est comparé avant la vérification du monteur (<code>controle_signature.py</code>). Les fourchettes se changent dans <code>signature_fourchettes.json</code>.</p></div>
+    <div class="metrics" id="signature"></div>
+  </section>
+
+  <section class="vue" id="v-circuit">
+    <div><h2>Le circuit d'un réel</h2><p class="lead">Lu comme une séquence : chaque étape porte la couleur d'étiquette du kit. Les clips hachurés sont les gestes du monteur.</p></div>
+    <div class="seq">
+      <div class="ruler" id="ruler"></div>
+      <div class="trk-label">V1 · ÉTAPES</div>
+      <div class="track" id="track"></div>
+    </div>
+    <div class="stops">
+      <div class="note"><h3>Arrêt 1 : après le dérush</h3><p>Sur un tournage neuf, rien ne continue tant que le monteur n'a pas corrigé le dérush.</p></div>
+      <div class="note"><h3>Arrêt 2 : avant l'export</h3><p>Jamais d'export avant la vérification du monteur dans Premiere. Garde-fou automatique.</p></div>
+      <div class="note"><h3>Règle d'or</h3><p>Les agents préparent, la conversation principale applique dans Premiere, le monteur valide.</p></div>
+    </div>
+  </section>
+
+  <section class="vue" id="v-outils" hidden>
+    <div><h2>Carte des outils</h2><p class="lead">Chaque outil de <code>Outils Claude/</code>, rangé par étape, avec son état déduit des fiches de règles et des journaux. Rien n'est archivé sans l'accord de Matis.</p></div>
+    <div class="filters">
+      <input id="q" type="search" placeholder="Chercher un outil ou un rôle…" aria-label="Chercher un outil">
+      <div class="row" id="f-etat" aria-label="Filtrer par état"></div>
+      <div class="row" id="f-etape" aria-label="Filtrer par étape"></div>
+      <span class="count" id="count"></span>
+    </div>
+    <div class="list" id="list"></div>
+  </section>
+
+  <section class="vue" id="v-agents" hidden>
+    <div><h2>L'équipe d'agents</h2><p class="lead">Onze spécialistes, un par étape. Aucun ne pilote Premiere : un seul Premiere ouvert, tenu par la conversation principale. Tous sont créés et attendent leur premier lot réel.</p></div>
+    <div class="agents" id="agents"></div>
+  </section>
+
+  <section class="vue" id="v-feuille" hidden>
+    <div><h2>Feuille de route</h2><p class="lead">Cinq paliers vers un atelier qui produit en série au niveau de qualité le plus haut.</p></div>
+    <div class="road" id="road"></div>
+  </section>
+
+  <section class="vue" id="v-mesures" hidden>
+    <div><h2>Mesures</h2><p class="lead">Ce qu'on suit pour savoir si l'atelier progresse. Le temps du monteur viendra du prochain lot chronométré.</p></div>
+    <div class="note"><h3>Audit des réels livrés en novembre (23/11/2026)</h3><p>87 réels contrôlés : 68 sans défaut de fichier, 19 avec un défaut. 15 des 19 datent d'avant les règles du 10/11 ; depuis, 4 seulement, tous passés sans contrôle d'export (2 dernières images noires, 2 images isolées, 1 sonie un peu forte). Signature : 27 conformes, 14 écarts de style. Détail : <code>Références montage/Signature Gacolet/AGENCE_AuditQualite_Novembre_MD_v01_20261123.md</code>.</p></div>
+    <div class="metrics">
+      <div class="metric"><span class="eyebrow">Temps du monteur</span><b>—</b><small>par réel · cible : moins de 15 min</small></div>
+      <div class="metric"><span class="eyebrow">Allers-retours client</span><b>—</b><small>par réel · cible : 0 ou 1</small></div>
+      <div class="metric"><span class="eyebrow">Défauts au contrôle</span><b>—</b><small>trouvés par <code>controle-export</code> · cible : 0</small></div>
+      <div class="metric"><span class="eyebrow">Réels livrés</span><b>—</b><small>par semaine</small></div>
+    </div>
+  </section>
+
+  <footer>Sources : <code>Module Claude/AGENCE_CarteOutils_Inventaire_MD_v01_20261123.md</code> (carte générée le 23/11/2026), <code>AGENCE_AtelierMontage_Plan_MD_v01_20261123.md</code>, module <code>gacolet-montage</code> 0.2.0.</footer>
+</div>
+
+<script>
+const OUTILS = [{"e": "1. Session, rushs, fichiers", "s": "EN SERVICE", "n": "copie_element_projet.py", "r": "Recopie un élément du panneau Projet (ex. « Calque de réglage », qui ne se crée pas par script) d'un AUTRE projet vers la racine de ce…", "d": "19/10", "j": 3}, {"e": "1. Session, rushs, fichiers", "s": "EN SERVICE", "n": "copie_limiteurs.py", "r": "Recopie les limiteurs de référence (piste voix A1 + master) d'une séquence modèle vers une autre séquence.", "d": "19/11", "j": 17}, {"e": "1. Session, rushs, fichiers", "s": "EN SERVICE", "n": "demarre_session.py", "r": "Démarrage d'une session de montage, SANS prendre l'écran de Matis (15/10/2026, d'après la journée Only Clean).", "d": "23/11", "j": 36}, {"e": "1. Session, rushs, fichiers", "s": "EN SERVICE", "n": "Metricool/ (1 fichiers)", "r": "Usage : guette_exports.sh <dossier copies> <dossier wav> <fichier repère> <nombre attendu>", "d": "23/11", "j": 16}, {"e": "1. Session, rushs, fichiers", "s": "EN SERVICE", "n": "range_projet.jsx", "r": "Range les éléments du projet dans les chutiers du gabarit et leur donne la couleur de leur catégorie.", "d": "jamais", "j": 0}, {"e": "1. Session, rushs, fichiers", "s": "EN SERVICE", "n": "relink_projet.py", "r": "Ouvre un projet Premiere et relie ses médias introuvables, compos AE comprises (règle de Matis, 16/10/2026 :", "d": "19/11", "j": 12}, {"e": "1. Session, rushs, fichiers", "s": "EN SERVICE", "n": "reouvre_projet.py", "r": "Corrige le .prproj ouvert dans Premiere SOUS LE MÊME NOM, sans que Matis change de projet.", "d": "19/11", "j": 17}, {"e": "1. Session, rushs, fichiers", "s": "EN SERVICE", "n": "retire_lumetri.py", "r": "Retire TOUS les effets Couleur Lumetri des chaînes d'effets d'un projet (références supprimées, indices renumérotés), en une passe.", "d": "19/10", "j": 1}, {"e": "1. Session, rushs, fichiers", "s": "EN SERVICE", "n": "seg_dossier", "r": "—", "d": "19/11", "j": 1}, {"e": "1. Session, rushs, fichiers", "s": "EN SERVICE", "n": "seg_dossier.swift", "r": "seg_dossier <dossier> : pour chaque image *.jpg/*.png, écrit <nom>_m.png = masque personne Apple Vision (précis). 19/11/2026, autocollants…", "d": "19/11", "j": 1}, {"e": "1. Session, rushs, fichiers", "s": "RÉCENT", "n": "copie_clips_seq.py", "r": "Copie les clips d'une piste vidéo d'une séquence vers la même piste d'une autre séquence, décalés (16/11/2026, FNSEA : sous-titres de R2…", "d": "11/11", "j": 1}, {"e": "1. Session, rushs, fichiers", "s": "RÉCENT", "n": "Tri photos/ (7 fichiers)", "r": "Applique un tri de photos : plan.json = {\"source\": dossier, \"cible\": dossier, \"gardees\": {\"nn Thème\": {\"DSCxxxxx\": \"Description\"}},…", "d": "19/11", "j": 2}, {"e": "2. Dérush", "s": "EN SERVICE", "n": "batch_xml.py", "r": "Séquence de dérush du lot (09/11/2026) : réels à la suite (V1/A1), chutes rangées à la suite de chaque réel sur V2/A2 « Chutes »", "d": "19/11", "j": 7}, {"e": "2. Dérush", "s": "EN SERVICE", "n": "derush_controle_lot.py", "r": "Retranscrit chaque réel d un lot monté (voix recomposée) pour vérifier qu aucun mot ne manque. Usage : ~/.venvs/mlx/bin/python…", "d": "19/11", "j": 3}, {"e": "2. Dérush", "s": "EN SERVICE", "n": "derush_coupe_mots.py", "r": "Retire des mots précis (ratés, « euh » collés, liaisons de tête) des morceaux d'un lot, coupe calée sur l'onde (09/11/2026, Meyer).", "d": "19/11", "j": 3}, {"e": "2. Dérush", "s": "EN SERVICE", "n": "derush_ecoute.py", "r": "Écoute (retranscription) du montage réel sur des plages de rush : derush_ecoute.py derush.xml '[[\"C3699\",12,27], …]'", "d": "21/10", "j": 1}, {"e": "2. Dérush", "s": "EN SERVICE", "n": "derush_finitions.py", "r": "Finitions des bords d un dérush (09/11/2026, chiffres des retouches de Matis : air 20-30 ms avant l attaque, 40-60 ms après le son).", "d": "19/11", "j": 5}, {"e": "2. Dérush", "s": "EN SERVICE", "n": "derush_mesure_bords.py", "r": "Mesure air avant / après et pauses internes de chaque morceau d un lot. Usage : python3 derush_mesure_bords.py lot.json sortie.json", "d": "09/11", "j": 1}, {"e": "2. Dérush", "s": "EN SERVICE", "n": "derush_morceaux.py", "r": "3e passe du dérush (méthode Purple) : retranscrit CHAQUE morceau du XML seul, sans contexte (Whisper ne peut plus lisser", "d": "09/11", "j": 6}, {"e": "2. Dérush", "s": "EN SERVICE", "n": "derush_passe2.py", "r": "2e passe du dérush : repère les reprises collées dans le son MONTÉ (retranscrit) et les ajoute en exclusions.", "d": "29/10", "j": 3}, {"e": "2. Dérush", "s": "EN SERVICE", "n": "derush_prises.py", "r": "Prises en double ou en triple restées dans un dérush, repérées par RESSEMBLANCE (pas seulement des mots identiques).", "d": "19/11", "j": 21}, {"e": "2. Dérush", "s": "EN SERVICE", "n": "derush_resserre.py", "r": "Resserre un dérush comme Matis (Hugo 04/11/2026) sans manger de mots.", "d": "19/11", "j": 16}, {"e": "2. Dérush", "s": "EN SERVICE", "n": "derush_xml.py", "r": "Dérush 1er balayage -> XML FCP7 importable dans Premiere (une séquence, réels à la suite, un marqueur par réel).", "d": "19/11", "j": 23}, {"e": "2. Dérush", "s": "EN SERVICE", "n": "fondus_sortie_coupe.py", "r": "Fondus posés par QE à cheval sur une coupe (entrée + sortie) -> fondu de SORTIE seul qui se termine pile sur la coupe,", "d": "20/10", "j": 1}, {"e": "2. Dérush", "s": "EN SERVICE", "n": "locuteurs_niveau.py", "r": "Tournages Meta : Gabriel (derrière la caméra) dicte, l'intervenant (micro sur lui) répète. Garder SEULEMENT l'intervenant.", "d": "19/11", "j": 4}, {"e": "2. Dérush", "s": "EN SERVICE", "n": "marge_debut.py", "r": "Marge de début de réel DÈS LE DÉRUSH (Matis, 16/11/2026 : « respecte la règle de marge du début dès ton premier dérush,", "d": "20/11", "j": 2}, {"e": "2. Dérush", "s": "EN SERVICE", "n": "recale_fondus.py", "r": "Recale les fondus audio (AudioTransitionTrackItem) de A1 du réel 1 Bonobo après l'insertion des passages muets des questions.", "d": "22/10", "j": 1}, {"e": "2. Dérush", "s": "EN SERVICE", "n": "recale_fondus_bords.py", "r": "Pistes de voix à fondus CENTRÉS sur les coupes : ne pas les passer ici (ils ne touchent pas les bords).", "d": "24/10", "j": 1}, {"e": "2. Dérush", "s": "EN SERVICE", "n": "recale_fondus_insert.py", "r": "Recale les fondus audio (AudioTransitionTrackItem) d'une piste après l'insertion de passages muets (trackItem.move ne déplace pas les…", "d": "19/10", "j": 2}, {"e": "2. Dérush", "s": "EN SERVICE", "n": "retire_effet_piste.py", "r": "Retire un effet (par son nom affiché, ex. « Couleur Lumetri ») de tous les clips d'une piste vidéo d'une séquence.", "d": "15/10", "j": 1}, {"e": "2. Dérush", "s": "EN SERVICE", "n": "trans_marge.py", "r": "Décale de D s (TRANS_D, négatif = plus tôt) les fondus audio des pistes PISTES qui commencent à DEBUT (s), séquence SEQ. Usage : via…", "d": "23/10", "j": 1}, {"e": "2. Dérush", "s": "EN SERVICE", "n": "transcrit_mlx.py", "r": "Transcription mot à mot sur la puce graphique (MLX Whisper large-v3-turbo).", "d": "04/11", "j": 4}, {"e": "2. Dérush", "s": "RÉCENT", "n": "derush_bords.py", "r": "Recale le début et la fin de chaque morceau de selection.json sur une retranscription PRÉCISE (fenêtre de ±1,5 s) : occurrence la plus…", "d": "06/11", "j": 7}, {"e": "2. Dérush", "s": "RÉCENT", "n": "derush_compare.py", "r": "Compare le dérush de Claude (XML d'origine) à la version retouchée par Matis (clips A1 relus dans Premiere).", "d": "23/11", "j": 1}, {"e": "2. Dérush", "s": "RÉCENT", "n": "derush_daccord.py", "r": "Retire le tic « d'accord » collé aux phrases (Hugo), contrôlé par retranscription : le texte restant doit être identique moins « d'accord ».", "d": "05/11", "j": 1}, {"e": "2. Dérush", "s": "RÉCENT", "n": "derush_verif.py", "r": "Contrôle du dérush : chaque morceau MONTÉ est retranscrit seul et comparé mot à mot au texte voulu (mots manquants / en plus). Usage :…", "d": "10/11", "j": 11}, {"e": "2. Dérush", "s": "RÉCENT", "n": "retire_ameliorer_voix.py", "r": "Retire « Améliorer la voix » (Enhance Speech) des clips audio d'un .prproj : le clip relit le son d'origine.", "d": "10/11", "j": 1}, {"e": "2. Dérush", "s": "RÉCENT", "n": "retire_stab_depuis.py", "r": "Retire uniquement l'effet Stabilisation des clips vidéo d'une séquence qui commencent à partir de DEPUIS secondes.", "d": "17/11", "j": 1}, {"e": "2. Dérush", "s": "RÉCENT", "n": "retire_temps.py", "r": "Retire du temps dans une séquence (raccourcir des plans et faire reculer la suite), DIRECTEMENT dans le .prproj, en une passe :", "d": "19/11", "j": 5}, {"e": "4a. B-rolls et stabilisation", "s": "EN SERVICE", "n": "B-rolls calques/ (21 fichiers)", "r": "Atténue un mouvement de caméra : suivi du décor (bande y0-y1), on retire une fraction F du déplacement (référence = image REF), zoom…", "d": "17/11", "j": 7}, {"e": "4a. B-rolls et stabilisation", "s": "EN SERVICE", "n": "bruit_brolls.jsx", "r": "Relevé des b-rolls d'une séquence pour bruit_brolls.py (Matis, 10/11/2026). Remplacer __PROJET__ (morceau du nom) et __SEQ__ (nom exact).", "d": "17/11", "j": 3}, {"e": "4a. B-rolls et stabilisation", "s": "EN SERVICE", "n": "bruit_brolls.py", "r": "Bruit des b-rolls d'une séquence, tel qu'il sortira (Matis, 10/11/2026 : « dis-moi ceux où il faut absolument Neat »).", "d": "17/11", "j": 3}, {"e": "4a. B-rolls et stabilisation", "s": "EN SERVICE", "n": "clips_rouges.py", "r": "Liste les clips de timeline étiquetés d'une couleur (par défaut rouge = 6) dans un .prproj enregistré.", "d": "31/10", "j": 2}, {"e": "4a. B-rolls et stabilisation", "s": "EN SERVICE", "n": "etiquette_clips.py", "r": "Change la couleur d'étiquette de clips VIDÉO de timeline repérés par leurs temps (Le Petit Mas, 23/10/2026 : clips à débruiter en orange).", "d": "17/11", "j": 2}, {"e": "4a. B-rolls et stabilisation", "s": "EN SERVICE", "n": "etiquette_clips2.py", "r": "Couleur d'étiquette de clips VIDÉO de timeline, même quand le clip n'a encore aucune couleur enregistrée (clips importés par XML :", "d": "17/11", "j": 1}, {"e": "4a. B-rolls et stabilisation", "s": "RÉCENT", "n": "etiquette_audio.py", "r": "Couleur d'étiquette de clips AUDIO de timeline (variante audio d'etiquette_clips2.py, The New Me 10/11/2026).", "d": "09/11", "j": 1}, {"e": "4b. Hook, suivi de tête, zooms", "s": "EN SERVICE", "n": "camera_pull.py", "r": "camera_pull.py entree.prproj sortie.prproj : ajoute le preset « TakeOver- MNML Camera Pull (Intro) » de Matis (lu dans son fichier de…", "d": "18/11", "j": 24}, {"e": "4b. Hook, suivi de tête, zooms", "s": "EN SERVICE", "n": "controle_centrage.py", "r": "Contrôle BLOQUANT (Matis, 16/11/2026 : « centre toujours le sujet au milieu de l'écran » ; « il manque tous les éléments du hook »).", "d": "19/11", "j": 5}, {"e": "4b. Hook, suivi de tête, zooms", "s": "EN SERVICE", "n": "insere_temps.py", "r": "Insère du temps (et agrandit des plages) dans une séquence, DIRECTEMENT dans le .prproj, en une passe :", "d": "19/11", "j": 11}, {"e": "4b. Hook, suivi de tête, zooms", "s": "EN SERVICE", "n": "nez_lot.swift", "r": "Centre du nez (Apple Vision) pour toutes les images d'un dossier (triées) -> \"fichier x y\" en pixels, origine en haut à gauche ; \"fichier…", "d": "19/11", "j": 5}, {"e": "4b. Hook, suivi de tête, zooms", "s": "EN SERVICE", "n": "points_nez.swift", "r": "Points du nez (Apple Vision) sur une image -> coordonnées pixels (origine en haut à gauche)", "d": "29/10", "j": 2}, {"e": "4b. Hook, suivi de tête, zooms", "s": "EN SERVICE", "n": "Suivi yeux/ (10 fichiers)", "r": "Suivi d'une NARINE façon tracker After Effects (zone de motif fixe, zone de recherche, corrélation normalisée, sous-pixel).", "d": "23/11", "j": 5}, {"e": "4b. Hook, suivi de tête, zooms", "s": "RÉCENT", "n": "camera_pull_piste.py", "r": "camera_pull_piste.py (copie de camera_pull.py, PISTE=index de piste vidéo, 0 = V1 ; 04/11/2026 : Camera Pull sur un calque de réglage V3…", "d": "19/11", "j": 4}, {"e": "4b. Hook, suivi de tête, zooms", "s": "RÉCENT", "n": "corps_centre.swift", "r": "centre horizontal de la personne (masque de segmentation Apple Vision) pour chaque image d'un dossier", "d": "23/11", "j": 2}, {"e": "4b. Hook, suivi de tête, zooms", "s": "RÉCENT", "n": "mots_cles_hook.py", "r": "Mot-clé du hook en gros (04/11/2026, SOS Codognan) : duplique un texte graphique natif de Matis (sans élément de projet, donc impossible", "d": "04/11", "j": 1}, {"e": "4b. Hook, suivi de tête, zooms", "s": "RÉCENT", "n": "suivi_narine_seq.py", "r": "track.py rush in_s nb_images echelle_premiere sortie.json -> suivi de la narine en coordonnées séquence (cadrage Premiere centré).", "d": "23/11", "j": 3}, {"e": "4b. Hook, suivi de tête, zooms", "s": "RÉCENT", "n": "yeux_lot.swift", "r": "Yeux et nez (Apple Vision) pour toutes les images d'un dossier : \"fichier xYeux yYeux xNez yNez largeurVisage\" en pixels, origine en haut…", "d": "23/11", "j": 4}, {"e": "4b. Hook, suivi de tête, zooms", "s": "DORMANT", "n": "geo_hooks_modele.jsx", "r": "Relevé de géométrie pour autocollants_roto.py (19/11/2026) : V1 (+ plans dans les imbrications), V2 b-rolls actifs, V3 calques (Camera…", "d": "jamais", "j": 0}, {"e": "4c. Colo", "s": "EN SERVICE", "n": "bleu.py", "r": "Passe en bleu (étiquette 9) les clips de timeline rouges (6) qui commencent aux temps donnés (BLEU_JSON = [secondes...]), séquence BLEU_SEQ.", "d": "23/10", "j": 1}, {"e": "4c. Colo", "s": "EN SERVICE", "n": "controle_colo.py", "r": "Contrôle colo avant export, image par image : LUT (V5) présente sous tout plan log et absente sous les plans non log (iPhone),", "d": "18/11", "j": 11}, {"e": "4c. Colo", "s": "EN SERVICE", "n": "controle_export.py", "r": "Contrôle d'un fichier exporté AVANT de l'annoncer (Matis, 09/11/2026, IMG_1140 : « comment ça passe dans ton contrôle d'export ? »).", "d": "20/11", "j": 19}, {"e": "4c. Colo", "s": "EN SERVICE", "n": "DaVinci/ (33 fichiers)", "r": "Lecture / écriture des vrais réglages DaVinci (curseurs) dans un .drx, sans souris.", "d": "19/11", "j": 14}, {"e": "4c. Colo", "s": "EN SERVICE", "n": "exporte_ame.py", "r": "Met des réels en file dans Adobe Media Encoder, un fichier par réel (Matis, 21/10/2026). Premiere ne calcule rien : AME exporte.", "d": "23/11", "j": 13}, {"e": "4c. Colo", "s": "EN SERVICE", "n": "interprete_log.py", "r": "Interprète des médias en log (gestion des couleurs de Premiere) DIRECTEMENT dans le .prproj, en une passe (26/10/2026, Batch PA).", "d": "23/11", "j": 1}, {"e": "4c. Colo", "s": "EN SERVICE", "n": "Lightroom/ (5 fichiers)", "r": "Envoie une commande au Pont Claude de Lightroom Classic et attend la reponse.", "d": "10/11", "j": 4}, {"e": "4c. Colo", "s": "EN SERVICE", "n": "lut_calque.py", "r": "Pose une LUT en entrée sur le Lumetri d'un clip (calque d'effet) en recopiant le Lumetri d'un calque modèle où Matis a chargé une LUT.", "d": "19/10", "j": 4}, {"e": "4c. Colo", "s": "EN SERVICE", "n": "lut_multi.py", "r": "Pose des LUT (Lumetri recopié d'un modèle) sur PLUSIEURS clips en UNE SEULE passe (18/10/2026 : lut_calque.py lancé 89 fois", "d": "20/11", "j": 23}, {"e": "4c. Colo", "s": "EN SERVICE", "n": "releve_pistes_colo.jsx", "r": "—", "d": "17/11", "j": 2}, {"e": "4c. Colo", "s": "EN SERVICE", "n": "sdr.swift", "r": "Conversion HDR -> SDR Rec. 709 par AVFoundation (même tone mapping qu'Apple), ProRes 422.", "d": "17/11", "j": 1}, {"e": "4c. Colo", "s": "EN SERVICE", "n": "verif_export.py", "r": "Contrôles BLOQUANTS avant tout export (Matis, 10/11/2026 : « pourquoi je suis obligé de te le redire à chaque fois ? »).", "d": "19/11", "j": 12}, {"e": "4c. Colo", "s": "RÉCENT", "n": "applique_lut.py", "r": "Applique une LUT .cube (3D, interpolation trilinéaire) à une image. Usage : applique_lut.py lut.cube entree.png sortie.png", "d": "23/11", "j": 1}, {"e": "4c. Colo", "s": "RÉCENT", "n": "expo_lut_dji.py", "r": "—", "d": "23/11", "j": 2}, {"e": "4c. Colo", "s": "RÉCENT", "n": "precorrige_lut.py", "r": "Pré-corrige les couleurs d'un élément graphique (PNG RGBA) qui passera SOUS la colo de Premiere (expo du calque V4 puis LUT S-Log3 → 709…", "d": "19/11", "j": 1}, {"e": "4d. Son", "s": "EN SERVICE", "n": "Artlist/ (19 fichiers)", "r": "node al_clip_get.mjs '[[id,\"recherche\"],…]' : vue Footage du panneau Artlist ; cherche, repère la vignette du plan (id dans l'image), «…", "d": "19/11", "j": 37}, {"e": "4d. Son", "s": "EN SERVICE", "n": "bruit.py", "r": "—", "d": "23/11", "j": 1}, {"e": "4d. Son", "s": "EN SERVICE", "n": "controle_fondus.py", "r": "Contrôle des fondus audio AVANT EXPORT (Matis, 26/10/2026 : réels de Gab postés sans crossfade, « ça clic dans tous les sens.", "d": "19/11", "j": 22}, {"e": "4d. Son", "s": "EN SERVICE", "n": "decale_fondus.py", "r": "Décale de DELTA s les fondus audio d'une piste qui ne tombent sur aucune coupe, avant AVANT s (après un move() de clips).", "d": "24/10", "j": 1}, {"e": "4d. Son", "s": "EN SERVICE", "n": "dedup_fondus.py", "r": "Retire les fondus audio EN DOUBLE (même début, même fin, même type) sur toutes les pistes audio d'une séquence : un seul gardé par place.", "d": "24/10", "j": 1}, {"e": "4d. Son", "s": "EN SERVICE", "n": "duree_fondus.py", "r": "Raccourcit les fondus audio (transitions) d'une piste : fondu d'entrée = ENTREE images, de sortie = SORTIE images (règle de Matis : 1 et…", "d": "20/10", "j": 3}, {"e": "4d. Son", "s": "EN SERVICE", "n": "edit_musique_xml.py", "r": "edit_musique_xml.py montage.json sortie.xml [nom_sequence] [largeur hauteur ips]", "d": "22/10", "j": 1}, {"e": "4d. Son", "s": "EN SERVICE", "n": "fondus.py", "r": "fondus.py entree.prproj sortie.prproj : pose ou règle des fondus audio (transitions « Puissance constante », comme Matis) en bord de clip.", "d": "13/10", "j": 1}, {"e": "4d. Son", "s": "EN SERVICE", "n": "fondus_chevauches.py", "r": "Retire les fondus audio qui se CHEVAUCHENT sur une même piste (toutes les pistes audio d'une séquence) : par groupe, garde le plus long,", "d": "10/11", "j": 2}, {"e": "4d. Son", "s": "EN SERVICE", "n": "fondus_entree.py", "r": "Ajoute un fondu d'ENTRÉE (N images, 1 par défaut) aux clips d'une piste audio qui commencent aux temps donnés, sans toucher aux fondus…", "d": "26/10", "j": 1}, {"e": "4d. Son", "s": "EN SERVICE", "n": "fondus_orphelins.py", "r": "Retire les fondus audio ORPHELINS (posés sur aucun bord de clip) de toutes les pistes audio d'une séquence : fondus fantômes,", "d": "10/11", "j": 1}, {"e": "4d. Son", "s": "EN SERVICE", "n": "isole_voix.swift", "r": "iso entree.wav sortie.wav : isolation de voix Apple (AUSoundIsolation), rendu hors ligne", "d": "29/10", "j": 1}, {"e": "4d. Son", "s": "EN SERVICE", "n": "limiteur_en_dernier.py", "r": "Met le limiteur (Amplitude maximale) en DERNIER dans la chaîne d'effets de la piste audio PISTE (0 = A1) de la séquence SEQ.", "d": "10/11", "j": 1}, {"e": "4d. Son", "s": "EN SERVICE", "n": "limiteurs_controle.py", "r": "Contrôle des limiteurs d'une séquence (10/11/2026, OC R01 exporté sans limiteur sur la piste de la voix RX) :", "d": "09/11", "j": 1}, {"e": "4d. Son", "s": "EN SERVICE", "n": "musique_fondus.py", "r": "Musiques posées sur une piste audio : points d'entrée exacts (au centième, Premiere les arrondit à l'image) + fondus en TRANSITIONS «…", "d": "26/10", "j": 2}, {"e": "4d. Son", "s": "EN SERVICE", "n": "releve_voix_textes.jsx", "r": "Relevé pour st_controle.py (10/11/2026) : clips des pistes voix (PISTES_VOIX) et clips graphiques (textes) de la séquence. __PROJET__,…", "d": "18/11", "j": 6}, {"e": "4d. Son", "s": "EN SERVICE", "n": "roto_personne.swift", "r": "Détoure la personne de chaque PNG d'un dossier (Apple Vision, qualité précise) -> PNG RGBA dans le dossier de sortie.", "d": "29/10", "j": 4}, {"e": "4d. Son", "s": "EN SERVICE", "n": "vide_fondus.py", "r": "Retire toutes les transitions audio des pistes PISTES d'une séquence (avant de les reposer, ex. après déplacement de clips).", "d": "09/11", "j": 2}, {"e": "4d. Son", "s": "EN SERVICE", "n": "voix_claire.sh", "r": "Voix plus intelligible et de niveau constant (Matis, 22/10/2026, « Appel le petit mas », DJI dans une cuisine) :", "d": "24/10", "j": 2}, {"e": "4d. Son", "s": "EN SERVICE", "n": "voix_naturelle.sh", "r": "Voix débruitée, moins de réverbe, niveau haut et régulier, SANS remonter le bruit dans les pauses (Le Petit Mas, 23/10/2026,", "d": "24/10", "j": 1}, {"e": "4d. Son", "s": "EN SERVICE", "n": "voix_propre.py", "r": "—", "d": "23/11", "j": 2}, {"e": "4d. Son", "s": "EN SERVICE", "n": "voix_reels.py", "r": "—", "d": "18/11", "j": 3}, {"e": "4d. Son", "s": "RÉCENT", "n": "compresseur_voix.sh", "r": "Après pose d'un « Compresseur monobande » en QE sur A1 (qui REMPLACE le limiteur) : remet le limiteur (copié d'une sauvegarde),", "d": "10/11", "j": 1}, {"e": "4d. Son", "s": "RÉCENT", "n": "decale_fondus_blocs.py", "r": "decale_fondus_blocs.py lu.prproj ecrit.prproj (BLOCS_JSON = [[debut_s, fin_s, decalage_s], ...], temps AVANT déplacement)", "d": "10/11", "j": 1}, {"e": "4d. Son", "s": "RÉCENT", "n": "fondus_1image.py", "r": "Règle les fondus audio posés par QE (2 s par défaut) aux durées de Matis (14/10/2026) :", "d": "17/11", "j": 7}, {"e": "4d. Son", "s": "RÉCENT", "n": "fondus_fantomes.sh", "r": "Fondus fantômes : orphelins puis chevauchements, en une passe (via reouvre_projet.py). SEQ=<UID> fondus_fantomes.sh lu.prproj écrit.prproj", "d": "10/11", "j": 1}, {"e": "4d. Son", "s": "RÉCENT", "n": "fondus_fin_reel.py", "r": "Fondu de SORTIE en fin de réel sur une piste musique (réf. Matis, Batch PA 27/10/2026 : réels 1 et 2, 0,60-0,84 s, « Puissance constante »).", "d": "10/11", "j": 2}, {"e": "4d. Son", "s": "RÉCENT", "n": "limiteur_piste.py", "r": "Effets de PISTE audio dans le .prproj (23/10/2026, Le Petit Mas) : remplace le limiteur d'une piste par une copie de celui de la piste", "d": "23/11", "j": 2}, {"e": "4d. Son", "s": "RÉCENT", "n": "neat_auto.py", "r": "Neat en effet d'ÉLÉMENT MAÎTRE + Auto Profile sur une liste de rushs, d'une traite, sans capture (règle du 26/10/2026).", "d": "10/11", "j": 3}, {"e": "4d. Son", "s": "RÉCENT", "n": "pic_sfx.py", "r": "Donne l'instant du pic de volume d'un son (pour caler ce pic sur l'apparition d'un texte).", "d": "23/11", "j": 1}, {"e": "4d. Son", "s": "RÉCENT", "n": "refait_fondus.py", "r": "Refait TOUS les fondus d'une piste audio : coupe = COUPE images centrées, entrée de bloc = ENTREE images, sortie = SORTIE images.", "d": "16/11", "j": 2}, {"e": "4d. Son", "s": "RÉCENT", "n": "Voix AU/ (2 fichiers)", "r": "au_rendu entree.wav sortie.wav SOUS-TYPE FABRICANT [id=valeur ...] (sortie \"-\" = liste des paramètres)", "d": "23/11", "j": 1}, {"e": "4e. Sous-titres, textes, motion", "s": "EN SERVICE", "n": "ae_do.py", "r": "Envoie un script ExtendScript à After Effects ouvert (AppleScript DoScript en ligne). Dans le script : log(\"...\") écrit tout de suite dans…", "d": "22/10", "j": 2}, {"e": "4e. Sous-titres, textes, motion", "s": "EN SERVICE", "n": "autocollants_roto.py", "r": "Autocollants (style autocollant voiture SOS) en ROTO derrière la personne, à la place AFFICHÉE (19/11/2026, Matis : « mets les 2 en roto…", "d": "23/11", "j": 2}, {"e": "4e. Sous-titres, textes, motion", "s": "EN SERVICE", "n": "bandeaux_marvin.py", "r": "Bandeaux d'accroche « Marvin » (PNG 2160×3840 transparents) : un rectangle blanc PAR LIGNE, collés (aucun espace),", "d": "23/11", "j": 1}, {"e": "4e. Sous-titres, textes, motion", "s": "EN SERVICE", "n": "corrige.py", "r": "-*- coding: utf-8 -*-", "d": "19/11", "j": 3}, {"e": "4e. Sous-titres, textes, motion", "s": "EN SERVICE", "n": "corrige_textes_prproj.py", "r": "—", "d": "jamais", "j": 0}, {"e": "4e. Sous-titres, textes, motion", "s": "EN SERVICE", "n": "corrige_textes_v2.py", "r": "—", "d": "10/11", "j": 7}, {"e": "4e. Sous-titres, textes, motion", "s": "EN SERVICE", "n": "fabrique_mogrt.py", "r": "Fabrique une copie d un modèle .mogrt fait dans Premiere avec un autre texte (garde police, taille, style).", "d": "jamais", "j": 0}, {"e": "4e. Sous-titres, textes, motion", "s": "EN SERVICE", "n": "genere_clips.py", "r": "genere_clips.py <modele.mogrt> <dossier_sortie> <liste.json> ; liste = [[nom, texte], ...]", "d": "23/11", "j": 2}, {"e": "4e. Sous-titres, textes, motion", "s": "EN SERVICE", "n": "lit_textes_piste.py", "r": "Liste les textes graphiques d'une piste (même indexation que corrige_textes_v2.py : rang sur la piste triée par début).", "d": "26/10", "j": 1}, {"e": "4e. Sous-titres, textes, motion", "s": "EN SERVICE", "n": "patch_textes.py", "r": "Modifie des octets du bloc « Texte source » des clips texte natifs d'une piste (ombre, couleurs…), clip par clip.", "d": "22/10", "j": 1}, {"e": "4e. Sous-titres, textes, motion", "s": "EN SERVICE", "n": "police_mogrt.py", "r": "police_mogrt.py modele.mogrt sortie.mogrt NouveauNomPostScript : copie du modèle avec une autre police (bloc texte + definition.json).", "d": "22/10", "j": 1}, {"e": "4e. Sous-titres, textes, motion", "s": "EN SERVICE", "n": "police_textes.py", "r": "Change la police des clips texte natifs d'une piste dans une plage de temps (nom de police réécrit à la même place dans le bloc binaire).", "d": "10/11", "j": 2}, {"e": "4e. Sous-titres, textes, motion", "s": "EN SERVICE", "n": "pose_textes.py", "r": "Pose des clips .mogrt sur une piste vidéo.", "d": "jamais", "j": 0}, {"e": "4e. Sous-titres, textes, motion", "s": "EN SERVICE", "n": "roto_instance.swift", "r": "Masque de LA personne dont le visage est le plus grand (Apple Vision, instances) : écarte statues, passants, reflets collés à elle.", "d": "29/10", "j": 2}, {"e": "4e. Sous-titres, textes, motion", "s": "EN SERVICE", "n": "roto_objet.swift", "r": "Masque « sujet » d'Apple Vision (détourage d'objet, comme l'appui long de Photos) : garde ce que la personne PORTE", "d": "29/10", "j": 2}, {"e": "4e. Sous-titres, textes, motion", "s": "EN SERVICE", "n": "roto_plage.jsx", "r": "Liste les clips V1 d'une plage pour roto_plage.py. Remplacer T0/T1 avant envoi (pr_essai.py).", "d": "11/10", "j": 1}, {"e": "4e. Sous-titres, textes, motion", "s": "EN SERVICE", "n": "roto_plage.py", "r": "Détourage d'une plage de timeline À PARTIR DES RUSHS D'ORIGINE (sans sous-titres ni calques), coupes gérées.", "d": "11/10", "j": 1}, {"e": "4e. Sous-titres, textes, motion", "s": "EN SERVICE", "n": "safezone.py", "r": "Vérifie qu'une anim transparente (.mov ProRes 4444 ou dossier/PNG 1080×1920) reste dans la safe zone Instagram de Matis.", "d": "10/11", "j": 3}, {"e": "4e. Sous-titres, textes, motion", "s": "EN SERVICE", "n": "safezone_ecran.py", "r": "Safe zone d'un ÉCRAN PLEIN (fond opaque plein cadre, ex. écrans questions « …_EcranPlein_… ») : le fond n'est pas contrôlé,", "d": "16/11", "j": 2}, {"e": "4e. Sous-titres, textes, motion", "s": "EN SERVICE", "n": "safezone_place.py", "r": "Safe zone À LA PLACE RÉELLE : applique l'échelle et la position du clip Premiere (Trajectoire) à l'alpha d'une anim transparente.", "d": "16/11", "j": 6}, {"e": "4e. Sous-titres, textes, motion", "s": "EN SERVICE", "n": "Sous-titres calés/ (4 fichiers)", "r": "—", "d": "18/11", "j": 1}, {"e": "4e. Sous-titres, textes, motion", "s": "EN SERVICE", "n": "st_blocs.py", "r": "Sous-titres « style Marvin » : blocs d'une ligne de 1 à 3 mots (18 caractères max) depuis une transcription mot à mot par réel.", "d": "17/11", "j": 6}, {"e": "4e. Sous-titres, textes, motion", "s": "EN SERVICE", "n": "st_controle.py", "r": "Contrôles bloquants des sous-titres et de la marge de début (Matis, 10/11/2026 : « pourquoi il reste 3 points à vérifier après que tu as…", "d": "18/11", "j": 7}, {"e": "4e. Sous-titres, textes, motion", "s": "EN SERVICE", "n": "st_police_pistes.py", "r": "(base : style_soustitres.py) Police de TOUS les blocs d'une piste de sous-titres Premiere (CaptionDataClipTrackItem), dans le .prproj.", "d": "10/11", "j": 2}, {"e": "4e. Sous-titres, textes, motion", "s": "EN SERVICE", "n": "st_pos_fichier.py", "r": "Règle Mouvement vectoriel (Echelle, Position y par plage de temps) des textes graphiques d'une piste vidéo, directement dans le .prproj…", "d": "24/10", "j": 1}, {"e": "4e. Sous-titres, textes, motion", "s": "EN SERVICE", "n": "st_restaure.py", "r": "Remet le contenu (style + texte) des textes graphiques d'une piste depuis une copie de secours, clip par clip (même ordre). Usage :…", "d": "24/10", "j": 1}, {"e": "4e. Sous-titres, textes, motion", "s": "EN SERVICE", "n": "st_sous_bandeau.py", "r": "Retire d'une piste de sous-titres Premiere les blocs qui COMMENCENT avant FIN (s), c.-à-d. sous le bandeau d'accroche (22/10/2026).", "d": "jamais", "j": 0}, {"e": "4e. Sous-titres, textes, motion", "s": "EN SERVICE", "n": "style_soustitres.py", "r": "Police (et taille) de TOUS les blocs d'une piste de sous-titres Premiere (CaptionDataClipTrackItem), dans le .prproj.", "d": "19/11", "j": 10}, {"e": "4e. Sous-titres, textes, motion", "s": "EN SERVICE", "n": "style_textes.py", "r": "Recopie le STYLE d'un sous-titre modèle (police, taille, interlettrage, couleurs, ombre = tout le bloc « Texte source » sauf le texte, +…", "d": "16/10", "j": 1}, {"e": "4e. Sous-titres, textes, motion", "s": "EN SERVICE", "n": "textes_piste.py", "r": "Remplace le texte de textes graphiques d'une piste vidéo, repérés par leur début (s), en gardant leur style. Chaque clip reçoit son propre…", "d": "19/11", "j": 4}, {"e": "4e. Sous-titres, textes, motion", "s": "RÉCENT", "n": "bande_sujet.py", "r": "Bandeau blanc « à la Marvin » des capsules Gab (19/10/2026, identique aux bandes d'appels du 13/10) : PNG 2160×3840 transparent,", "d": "23/11", "j": 2}, {"e": "4e. Sous-titres, textes, motion", "s": "RÉCENT", "n": "bandeaux_lignes.py", "r": "—", "d": "23/11", "j": 2}, {"e": "4e. Sous-titres, textes, motion", "s": "RÉCENT", "n": "extrait_srt.py", "r": "Extrait les sous-titres d'un projet Premiere enregistré (.prproj) en fichiers SRT, sans passer par l'export de Premiere.", "d": "23/11", "j": 1}, {"e": "4e. Sous-titres, textes, motion", "s": "RÉCENT", "n": "mot_com.py", "r": "« COM » en motion, DA de l'agence (pilule noire #1D1D1B 92 %, filet citron #C6FF33, Bebas italique citron, halo + ombre douce).", "d": "23/11", "j": 2}, {"e": "4e. Sous-titres, textes, motion", "s": "RÉCENT", "n": "roto_haut_tete.py", "r": "—", "d": "23/11", "j": 2}, {"e": "4e. Sous-titres, textes, motion", "s": "RÉCENT", "n": "roto_nettoie.py", "r": "—", "d": "23/11", "j": 1}, {"e": "4e. Sous-titres, textes, motion", "s": "RÉCENT", "n": "st_sans_ponct.py", "r": "Retire la ponctuation des sous-titres d'une PISTE DE SOUS-TITRES Premiere (règles de regles-sous-titres.md) directement dans le .prproj.", "d": "10/11", "j": 2}, {"e": "4e. Sous-titres, textes, motion", "s": "RÉCENT", "n": "st_style_seq.py", "r": "Recopie le style des textes graphiques d'une séquence MODELE (uid) sur ceux d'une séquence CIBLE (uid), texte gardé. Via reouvre_projet.py.", "d": "19/11", "j": 3}, {"e": "5-7. Contrôle et export", "s": "EN SERVICE", "n": "controle_edit.py", "r": "Contrôle colo et bornes d'un EDIT sans voix monté dans Premiere (18/11/2026, Only Clean Marguerittes) — regles/edits.md :", "d": "17/11", "j": 1}, {"e": "5-7. Contrôle et export", "s": "EN SERVICE", "n": "SwissTransfer/ (2 fichiers)", "r": "Pilote un Chrome invisible (profil séparé) par son protocole de débogage.", "d": "23/11", "j": 4}, {"e": "5-7. Contrôle et export", "s": "EN SERVICE", "n": "verif_bords.jsx", "r": "@projet 20-10.prproj", "d": "20/10", "j": 1}, {"e": "Pont Premiere, écran, timeline", "s": "EN SERVICE", "n": "clic.swift", "r": "clic x y [double] (points écran principal)", "d": "jamais", "j": 0}, {"e": "Pont Premiere, écran, timeline", "s": "EN SERVICE", "n": "fenetres", "r": "—", "d": "29/10", "j": 1}, {"e": "Pont Premiere, écran, timeline", "s": "EN SERVICE", "n": "fenetres.swift", "r": "Liste les fenêtres d'une appli (id, taille, titre) sans la mettre au premier plan.", "d": "29/10", "j": 1}, {"e": "Pont Premiere, écran, timeline", "s": "EN SERVICE", "n": "Pont MCP auto/ (5 fichiers)", "r": "—", "d": "23/11", "j": 2}, {"e": "Pont Premiere, écran, timeline", "s": "EN SERVICE", "n": "pr.mjs", "r": "Exécute un fichier ExtendScript dans Premiere via le dossier du MCP Bridge.", "d": "17/11", "j": 9}, {"e": "Pont Premiere, écran, timeline", "s": "EN SERVICE", "n": "Timeline/ (6 fichiers)", "r": "python3 timeline_donnees.py dossier_montage plans_vNN.json son.wav sortie.json \"Titre\" id_edit [video_url]", "d": "09/11", "j": 8}, {"e": "Autres", "s": "EN SERVICE", "n": "chemins.py", "r": "Chemins valables sur tous les postes de montage (23/11/2026, Matis : scripts indépendants du poste).", "d": "23/11", "j": 15}, {"e": "Autres", "s": "EN SERVICE", "n": "dedup_composants_piste.py", "r": "Retire les doublons dans la chaîne d'effets d'une piste audio (même composant référencé deux fois, laissé par QE addAudioEffect,", "d": "10/11", "j": 1}, {"e": "Autres", "s": "EN SERVICE", "n": "glisse.swift", "r": "—", "d": "jamais", "j": 0}, {"e": "Autres", "s": "EN SERVICE", "n": "menton.swift", "r": "Pour chaque image : \"fichier chin_y chin_x face_top face_w\" (pixels, origine en haut) ou \"fichier -\"", "d": "22/10", "j": 1}, {"e": "Autres", "s": "EN SERVICE", "n": "niveaux.py", "r": "Mesure les niveaux d'une image (équivalent chiffré de la forme d'onde Lumetri, échelle 0-100 IRE).", "d": "20/11", "j": 10}, {"e": "Autres", "s": "EN SERVICE", "n": "nomme_pistes.py", "r": "Nomme les pistes d'une séquence dans le .prproj (les noms de pistes ne sont pas réglables par script).", "d": "20/10", "j": 1}, {"e": "Autres", "s": "EN SERVICE", "n": "nr_rushs.py", "r": "Réduction de bruit SANS DaVinci (choix de Matis, 14/10/2026) : uniquement sur les rushs bruités ET utilisés au montage.", "d": "15/10", "j": 3}, {"e": "Autres", "s": "EN SERVICE", "n": "params_piste.py", "r": "Règle des paramètres d'effets de PISTE audio dans le .prproj. Usage : PARAMS_JSON='{\"seq\":uid,\"reglages\":[[index_piste, \"Nom du…", "d": "10/11", "j": 1}, {"e": "Autres", "s": "EN SERVICE", "n": "planche.py", "r": "planche.py <dossier> <sortie.png> [colonnes] : planche-contact numérotée des vidéos d'un dossier", "d": "18/11", "j": 16}, {"e": "Autres", "s": "EN SERVICE", "n": "pr_essai.py", "r": "Lance un script Premiere via pr.mjs et réessaie si la réponse est vide (le pont rate parfois le 1er appel).", "d": "jamais", "j": 0}, {"e": "Autres", "s": "EN SERVICE", "n": "proxys.py", "r": "Fabrique des proxys ProRes Proxy 1080×1920 (encodeur matériel) pour des rushs lourds (Sony H.264 4:2:2 10 bits, non décodés par la puce du…", "d": "15/10", "j": 1}, {"e": "Autres", "s": "EN SERVICE", "n": "releve_edit.jsx", "r": "Relevé pour controle_edit.py (18/11/2026, edit Only Clean Marguerittes) : plans de V1 (imbrications résolues) et calques de V2-V3, en…", "d": "17/11", "j": 1}, {"e": "Autres", "s": "EN SERVICE", "n": "structure_lot.sh", "r": "Pistes nommées + limiteurs voix/master en UNE passe sur le .prproj (via reouvre_projet.py) : structure_lot.sh lu.prproj écrit.prproj", "d": "20/10", "j": 1}, {"e": "Autres", "s": "EN SERVICE", "n": "supprime_piste_st.py", "r": "Retire une piste de sous-titres d'une séquence, directement dans le .prproj (projet fermé ou via reouvre_projet.py).", "d": "29/10", "j": 1}, {"e": "Autres", "s": "EN SERVICE", "n": "telecharge.sh", "r": "Remplace NoTube. Usage : telecharge <lien> [mp4/mp3/wav/prores] [dossier]", "d": "23/11", "j": 3}, {"e": "Autres", "s": "EN SERVICE", "n": "tete_lot.swift", "r": "Centre du SUJET pour toutes les images d'un dossier -> \"fichier x y\" (pixels, origine en haut à gauche).", "d": "17/11", "j": 1}, {"e": "Autres", "s": "EN SERVICE", "n": "verticaux.py", "r": "verticaux.py <dossier client...> : liste les vidéos VERTICALES (hauteur > largeur) avec durée et définition", "d": "19/11", "j": 5}, {"e": "Autres", "s": "EN SERVICE", "n": "vitesse.py", "r": "Accélère des exports finis sans toucher à la session Premiere (Matis, 21/10/2026 : réels Gab à 105 %).", "d": "18/11", "j": 18}, {"e": "Autres", "s": "RÉCENT", "n": "sans_doublons_marques.py", "r": "Coupe l'option « Afficher les marques d'images dupliquées » de toutes les séquences d'un projet (MZ.SQShowDuplicateMarkers).", "d": "23/11", "j": 1}, {"e": "Autres", "s": "RÉCENT", "n": "transplante_plage.py", "r": "Fait revenir une partie de montage perdue (04/11/2026, SOS Codognan, réel offre effacé entre deux enregistrements) en la recopiant depuis", "d": "04/11", "j": 1}, {"e": "Autres", "s": "DORMANT", "n": "durees.py", "r": "durees.py <dossier> -> liste récursive : durée / chemin relatif", "d": "jamais", "j": 0}];
+const ETAPES = {
+  "1. Session, rushs, fichiers":{c:"--l-caramel",court:"Session"},
+  "2. Dérush":{c:"--l-iris",court:"Dérush"},
+  "4a. B-rolls et stabilisation":{c:"--l-sarcelle",court:"B-rolls"},
+  "4b. Hook, suivi de tête, zooms":{c:"--l-magenta",court:"Hook et zooms"},
+  "4c. Colo":{c:"--l-violet",court:"Colo"},
+  "4d. Son":{c:"--l-vert",court:"Son"},
+  "4e. Sous-titres, textes, motion":{c:"--l-rose",court:"Sous-titres et motion"},
+  "5-7. Contrôle et export":{c:"--l-jaune",court:"Contrôle et export"},
+  "Pont Premiere, écran, timeline":{c:"--l-gris",court:"Pont Premiere"},
+  "Autres":{c:"--l-gris",court:"Autres"}
+};
+const ETATS = {"EN SERVICE":"s-ok","RÉCENT":"s-info","À TRIER":"s-warn","DORMANT":"s-dead","UNE SESSION":"s-gray"};
+const CIRCUIT = [
+  {t:"Session",who:"Claude",c:"--l-caramel",ag:["tri-rushs"],et:["1. Session, rushs, fichiers"],tc:"00:00"},
+  {t:"Dérush",who:"Claude",c:"--l-iris",ag:["derush"],et:["2. Dérush"],tc:"01:00"},
+  {t:"Correction du dérush",who:"Monteur",c:"--l-iris",ag:[],et:[],h:1,tc:"02:00"},
+  {t:"Habillage",who:"Claude",c:"--l-rose",ag:["brolls","hooks-zooms","colo","son","sous-titres","motion"],et:["4a. B-rolls et stabilisation","4b. Hook, suivi de tête, zooms","4c. Colo","4d. Son","4e. Sous-titres, textes, motion"],tc:"03:00"},
+  {t:"Contrôle avant export",who:"Claude",c:"--l-jaune",ag:["controle-export"],et:["5-7. Contrôle et export"],tc:"04:00"},
+  {t:"Vérification",who:"Monteur",c:"--l-jaune",ag:[],et:[],h:1,tc:"05:00"},
+  {t:"Export et contrôle",who:"Claude",c:"--l-jaune",ag:[],et:["5-7. Contrôle et export"],tc:"06:00"},
+  {t:"Livraison dans l'appli",who:"Monteur",c:"--l-vert",ag:["retours-client"],et:[],h:1,tc:"07:00"}
+];
+const AGENTS = [
+  ["tri-rushs","Avant la session","Rushs triés et nommés, plans ratés, doublons","--l-caramel"],
+  ["derush","Étape 2","Sélection des prises, XML, passages douteux","--l-iris"],
+  ["brolls","Étape 4","Plan de pose contrôlé par brolls_controle.py","--l-sarcelle"],
+  ["hooks-zooms","Étape 4","Temps et valeurs du hook, du Camera Pull et des zooms","--l-magenta"],
+  ["colo","Étape 4","Valeurs des trois calques, plan par plan","--l-violet"],
+  ["son","Étape 4","Gains, musique, SFX calés, fondus manquants","--l-vert"],
+  ["sous-titres","Étape 4","Textes corrigés, mots-clés, mots incertains","--l-rose"],
+  ["motion","Étape 4","Animations ProRes 4444 prêtes à poser","--l-rose"],
+  ["controle-export","Étape 5","« PRÊT » ou la liste des défauts mesurés","--l-jaune"],
+  ["retours-client","Après la livraison","Corrections numérotées, futures règles du client","--l-vert"],
+  ["formateur","À tout moment","Réponse sourcée aux questions d'un monteur","--l-gris"]
+];
+const ROUTE = [
+  ["1. Un poste solide","en cours","encours","Tout le circuit sur le Mac de Matis : module installé, chaque agent essayé sur un vrai lot, consignes corrigées."],
+  ["2. Deuxième poste","prêt à lancer","pret","Un autre monteur au même niveau dès la première semaine : poste.sh, guide d'accueil, agent formateur."],
+  ["3. Qualité mesurée","à venir","","Grille qualité d'un réel, temps et allers-retours comptés par réel dans l'appli."],
+  ["4. Production en série","à venir","","Plusieurs lots en même temps : une conversation par lot, agents en parallèle, file d'attente des lots dans l'appli."],
+  ["5. Zéro aller-retour client","à venir","","Fiche client avec section Montage, modèle de retour, agent retours-client qui nourrit les fiches."]
+];
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const cnt = f => OUTILS.filter(f).length;
+
+$("#k-outils").textContent = OUTILS.length;
+$("#k-service").textContent = cnt(o => o.s === "EN SERVICE");
+
+// Circuit
+$("#ruler").innerHTML = CIRCUIT.map((s,i) => `<div>${s.tc} · ${i+1}</div>`).join("");
+$("#track").innerHTML = CIRCUIT.map((s,i) => {
+  const n = s.et.length ? cnt(o => s.et.includes(o.e)) : 0;
+  return `<div class="clip${s.h ? " humain" : ""}" style="--c:var(${s.c})">
+    <span class="who">${s.who}</span><span class="t">${esc(s.t)}</span>
+    <div class="ag">${s.ag.map(a => `<span class="chip">${a}</span>`).join("")}</div>
+    ${n ? `<button type="button" data-i="${i}">${n} outils</button>` : ""}</div>`;
+}).join("");
+$("#track").addEventListener("click", e => {
+  const b = e.target.closest("button[data-i]"); if (!b) return;
+  filtre.etapes = new Set(CIRCUIT[b.dataset.i].et); filtre.etat = null; location.hash = "outils"; rendreOutils();
+});
+
+// Outils
+const filtre = {etat:null, etapes:new Set(), q:""};
+function rendreFiltres(){
+  $("#f-etat").innerHTML = Object.keys(ETATS).map(s =>
+    `<button type="button" class="f" data-etat="${s}" aria-pressed="${filtre.etat===s}"><span class="pill ${ETATS[s]}">${s}</span><em>${cnt(o=>o.s===s)}</em></button>`).join("");
+  $("#f-etape").innerHTML = Object.keys(ETAPES).filter(e => cnt(o=>o.e===e)).map(e =>
+    `<button type="button" class="f" data-etape="${esc(e)}" aria-pressed="${filtre.etapes.has(e)}" style="--c:var(${ETAPES[e].c})"><i></i>${ETAPES[e].court}<em>${cnt(o=>o.e===e)}</em></button>`).join("");
+}
+function rendreOutils(){
+  rendreFiltres();
+  const q = filtre.q.toLowerCase();
+  const ordre = Object.keys(ETATS);
+  const ls = OUTILS.filter(o => (!filtre.etat || o.s === filtre.etat) && (!filtre.etapes.size || filtre.etapes.has(o.e)) && (!q || (o.n + " " + o.r).toLowerCase().includes(q)))
+    .sort((a,b) => ordre.indexOf(a.s) - ordre.indexOf(b.s) || a.n.localeCompare(b.n, "fr"));
+  $("#count").textContent = `${ls.length} outil${ls.length > 1 ? "s" : ""} affiché${ls.length > 1 ? "s" : ""} sur ${OUTILS.length}`;
+  $("#list").innerHTML = ls.length ? ls.map(o => `<div class="it" style="--c:var(${(ETAPES[o.e]||ETAPES.Autres).c})">
+    <span class="bar" aria-hidden="true"></span><span class="pill ${ETATS[o.s]}">${o.s}</span><code>${esc(o.n)}</code>
+    <span class="r">${o.r === "—" ? "<em>sans description</em>" : esc(o.r)}</span>
+    <span class="d">${o.d === "jamais" ? "jamais cité" : "vu le " + o.d}<br>${o.j} journa${o.j > 1 ? "ux" : "l"}</span></div>`).join("")
+    : `<div class="it"><span></span><span class="r" style="grid-column:2 / -1">Aucun outil ne correspond. Retire un filtre ou change la recherche.</span></div>`;
+}
+$("#f-etat").addEventListener("click", e => { const b = e.target.closest("[data-etat]"); if (!b) return; filtre.etat = filtre.etat === b.dataset.etat ? null : b.dataset.etat; rendreOutils(); });
+$("#f-etape").addEventListener("click", e => { const b = e.target.closest("[data-etape]"); if (!b) return; const v = b.dataset.etape; filtre.etapes.has(v) ? filtre.etapes.delete(v) : filtre.etapes.add(v); rendreOutils(); });
+$("#q").addEventListener("input", e => { filtre.q = e.target.value; rendreOutils(); });
+
+// Agents
+$("#agents").innerHTML = AGENTS.map(([n,et,r,c]) => `<article class="agent" style="--c:var(${c})">
+  <div class="top"><code>${n}</code><span class="pill s-info">à essayer</span></div><p>${esc(r)}</p>
+  <div class="meta"><span class="chip">${et}</span><span class="chip">ne touche pas Premiere</span></div></article>`).join("");
+
+// Feuille de route
+$("#road").innerHTML = ROUTE.map(([t,etat,cl,p]) => `<div class="step ${cl}"><h3>${t}<span class="pill ${cl==="encours"?"s-info":cl==="pret"?"s-ok":"s-gray"}">${etat}</span></h3><p>${p}</p></div>`).join("");
+
+// Rangement
+const RANGE = [
+  ["CLAUDE.md","Règles transversales du montage, lues par Claude à chaque conversation","--l-iris"],
+  ["regles/","Une fiche par métier : dérush, son, colo, b-rolls, hooks, sous-titres, export, sessions","--l-iris"],
+  ["mode-emploi-kit-montage.md","Pistes, chutiers, outils, trousse de secours","--l-iris"],
+  ["Kit Montage Paul Audio/","Gabarits, modèles, préréglages, LUT, polices, SFX, musiques, médias","--l-sarcelle"],
+  ["Kit Montage Paul Audio/Outils Claude/","Les 173 outils de Claude (carte dans l'onglet Outils)","--l-sarcelle"],
+  ["Module Claude/","Guide d'installation, poste.sh, garde-fous, plan de l'atelier, guide d'accueil, carte des outils, cette page","--l-vert"],
+  ["Module Claude/gacolet-montage/","Source du module publié dans l'équipe Claude (agents, circuit)","--l-vert"],
+  ["Références montage/Signature Gacolet/","La signature mesurée et ses données","--l-rose"],
+  ["Références dérush/ · Références b-rolls/","Dérushs avant et après retouche, analyses de rythme b-roll","--l-rose"],
+  ["Sous-titres/<lot>/","SRT des lots","--l-violet"],
+  ["journal/","Un compte rendu par sujet : décisions, livrables, points ouverts","--l-jaune"],
+  ["Archives/ · Archives/Outils retirés/","Historique des règles, outils retirés (avec leur relais)","--l-gris"]
+];
+$("#rangement").innerHTML = RANGE.map(([n,r,c]) => `<div class="it rg" style="--c:var(${c})"><span class="bar" aria-hidden="true"></span><code>${esc(n)}</code><span class="r">${esc(r)}</span></div>`).join("");
+
+// Signature
+const SIG = [
+  ["Film burn","1 par réel","15 réels sur 15"],
+  ["Part de b-roll","≈ 60 % com · 72 % Meta","fourchette 40-80 % / 55-95 %"],
+  ["Coupes face caméra","≈ 8 par 10 s","une coupe toutes les 1,3 s"],
+  ["Sous-titres","16-19 par 10 s","blocs très courts"],
+  ["SFX","4-5 par réel","jamais zéro"],
+  ["Zooms","≈ 3 com · ≤ 1 Meta","presque aucun en pub"],
+  ["Hook","≈ 2 s","quand il est imbriqué"],
+  ["Son","−12,5 LUFS","fourchette −14,5 à −10,5, crête ≤ −1 dBFS"]
+];
+$("#signature").innerHTML = SIG.map(([t,v,n]) => `<div class="metric" style="border-style:solid"><span class="eyebrow">${t}</span><b style="color:var(--ink);font-size:24px">${v}</b><small>${n}</small></div>`).join("");
+
+// Vues
+const VUES = ["demarrer","rangement","circuit","outils","agents","signature","feuille","mesures"];
+function montrer(){
+  const v = VUES.includes(location.hash.slice(1)) ? location.hash.slice(1) : "circuit";
+  VUES.forEach(x => { document.getElementById("v-" + x).hidden = x !== v; });
+  document.querySelectorAll("nav.tabs a").forEach(a => a.setAttribute("aria-current", a.getAttribute("href") === "#" + v ? "page" : "false"));
+}
+window.addEventListener("hashchange", montrer);
+rendreOutils(); montrer();
+</script>
+
+</html>

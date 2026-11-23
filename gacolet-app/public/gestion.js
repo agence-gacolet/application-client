@@ -22,9 +22,9 @@ const DAYS = ["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"]
 const DEFAULT_COLORS = {"Agence Gacolet":"#1D1D1B","AR Climatisation":"#E8833A","Bonobo":"#2E9E5B","Delta Sud Formation":"#D6334A","Domaine Pagezi":"#7A1F3D","Flora Design":"#C25CC9","France Étanchéité":"#2F6FE4","Gaufrement Bon":"#E3B505","Hugo Maître Nageur":"#1BA6C9","Insolent":"#5C5C57","KR Thermolaquage":"#8C6239","La Vie La Construction":"#F06A1D","Le Petit Mas":"#6E8B3D","Locamex":"#E2559C","Meyer-Pic":"#3D4FB5","Only Clean":"#17A398","Paillotte Bassamoise":"#F2A93B","SOS Pare-Brise Codognan":"#9B2226","SOS Pare-Brise Vendargues":"#4A6C8C","Sport Défense":"#8E44AD","The New Me Montpellier":"#D98BA5","Total Habitat 360":"#6C7A2E"};
 const VIEWS = [
   ["accueil","Accueil"],["agenda","Agenda"],["taches","Tâches"],["messagerie","Messagerie"],["vocal","Vocal"],["commercial","Commercial"],["clients","Calendrier clients"],
-  ["montage","Rushs"],["tournage","Feuilles de tournage"],["publications","Publications"],["reels","Réels finis"],["depot","Dépôt"],["campagnes","Campagnes"],["formation","Formation"],["parametres","Paramètres"],["fiches","Tableau clients"],["strategie","Stratégie"],["idees","Idées"],["focus","Focus"],["finance","Finance"],["chalet","Chalet"]
+  ["montage","Rushs"],["tournage","Feuilles de tournage"],["publications","Publications"],["reels","Réels finis"],["atelier","Atelier montage"],["depot","Dépôt"],["campagnes","Campagnes"],["formation","Formation"],["parametres","Paramètres"],["fiches","Tableau clients"],["strategie","Stratégie"],["idees","Idées"],["focus","Focus"],["finance","Finance"],["chalet","Chalet"]
 ];
-const NAV_GROUPS = [["",["accueil"]],["Au quotidien",["agenda","taches","messagerie","vocal"]],["Production",["idees","strategie","tournage","montage","reels","depot","publications"]],["Clients",["commercial","fiches"]],["Publicité",["campagnes"]],["Ressources",["formation"]],["Compte",["parametres"]]];
+const NAV_GROUPS = [["",["accueil"]],["Au quotidien",["agenda","taches","messagerie","vocal"]],["Production",["idees","strategie","tournage","montage","reels","atelier","depot","publications"]],["Clients",["commercial","fiches"]],["Publicité",["campagnes"]],["Ressources",["formation"]],["Compte",["parametres"]]];
 /* Onglets fusionnés : le calendrier clients vit dans l’agenda, le montage dans les tâches. */
 const MERGED = { clients: ["agenda","agHub"] };
 /* Pages par défaut d’un compte sans réglage par prénom. Le serveur applique les mêmes limites aux données. */
@@ -39,7 +39,7 @@ const ROLE_VIEWS = {
   commercial: ["accueil","agenda","taches","messagerie","vocal","focus","commercial","clients","montage","publications","idees","campagnes","formation","parametres"]
 };
 const HIDDEN = ["finance","chalet","focus"]; // pages supprimées le 14/11/2026 (Matis)
-const canSee = k0 => { if (k0 === "reels") return canSee0("montage") || canSee0("publications"); const k = k0 === "depot" ? "publications" : k0; return canSee0(k); };
+const canSee = k0 => { if (k0 === "reels" || k0 === "atelier") return canSee0("montage") || canSee0("publications"); const k = k0 === "depot" ? "publications" : k0; return canSee0(k); };
 const canSee0 = k => HIDDEN.includes(k) ? false : !S.role || S.role === "owner" || (Array.isArray(S.views) ? S.views : ["accueil","parametres"].concat(ROLE_VIEWS[S.role] || [])).includes(k);
 const COLLS = ["events","tasks","commercial","campaigns","rushes","publications","clients","cevents","keydates","posts","edtodo","meta","messages","formations","msheets","idees","pilotage","ca","finance","strategies","shoots","vrooms"];
 const DUO = ["Matis","Gabriel"];
@@ -1965,6 +1965,14 @@ function rfToDepot(c, it){ if (!it.url){ toast("Le fichier n’est pas encore ar
   // Comme un dépôt normal : Claude écoute la vidéo et prépare les descriptions tout de suite
   it.asked = true; GC.api("POST","/api/g-prod/describe", { client: c, url: it.url, file: it.name, kind: "video" }).then(q => { if (q.queued){ it.wait = q.queued; PD.save(); pdPoll(); } }).catch(() => { it.asked = false; });
   toast("« " + it.name + " » est dans le Dépôt de " + c + ". Claude écrit les descriptions."); render(); }
+/* ---------- Atelier montage (Matis, 23/11/2026) : la page du pôle montage (installer un poste, rangement, circuit, outils, agents,
+   signature, feuille de route). Source : Drive 20_PRODUCTION/Module Claude/page atelier/ ; copiée ici dans public/atelier-montage.html. */
+function vAtelier(root){
+  root.appendChild(head("Atelier montage", "Le pôle montage en une page : installer un poste, où tout est rangé, le circuit d’un réel, les outils, les agents Claude et la signature Gacolet."));
+  const f = el("iframe","atelier-frame"); f.src = "/atelier-montage.html?v=2"; f.title = "Atelier montage";
+  f.style.cssText = "display:block;width:100%;height:calc(100dvh - 190px);min-height:520px;border:0;border-radius:14px;background:transparent";
+  root.appendChild(f);
+}
 function vReels(root){
   if (!S.pdCl && !S.pdClLoad){ S.pdClLoad = true; GC.api("GET","/api/g-prod/clients").then(r => { S.pdCl = (r.clients || []).map(c => c.name); S.pdNets = {}; (r.clients || []).forEach(c => { S.pdNets[c.name] = c.nets || []; }); render(); }).catch(() => {}).then(() => { S.pdClLoad = false; }); }
   const clients = S.pdCl && S.pdCl.length ? S.pdCl : clientNames();
@@ -3848,7 +3856,7 @@ function vAgendaHub(root){
 function vTachesHub(root){
   vTaches(root);
 }
-const RENDER = {strategie:vStrategie, fiches:vFiches, parametres:vParametres, accueil:vAccueil, agenda:vAgendaHub, taches:vTachesHub, commercial:vCommercial, campagnes:vMeta, montage:vMontage, tournage:vTournage, publications:vPublications, depot:vDepot, reels:vReels, clients:vClients, messagerie:vMessagerie, vocal:vVocal, formation:vFormation, idees:vIdees};
+const RENDER = {strategie:vStrategie, fiches:vFiches, parametres:vParametres, accueil:vAccueil, agenda:vAgendaHub, taches:vTachesHub, commercial:vCommercial, campagnes:vMeta, montage:vMontage, tournage:vTournage, publications:vPublications, depot:vDepot, reels:vReels, atelier:vAtelier, clients:vClients, messagerie:vMessagerie, vocal:vVocal, formation:vFormation, idees:vIdees};
 /* Chargement progressif : des blocs gris qui respirent à la place de « Chargement… » */
 function skeleton(n){ const w = el("div","sk-wrap"); w.setAttribute("aria-busy","true"); w.setAttribute("aria-label","Chargement");
   if (!n){ const t = el("div","sk sk-bar"); w.appendChild(t); n = 7; }
@@ -3908,6 +3916,7 @@ const ICONS = {
   tournage:'<rect x="3" y="7" width="13" height="11" rx="2"/><path d="M16 11l5-3v9l-5-3"/><circle cx="9.5" cy="12.5" r="2.3"/>',
   montage:'<rect x="3.5" y="6" width="17" height="12" rx="1.5"/><path d="M8 6v12M16 6v12M3.5 10h4.5M3.5 14h4.5M16 10h4.5M16 14h4.5"/>',
   reels:'<rect x="7" y="3" width="10" height="18" rx="2"/><path d="m10.5 9.5 4 2.5-4 2.5z"/>',
+  atelier:'<path d="M4 20h16M6 20V9l6-4 6 4v11"/><path d="M9.5 20v-5h5v5M9 11h6"/>',
   depot:'<path d="M12 15V4M7.5 8.5 12 4l4.5 4.5"/><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/>',
   publications:'<rect x="4" y="4" width="16" height="16" rx="4"/><circle cx="12" cy="12" r="3.6"/><path d="M16.7 7.3h.01"/>',
   clients:'<circle cx="9" cy="9" r="3.2"/><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5M15.5 6.2a3 3 0 0 1 0 5.6M17 14.3c1.9.6 3.1 2.2 3.5 4.7"/>',
@@ -3919,7 +3928,7 @@ const ICONS = {
   idees:'<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>',
   focus:'<path d="M12 21c-3.6 0-6.5-2.6-6.5-6.2 0-3.4 2.6-5.2 3.6-8.3.9 1.4 1.4 2.7 1.4 4 1.3-1.1 2.3-3.2 2.1-6 3 2.4 5.9 6 5.9 10.3 0 3.6-2.9 6.2-6.5 6.2z"/><path d="M12 21c-1.6 0-2.8-1.2-2.8-2.8 0-1.7 1.6-2.6 2.8-4.2 1.2 1.6 2.8 2.5 2.8 4.2 0 1.6-1.2 2.8-2.8 2.8z"/>'
 };
-const SHORT = {finance:"Finance", strategie:"Stratégie", chalet:"Chalet", fiches:"Tableau clients", parametres:"Paramètres", accueil:"Accueil", agenda:"Agenda", taches:"Tâches", commercial:"Commercial", campagnes:"Campagnes", depot:"Dépôt", reels:"Réels finis", montage:"Rushs", tournage:"Tournage", publications:"Publications", clients:"Calendrier clients", messagerie:"Messagerie", vocal:"Vocal", formation:"Formation", idees:"Idées", focus:"Focus"};
+const SHORT = {finance:"Finance", strategie:"Stratégie", chalet:"Chalet", fiches:"Tableau clients", parametres:"Paramètres", accueil:"Accueil", agenda:"Agenda", taches:"Tâches", commercial:"Commercial", campagnes:"Campagnes", depot:"Dépôt", reels:"Réels finis", atelier:"Atelier", montage:"Rushs", tournage:"Tournage", publications:"Publications", clients:"Calendrier clients", messagerie:"Messagerie", vocal:"Vocal", formation:"Formation", idees:"Idées", focus:"Focus"};
 const MOBILE_MAIN = ["accueil","agenda","taches","messagerie"];
 const ico = k => { const s = document.createElementNS("http://www.w3.org/2000/svg","svg"); s.setAttribute("viewBox","0 0 24 24"); s.setAttribute("aria-hidden","true"); s.classList.add("ico"); s.innerHTML = ICONS[k] || ""; return s; };
 function renderTabs(){
