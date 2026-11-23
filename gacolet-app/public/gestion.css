@@ -2022,7 +2022,7 @@ html.tg-lock,html.tg-lock body{overflow:hidden}
 .wa-re button{background:#2C2C2E!important;border:2px solid #000!important;border-radius:999px;padding:1px 7px;color:#fff}
 .wa-re button.on{background:#0A84FF!important}
 .wa-seen{font-size:11px;font-weight:500;color:#8E8E93;margin-top:4px}
-.wa-typing{background:var(--im-in)!important;border:0!important;border-radius:19px;margin-left:36px}
+.wa-typing{background:var(--im-in)!important;border:0!important;border-radius:19px;margin-left:36px;margin-top:14px!important}
 /* Barre d'écriture */
 .wa-form{background:rgba(0,0,0,.85)!important;border-top:1px solid rgba(255,255,255,.06)!important;padding:8px 14px 10px}
 .wa-bar textarea{background:#1C1C1E;border:1px solid #2C2C2E!important;border-radius:20px!important;min-height:38px;padding:9px 15px;font-size:15px;color:#fff}
