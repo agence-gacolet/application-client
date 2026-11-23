@@ -142,7 +142,7 @@ module.exports = function production({ app, auth, wrap, db, current, put, pubPla
   }));
 
   // Dépôts en cours, gardés sur le serveur (et plus dans le navigateur) : les mêmes sur tous les appareils, rien ne disparaît en fermant une fenêtre
-  const DKEYS = ["client","name","kind","url","date","time","reco","text","props","transcript","wait","asked","err","pct","up","upAt","upDev","type","nets","by","at"];
+  const DKEYS = ["client","name","kind","url","date","time","reco","text","props","transcript","wait","asked","err","pct","up","upAt","upDev","type","nets","fini","by","at"];
   const draftId = id => /^d[a-z0-9]{6,30}$/.test(String(id)) ? String(id) : "";
   app.get("/api/g-prod/drafts", auth, wrap(async (req, res) => {
     const list = await docsOf("_depot");
