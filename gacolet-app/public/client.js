@@ -509,8 +509,34 @@ function gifPicker(ch){
     load(); setTimeout(() => q.focus(), 50);
   });
 }
+/* Photo en grand dans l'appli (plus d'ouverture dans le navigateur) */
+function photoView(url, name){
+  document.querySelectorAll(".ph-view").forEach(x => x.remove());
+  const ov = el("div","ph-view"); ov.setAttribute("role","dialog"); ov.setAttribute("aria-modal","true"); ov.setAttribute("aria-label", name || "Photo");
+  const top = el("div","ph-top"); const dl = el("a","ph-btn","Télécharger"); dl.href = url; dl.setAttribute("download", name || "photo");
+  const x = el("button","ph-btn","Fermer"); x.type = "button"; top.append(dl, x);
+  const img = document.createElement("img"); img.src = url; img.alt = name || "Photo"; ov.append(top, img);
+  let LID = 0; const key = e => { if (e.key === "Escape") close(); };
+  function close(){ document.removeEventListener("keydown", key); ov.remove(); if (LID){ const id = LID; LID = 0; layerClose(id); } }
+  x.onclick = close; ov.onclick = e => { if (e.target === ov) close(); }; document.addEventListener("keydown", key);
+  document.body.appendChild(ov); LID = layerOpen(() => { LID = 0; close(); });
+}
+/* Smileys : panneau au-dessus de la barre, un clic ajoute le smiley là où est le curseur */
+const EMOJIS = "😀 😃 😄 😁 😆 😅 😂 🤣 😊 🙂 😉 😍 🥰 😘 😎 🤩 🥳 😏 🤔 🤨 😐 😶 🙄 😬 😴 😌 😛 😜 🤪 😝 🤗 🤭 🫡 🤫 😇 🥲 😢 😭 😤 😡 🤯 😳 🥵 🥶 😱 😨 😰 🤤 🤮 🤒 🤕 😷 🤠 🤑 💀 👻 🤡 💩 👍 👎 👌 ✌️ 🤞 🤙 👏 🙌 🙏 💪 👀 👋 🫶 ❤️ 🧡 💛 💚 💙 💜 🖤 🤍 💔 💯 🔥 ✨ ⭐ 🎉 🎊 🎁 🏆 🥇 ✅ ❌ ⚠️ ❓ ❗ 💡 📌 📅 ⏰ 📸 🎥 🎬 🎙️ 🎧 📱 💻 📈 📉 💰 💸 🚀 ☕ 🍕 🍻 🥂 ☀️ 🌧️ 🌊 🏊 🚗 🏠 🎯 👑".split(" ");
+function emojiPanel(btnEl, ta, after){
+  const open = document.querySelector(".emo-pan"); if (open){ open.remove(); return; }
+  const p = el("div","emo-pan"); p.setAttribute("role","dialog"); p.setAttribute("aria-label","Smileys");
+  EMOJIS.forEach(k => { const b = el("button",null,k); b.type = "button"; b.setAttribute("aria-label", k);
+    b.onmousedown = e => e.preventDefault();
+    b.onclick = e => { e.stopPropagation(); const a = ta.selectionStart != null ? ta.selectionStart : ta.value.length, z = ta.selectionEnd != null ? ta.selectionEnd : a;
+      ta.value = ta.value.slice(0, a) + k + ta.value.slice(z); const c = a + k.length; try { ta.setSelectionRange(c, c); } catch(x){} if (after) after(); }; p.appendChild(b); });
+  const form = btnEl.closest("form") || document.body; form.appendChild(p);
+  const shut = e => { if (!p.contains(e.target) && e.target !== btnEl){ p.remove(); document.removeEventListener("pointerdown", shut, true); } };
+  setTimeout(() => document.addEventListener("pointerdown", shut, true), 0);
+}
+const EMO_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0"/><circle cx="9" cy="10" r=".9" fill="currentColor"/><circle cx="15" cy="10" r=".9" fill="currentColor"/></svg>';
 function attachEl(f, key){
-  if (isImg(f)){ const a = el("a","wa-img"); a.href = f.url; a.target = "_blank"; a.rel = "noopener";
+  if (isImg(f)){ const a = el("a","wa-img"); a.href = f.url; a.onclick = e => { e.preventDefault(); e.stopPropagation(); photoView(f.url, f.name); };
     a.appendChild(mediaKeep(key, () => { const i = document.createElement("img"); i.src = f.url; i.alt = f.name || "Photo"; i.decoding = "async"; mediaSize(i, f); return i; })); return a; }
   if (isVid(f)) return mediaKeep(key, () => { const v = document.createElement("video"); v.className = "wa-vid"; v.src = vsrc(f.url); v.controls = true; v.preload = "metadata"; v.playsInline = true; mediaSize(v, f); return v; });
   const a = el("a","wa-file"); a.href = f.url; a.target = "_blank"; a.rel = "noopener"; a.setAttribute("download", f.name || "");
@@ -641,7 +667,7 @@ function vMessagerie(root){
     const ok = el("button","btn lemon","Envoyer le vocal"); ok.type = "button"; ok.onclick = () => crecStop(false);
     form.onsubmit = e => { e.preventDefault(); crecStop(false); };
     bar.append(rb, cb, ok);
-  } else { setBtn(); const gif = el("button","wa-ic wa-gif","GIF"); gif.type = "button"; gif.title = "Envoyer un GIF"; gif.setAttribute("aria-label", gif.title); gif.onclick = () => gifPicker(ch); bar.append(fi, clip, gif, ta, go2); }
+  } else { setBtn(); const gif = el("button","wa-ic wa-gif","GIF"); gif.type = "button"; gif.title = "Envoyer un GIF"; gif.setAttribute("aria-label", gif.title); gif.onclick = () => gifPicker(ch); const emo = el("button","wa-ic wa-emo"); emo.type = "button"; emo.title = "Smileys"; emo.setAttribute("aria-label", emo.title); emo.innerHTML = EMO_SVG; emo.onclick = () => emojiPanel(emo, ta, () => ta.oninput()); bar.append(fi, clip, gif, emo, ta, go2); }
   form.appendChild(bar);
   main.ondragover = e => { e.preventDefault(); main.classList.add("drop"); };
   main.ondragleave = () => main.classList.remove("drop");

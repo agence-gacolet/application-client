@@ -2317,3 +2317,14 @@ button.wi-p{cursor:pointer}button.wi-p:hover .wi-pt b{color:var(--lemon)}
 .id-compose{margin-bottom:18px}.id-compose[hidden]{display:none}
 .id-cacts{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
 .actions .left:has(+ .left){margin-right:8px}
+
+/* Visionneuse de photo, smileys, réactions au doigt (23/11/2026) */
+.ph-view{position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.94);display:flex;align-items:center;justify-content:center;padding:56px 12px 24px}
+.ph-view img{max-width:100%;max-height:100%;object-fit:contain;border-radius:6px}
+.ph-top{position:absolute;top:0;left:0;right:0;display:flex;justify-content:flex-end;gap:8px;padding:calc(10px + env(safe-area-inset-top)) 12px 10px}
+.ph-btn{background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:999px;padding:9px 16px;font:600 14px/1 inherit;text-decoration:none;cursor:pointer}
+.wa-form{position:relative}
+.emo-pan{position:absolute;left:8px;right:8px;bottom:calc(100% + 6px);z-index:50;display:grid;grid-template-columns:repeat(auto-fill,minmax(40px,1fr));gap:2px;max-height:240px;overflow:auto;padding:8px;background:#1C1C1E;border:1px solid rgba(255,255,255,.12);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+.emo-pan button{border:0;background:none;font-size:24px;line-height:1;padding:6px 0;border-radius:8px;cursor:pointer}
+.emo-pan button:hover{background:rgba(255,255,255,.1)}
+@media (hover:none){ .wa-bub{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none} }
