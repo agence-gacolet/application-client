@@ -1338,7 +1338,7 @@ html{-webkit-tap-highlight-color:transparent}
 @media (hover:none){ .wa-dots{display:none} }
 .wa-typing{border-bottom-left-radius:5px;margin-left:34px}
 .wa-typing i{background:rgba(235,235,245,.5)}
-.wa-typing>span:not(.wa-ty-av){display:none}
+.wa-typing>span{display:none!important}
 .wa-typing{position:relative}
 .wa-ty-av{position:absolute;left:-32px;bottom:0;display:flex;margin:0!important}
 .wa-ty-av>*+*{margin-left:-10px}

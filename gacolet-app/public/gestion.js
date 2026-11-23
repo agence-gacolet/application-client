@@ -3003,8 +3003,8 @@ function liveFill(){
   const L = window.GC_LIVE || {}, ch = MSG_CH, me = S.me || "Gabriel";
   const ty = document.getElementById("wa-typing");
   if (ty){ const who = ((L.typing || {})[ch] || []).filter(n => n !== me); ty.hidden = !who.length;
-    const lb = ty.querySelector("span"); if (lb) lb.textContent = who.length ? (who.length === 1 ? who[0] + " écrit" : who.join(" et ") + " écrivent") : "";
-    const avk = who.slice(0, 3).join("|"); if (ty.dataset.av !== avk){ ty.dataset.av = avk; ty.querySelectorAll(".wa-ty-av").forEach(a => a.remove()); const box = el("span","wa-ty-av"); who.slice(0, 3).forEach(n => box.appendChild(avatarEl(n, 26))); ty.prepend(box); }
+    const lb = ty.querySelector("span:not(.wa-ty-av)"); if (lb) lb.textContent = who.length ? (who.length === 1 ? who[0] + " écrit" : who.join(" et ") + " écrivent") : "";
+    const avk = who.slice(0, 3).join("|"); if (ty.dataset.av !== avk){ ty.dataset.av = avk; ty.querySelectorAll(".wa-ty-av").forEach(a => a.remove()); const box = el("div","wa-ty-av"); who.slice(0, 3).forEach(n => box.appendChild(avatarEl(n, 26))); ty.prepend(box); }
     if (who.length){ const l = document.getElementById("chat-list"); if (l && l.scrollHeight - l.scrollTop - l.clientHeight < 120) l.scrollTop = l.scrollHeight; } }
   const r0 = (L.reads || {})[ch] || {}, readers = Object.keys(r0).filter(n => n !== me);
   document.querySelectorAll(".wa-tk").forEach(t => { const by = readers.filter(n => r0[n] >= (t.dataset.at || "")); t.classList.toggle("read", !!by.length); t.title = by.length ? "Lu par " + by.join(", ") : "Envoyé"; });
