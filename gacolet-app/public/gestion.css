@@ -2333,3 +2333,8 @@ button.wi-p{cursor:pointer}button.wi-p:hover .wi-pt b{color:var(--lemon)}
 .vx-del{align-self:center;padding:6px 12px}
 .vx-del.armed{border-color:#ff6b6b;color:#ff6b6b}
 .vx-hero:has(.vx-menu){z-index:20}
+/* Heure et ⋯ alignés sur la bulle (en bas), l'heure juste après les points (23/11/2026) */
+.wa-line .wa-dots{align-self:flex-end!important;margin-bottom:2px}
+.wa-line:hover .wa-time{top:auto!important;bottom:9px!important;transform:none!important;line-height:14px}
+.wa-line:not(.mine):hover .wa-time{left:calc(100% + 4px)!important;right:auto!important}
+.wa-line.mine:hover .wa-time{right:calc(100% + 4px)!important;left:auto!important}
