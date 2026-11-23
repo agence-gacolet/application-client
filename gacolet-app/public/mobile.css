@@ -64,6 +64,13 @@
   .seg{border-radius:10px;padding:2px;-webkit-mask-image:none!important;mask-image:none!important;display:flex;width:100%;overflow:visible}
   .seg button{flex:1 1 0;min-width:0;padding-left:6px;padding-right:6px}
   .seg button{min-height:32px;border-radius:8px;font-size:var(--fs-s)}
+  /* Plus de 4 onglets (Paramètres…) : une seule ligne de pastilles qui défile au doigt, l'onglet actif centré (23/11/2026) */
+  .seg button{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .head .tools .seg:has(> button:nth-child(5)),.seg:has(> button:nth-child(5)){flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;
+    background:transparent;padding:0;gap:6px;margin:0 -16px;padding:0 16px;width:calc(100% + 32px);max-width:none;scroll-padding:0 16px}
+  .seg:has(> button:nth-child(5))::-webkit-scrollbar{display:none}
+  .seg:has(> button:nth-child(5)) button{flex:0 0 auto;overflow:visible;min-height:34px;padding:0 14px;border-radius:999px;background:var(--surface);color:var(--muted)}
+  .seg:has(> button:nth-child(5)) button[aria-pressed="true"]{background:var(--lemon);color:#1D1D1B}
 
   /* ---------- Agenda ---------- */
   .ag-head .sub{display:none}

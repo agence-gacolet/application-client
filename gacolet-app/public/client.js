@@ -37,8 +37,24 @@ function head(title, sub, tools){
   if (tools){ const t = el("div","tools"); tools.forEach(x => x && t.appendChild(x)); h.appendChild(t); }
   return h;
 }
-function openModal(build){ const m = $("#modal"); m.textContent = ""; m.className = "modal"; build(m); $("#overlay").classList.add("open"); }
-function closeModal(){ $("#overlay").classList.remove("open"); }
+/* Retour du téléphone (glisser depuis le bord gauche) : referme la fenêtre ou la conversation ouverte au lieu de changer de page (23/11/2026) */
+const BK_STACK = []; let LAYER_N = 0, LAYER_IGN = 0, LAST_HASH = location.hash;
+function layerOpen(fn){ const id = ++LAYER_N; BK_STACK.push({ id, fn, h: location.hash }); try { history.pushState({ gcL: id }, "", location.href); } catch(e){} return id; }
+let BK_PENDING = null, BK_RES = null; // une navigation demandée pendant qu’une étape se referme attend qu’elle soit retirée de l’historique
+function layerClose(id){ const i = BK_STACK.findIndex(L => L.id === id); if (i < 0) return; const L = BK_STACK.splice(i, 1)[0];
+  if (!BK_PENDING) BK_PENDING = new Promise(r => { BK_RES = r; });
+  setTimeout(() => { if (location.hash === L.h && history.state && history.state.gcL === id){ LAYER_IGN++; history.back(); setTimeout(bkDone, 400); } else bkDone(); }, 0); }
+function bkDone(){ if (BK_RES){ const r = BK_RES; BK_RES = null; BK_PENDING = null; r(); } }
+document.addEventListener("click", e => { if (!BK_PENDING || e.defaultPrevented) return; const a = e.target.closest && e.target.closest("a[href^='#']"); if (!a) return; e.preventDefault(); const h = a.getAttribute("href"); BK_PENDING.then(() => { location.hash = h; }); });
+window.addEventListener("popstate", e => {
+  if (LAYER_IGN){ LAYER_IGN--; bkDone(); return; }
+  const cur = (e.state && e.state.gcL) || 0; let n = 0;
+  while (BK_STACK.length && BK_STACK[BK_STACK.length - 1].id > cur){ const L = BK_STACK.pop(); n++; try { L.fn(); } catch(x){ console.error(x); } }
+  if (cur && !BK_STACK.some(L => L.id === cur)) history.back(); // étape déjà refermée par un bouton : on la saute
+});
+let MODAL_L = 0, CONV_L = 0;
+function openModal(build){ const m = $("#modal"); m.textContent = ""; m.className = "modal"; build(m); $("#overlay").classList.add("open"); if (!MODAL_L) MODAL_L = layerOpen(() => { MODAL_L = 0; $("#overlay").classList.remove("open"); }); }
+function closeModal(){ $("#overlay").classList.remove("open"); if (MODAL_L){ const id = MODAL_L; MODAL_L = 0; layerClose(id); } }
 /* Fenêtre : se ferme seulement si le clic commence ET finit sur le fond (une sélection de texte lâchée hors de la fenêtre ne la ferme plus).
    Entrée = bouton principal de la fenêtre (Enregistrer, Créer…) ; Maj + Entrée = retour à la ligne dans un texte long. */
 let OV_DOWN = false;
@@ -205,7 +221,7 @@ function renderTabs(){
   $("#acct-name").textContent = myName(); $("#acct-role").textContent = (S.f && S.f.client.name) || "";
   const tot = badge.valider + badge.tournages + unread(); try { if (navigator.setAppBadge) { tot ? navigator.setAppBadge(tot) : navigator.clearAppBadge(); } } catch(e){}
 }
-function go(v){ if (location.hash !== "#"+v) location.hash = v; else render(); }
+function go(v){ if (BK_PENDING){ BK_PENDING.then(() => go(v)); return; } if (location.hash !== "#"+v) location.hash = v; else render(); }
 
 /* ---------- Accueil ---------- */
 function vAccueil(root){
@@ -295,8 +311,8 @@ function shOpen(s){
   const x = el("button","cl-vx"); x.type = "button"; x.setAttribute("aria-label","Fermer"); x.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>';
   top.append(tt, x); ov.appendChild(top);
   const sc = el("div","sh-scroll"), pg = el("div","sh-box full"); sc.appendChild(pg); ov.appendChild(sc);
-  const close = () => { ov.remove(); document.body.classList.remove("cl-noscroll"); }; x.onclick = close; tapClose(x, close);
-  document.body.appendChild(ov); document.body.classList.add("cl-noscroll"); shPage(s, pg, true);
+  let LID = 0; const close = () => { ov.remove(); document.body.classList.remove("cl-noscroll"); layerClose(LID); }; x.onclick = close; tapClose(x, close);
+  document.body.appendChild(ov); document.body.classList.add("cl-noscroll"); LID = layerOpen(close); shPage(s, pg, true);
 }
 function vTournages(root){
   const list = shoots(), f = S.shf || "wait";
@@ -405,9 +421,9 @@ function openViewer(p, start, play){
   else bot.appendChild(el("p","cl-vst", ST_LABEL[p.status] + (p.decidedBy ? " par " + p.decidedBy : "")));
   ov.appendChild(bot);
   const key = e => { if (e.key === "Escape") close(); };
-  function close(){ document.removeEventListener("keydown", key); ov.remove(); document.body.classList.remove("cl-noscroll"); }
+  let LID = 0; function close(){ document.removeEventListener("keydown", key); ov.remove(); document.body.classList.remove("cl-noscroll"); layerClose(LID); }
   x.onclick = close; tapClose(x, close); document.addEventListener("keydown", key);
-  document.body.appendChild(ov); document.body.classList.add("cl-noscroll");
+  document.body.appendChild(ov); document.body.classList.add("cl-noscroll"); LID = layerOpen(close);
   const strip = sl.querySelector(".cl-strip"); strip.scrollLeft = (start || 0) * strip.clientWidth; strip.focus({ preventScroll: true });
   /* Lecture lancée tout de suite quand on a touché une vidéo (dans le geste, sinon l’iPhone la bloque) */
   const v = play && strip.querySelector('video[data-i="' + (start || 0) + '"]'); if (v) v.play().catch(() => {});
@@ -866,8 +882,8 @@ function vPrel(root){
 function openDrawer(link2, badge){
   if (document.querySelector(".dr-wrap")) return;
   const me = (S.f && S.f.me) || {}, wrap = el("div","dr-wrap"), pan = el("aside","dr"); pan.setAttribute("role","dialog"); pan.setAttribute("aria-label","Menu"); wrap.appendChild(pan);
-  const close = () => { wrap.classList.remove("open"); setTimeout(() => wrap.remove(), 260); document.removeEventListener("keydown", esc); };
-  const esc = e => { if (e.key === "Escape") close(); }; document.addEventListener("keydown", esc); wrap.onclick = e => { if (e.target === wrap) close(); };
+  let LID = 0; const close = () => { wrap.classList.remove("open"); setTimeout(() => wrap.remove(), 260); document.removeEventListener("keydown", esc); layerClose(LID); };
+  const esc = e => { if (e.key === "Escape") close(); }; document.addEventListener("keydown", esc); LID = layerOpen(close); wrap.onclick = e => { if (e.target === wrap) close(); };
   const top = el("div","dr-top"); top.appendChild(avatarEl(me.name || "Vous", 64)); pan.appendChild(top);
   pan.appendChild(el("b","dr-name", me.name || "")); pan.appendChild(el("span","dr-sub", (S.f && S.f.client && S.f.client.name) || me.entreprise || ""));
   const w = waiting(), u = unread(), st = el("div","dr-stats");
@@ -906,8 +922,11 @@ function render(){
   R[S.view](root);
   window.scrollTo(0, keepY);
   if (fid){ const n = document.getElementById(fid); if (n){ n.focus({ preventScroll: true }); try { if (caret != null) n.setSelectionRange(caret, caret); } catch(e){} } }
+  { const conv = chat && !!S.conv && matchMedia("(max-width:900px)").matches;
+    if (conv && !CONV_L) CONV_L = layerOpen(() => { CONV_L = 0; S.conv = false; render(); });
+    else if (!conv && CONV_L){ const id = CONV_L; CONV_L = 0; layerClose(id); } }
 }
-window.addEventListener("hashchange", () => { fromHash(); S.modOpen = null; render(); window.scrollTo(0,0); });
+window.addEventListener("hashchange", () => { LAST_HASH = location.hash; fromHash(); S.modOpen = null; render(); window.scrollTo(0,0); });
 
 async function loadFeed(){ const f = await api("/api/c/feed"); const before = S.f ? JSON.stringify([(S.f.client || {}).metier || "", S.f.messages.map(m => m.id + m.at), S.f.idees.map(i => i.id + (i.seen || []).length), (S.f.visio || {}).here, (S.f.shoots || []).map(s => s.id + s.status + s.sentAt), (S.f.bilans || []).map(b => b.m + b.at)]) : ""; S.f = f; saveCache(); if (f.bilans) (f.bilans || []).forEach(b => { if (S.biHtml && S.biAt && S.biAt[b.m] !== b.at) delete S.biHtml[b.m]; (S.biAt = S.biAt || {})[b.m] = b.at; });
   const after = JSON.stringify([(f.client || {}).metier || "", f.messages.map(m => m.id + m.at), f.idees.map(i => i.id + (i.seen || []).length), (f.visio || {}).here, (f.shoots || []).map(s => s.id + s.status + s.sentAt), (f.bilans || []).map(b => b.m + b.at)]);

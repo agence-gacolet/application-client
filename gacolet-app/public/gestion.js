@@ -123,9 +123,27 @@ async function remove(col, id){
 }
 const strip = o => { const c = Object.assign({}, o); delete c.id; return c; };
 
+/* ---------- Retour du téléphone (glisser depuis le bord gauche, bouton retour Android) ----------
+   Chaque conversation, fenêtre, menu ou visionneuse ouverte ajoute une étape à l’historique :
+   le geste retour la referme au lieu de quitter la page. */
+const BK_STACK = []; let CONV_L = 0, LAYER_N = 0, LAYER_IGN = 0, LAST_HASH = location.hash;
+function layerOpen(fn){ const id = ++LAYER_N; BK_STACK.push({ id, fn, h: location.hash }); try { history.pushState({ gcL: id }, "", location.href); } catch(e){} return id; }
+let BK_PENDING = null, BK_RES = null; // une navigation demandée pendant qu’une étape se referme attend qu’elle soit retirée de l’historique
+function layerClose(id){ const i = BK_STACK.findIndex(L => L.id === id); if (i < 0) return; const L = BK_STACK.splice(i, 1)[0];
+  if (!BK_PENDING) BK_PENDING = new Promise(r => { BK_RES = r; });
+  setTimeout(() => { if (location.hash === L.h && history.state && history.state.gcL === id){ LAYER_IGN++; history.back(); setTimeout(bkDone, 400); } else bkDone(); }, 0); }
+function bkDone(){ if (BK_RES){ const r = BK_RES; BK_RES = null; BK_PENDING = null; r(); } }
+document.addEventListener("click", e => { if (!BK_PENDING || e.defaultPrevented) return; const a = e.target.closest && e.target.closest("a[href^='#']"); if (!a) return; e.preventDefault(); const h = a.getAttribute("href"); BK_PENDING.then(() => { location.hash = h; }); });
+window.addEventListener("popstate", e => {
+  if (LAYER_IGN){ LAYER_IGN--; bkDone(); return; }
+  const cur = (e.state && e.state.gcL) || 0; let n = 0;
+  while (BK_STACK.length && BK_STACK[BK_STACK.length - 1].id > cur){ const L = BK_STACK.pop(); n++; try { L.fn(); } catch(x){ console.error(x); } }
+  if (cur && !BK_STACK.some(L => L.id === cur)) history.back(); // étape déjà refermée par un bouton : on la saute
+});
 /* ---------- Fenêtres et formulaires ---------- */
-function openModal(build){ const m = $("#modal"); m.textContent = ""; m.className = "modal"; build(m); $("#overlay").classList.add("open"); const f = m.querySelector("input:not([type=checkbox]),select,textarea,button"); if (f) f.focus(); }
-function closeModal(){ $("#overlay").classList.remove("open"); }
+let MODAL_L = 0;
+function openModal(build){ const m = $("#modal"); m.textContent = ""; m.className = "modal"; build(m); $("#overlay").classList.add("open"); if (!MODAL_L) MODAL_L = layerOpen(() => { MODAL_L = 0; $("#overlay").classList.remove("open"); }); const f = m.querySelector("input:not([type=checkbox]),select,textarea,button"); if (f) f.focus(); }
+function closeModal(){ $("#overlay").classList.remove("open"); if (MODAL_L){ const id = MODAL_L; MODAL_L = 0; layerClose(id); } }
 /* Fenêtre : se ferme seulement si le clic commence ET finit sur le fond (une sélection de texte lâchée hors de la fenêtre ne la ferme plus).
    Entrée = bouton principal de la fenêtre (Enregistrer, Créer…) ; Maj + Entrée = retour à la ligne dans un texte long. */
 let OV_DOWN = false;
@@ -860,7 +878,7 @@ function head(title, sub, tools){
 }
 function btn(label, cls, fn){ const b = el("button","btn "+(cls||""), label); b.onclick = fn; return b; }
 function addBtn(label, fn){ const b = btn(label, "lemon add", fn); b.setAttribute("aria-label", label); b.title = label; if (!writable()) b.disabled = true; return b; }
-function segm(options, value, onPick){ const s = el("div","seg"); s.setAttribute("role","group"); options.forEach(([v,l]) => { const b = el("button",null,l); b.setAttribute("aria-pressed", String(v === value)); b.onclick = () => onPick(v); s.appendChild(b); }); return s; }
+function segm(options, value, onPick){ const s = el("div","seg"); s.setAttribute("role","group"); options.forEach(([v,l]) => { const b = el("button",null,l); b.setAttribute("aria-pressed", String(v === value)); b.onclick = () => onPick(v); s.appendChild(b); }); requestAnimationFrame(() => { const on = s.querySelector("[aria-pressed=true]"); if (on && s.scrollWidth > s.clientWidth) s.scrollLeft = on.offsetLeft - (s.clientWidth - on.offsetWidth) / 2; }); return s; }
 function chipBar(options, value, onPick, counts){ const c = el("div","chips"); options.forEach(([v,l]) => { const b = el("button","chip",l); if (counts && counts[v] != null) b.appendChild(el("span","c",String(counts[v]))); b.setAttribute("aria-pressed", String(v === value)); b.onclick = () => onPick(v); c.appendChild(b); }); return c; }
 function table(cols){ const w = el("div","tw"); const t = el("table","t"); const th = el("tr"); cols.forEach(c => th.appendChild(el("th", c[0] === "~" ? "hm" : null, c.replace(/^~/,"")))); const thead = el("thead"); thead.appendChild(th); t.appendChild(thead); const tb = el("tbody"); t.appendChild(tb); w.appendChild(t); return {w, tb}; }
 function mo(cell, txt){ if (txt) cell.appendChild(el("div","mo",txt)); return cell; }
@@ -2511,8 +2529,8 @@ function waInfo(ch, mode, tab){
   const media = files.filter(f => isImg(f) || isVid(f)), docs = files.filter(f => !isImg(f) && !isVid(f)).concat(msgs.filter(m => m.audio).map(m => ({ url: m.audio, name: "Message vocal de " + m.who, who: m.who, at: m.at, mid: m.id, audio: true })));
   const links = []; msgs.forEach(m => (String(m.text || "").match(/https?:\/\/[^\s<>"]+/g) || []).forEach(u => links.push({ url: u.replace(/[).,;!?]+$/, ""), who: m.who, at: m.at, mid: m.id, text: m.text })));
   const wrap = el("div","wi-wrap"), pan = el("aside","wi"); pan.setAttribute("role","dialog"); pan.setAttribute("aria-label","Infos de la conversation"); wrap.appendChild(pan);
-  const close = () => { wrap.remove(); document.removeEventListener("keydown", esc); }, esc = e => { if (e.key === "Escape") close(); };
-  wrap.onclick = e => { if (e.target === wrap) close(); }; document.addEventListener("keydown", esc);
+  let LID = 0; const close = () => { wrap.remove(); document.removeEventListener("keydown", esc); layerClose(LID); }, esc = e => { if (e.key === "Escape") close(); };
+  wrap.onclick = e => { if (e.target === wrap) close(); }; document.addEventListener("keydown", esc); LID = layerOpen(close);
   const jump = mid => { close(); const t = document.getElementById("m-" + mid); if (t){ t.scrollIntoView({ block: "center", behavior: "smooth" }); t.classList.remove("flash"); void t.offsetWidth; t.classList.add("flash"); } };
   const head = el("div","wi-top"); const x = el("button","wi-x"); x.type = "button"; x.setAttribute("aria-label","Fermer"); x.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>'; x.onclick = close;
   const view = tab || "home";
@@ -2565,13 +2583,13 @@ function waThumb(f){ const t = el("button","wi-th"); t.type = "button"; if (isIm
   else { const v = document.createElement("video"); v.src = f.url + "#t=0.5"; v.muted = true; v.preload = "metadata"; t.appendChild(v); t.appendChild(el("span","wi-play","▶")); } return t; }
 // Visionneuse plein écran (flèches pour passer d'un média à l'autre)
 function waLight(list, i){
-  const ov = el("div","wl"), close = () => { ov.remove(); document.removeEventListener("keydown", key, true); };
+  let LID = 0; const ov = el("div","wl"), close = () => { ov.remove(); document.removeEventListener("keydown", key, true); layerClose(LID); };
   const show = () => { ov.textContent = ""; const f = list[i]; const x = el("button","wl-x","×"); x.onclick = close; const cnt = el("span","wl-n", (i + 1) + " / " + list.length + " · " + (f.who || "") + " · " + fmtD((f.at || "").slice(0, 10)));
     const box = el("div","wl-box"); if (isImg(f)){ const im = document.createElement("img"); im.src = f.url; box.appendChild(im); } else { const v = document.createElement("video"); v.src = f.url; v.controls = true; v.autoplay = true; v.playsInline = true; box.appendChild(v); }
     const dl = el("a","wl-dl","Télécharger"); dl.href = f.url; dl.setAttribute("download", f.name || ""); ov.append(x, cnt, dl, box);
     if (list.length > 1){ const p = el("button","wl-p","‹"), n = el("button","wl-nx","›"); p.onclick = e => { e.stopPropagation(); i = (i - 1 + list.length) % list.length; show(); }; n.onclick = e => { e.stopPropagation(); i = (i + 1) % list.length; show(); }; ov.append(p, n); } };
   const key = e => { if (e.key === "Escape"){ e.stopPropagation(); close(); } else if (e.key === "ArrowLeft" && list.length > 1){ i = (i - 1 + list.length) % list.length; show(); } else if (e.key === "ArrowRight" && list.length > 1){ i = (i + 1) % list.length; show(); } };
-  ov.onclick = e => { if (e.target === ov) close(); }; document.addEventListener("keydown", key, true); show(); document.body.appendChild(ov);
+  ov.onclick = e => { if (e.target === ov) close(); }; document.addEventListener("keydown", key, true); show(); document.body.appendChild(ov); LID = layerOpen(close);
 }
 
 /* ---------- Messagerie (façon messagerie de téléphone) ---------- */
@@ -3759,7 +3777,7 @@ function openSearch(){
   const box = el("div","srch-box"); const top = el("div","srch-top"); const ic = el("span","srch-ic"); ic.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>';
   const inp = el("input"); inp.type = "search"; inp.placeholder = "Un client, une tâche, un message…"; inp.setAttribute("aria-label","Rechercher"); top.append(ic, inp, el("kbd", null, "Échap")); box.appendChild(top);
   const list = el("div","srch-list"); list.setAttribute("role","listbox"); box.appendChild(list); ov.appendChild(box);
-  const close = () => { ov.remove(); SRCH = null; document.removeEventListener("keydown", key, true); };
+  let LID = 0; const close = () => { ov.remove(); SRCH = null; document.removeEventListener("keydown", key, true); layerClose(LID); };
   const pick = it => { close(); it.act(); };
   const draw = () => { list.textContent = ""; const q = norm(inp.value.trim());
     if (!q){ shown = items.filter(i => i.kind === "Onglet").slice(0, 8); }
@@ -3774,13 +3792,13 @@ function openSearch(){
     const on = list.querySelector(".srch-it.on"); if (on) on.scrollIntoView({ block: "nearest" }); };
   const key = e => { if (e.key === "Escape"){ e.preventDefault(); close(); } else if (e.key === "ArrowDown"){ e.preventDefault(); sel = Math.min(shown.length - 1, sel + 1); draw(); } else if (e.key === "ArrowUp"){ e.preventDefault(); sel = Math.max(0, sel - 1); draw(); } else if (e.key === "Enter" && shown[sel]){ e.preventDefault(); pick(shown[sel]); } };
   inp.oninput = () => { sel = 0; draw(); }; ov.onclick = e => { if (e.target === ov) close(); };
-  document.addEventListener("keydown", key, true); document.body.appendChild(ov); SRCH = ov; draw(); inp.focus();
+  document.addEventListener("keydown", key, true); document.body.appendChild(ov); SRCH = ov; LID = layerOpen(close); draw(); inp.focus();
 }
 document.addEventListener("keydown", e => { if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K") && S.ready !== undefined && S.d){ e.preventDefault(); SRCH ? null : openSearch(); } });
 { const a = document.getElementById("srch"), b = document.getElementById("msrch"); if (a) a.onclick = openSearch; if (b) b.onclick = openSearch; }
-function go(v){ if (MERGED[v]){ S.ui[MERGED[v][1]] = v; remember(); v = MERGED[v][0]; } if (location.hash !== "#"+v) location.hash = v; else { S.view = v; render(); } }
+function go(v){ if (BK_PENDING){ BK_PENDING.then(() => go(v)); return; } if (MERGED[v]){ S.ui[MERGED[v][1]] = v; remember(); v = MERGED[v][0]; } if (location.hash !== "#"+v) location.hash = v; else { S.view = v; render(); } }
 function fromHash(){ let h = (location.hash||"").replace("#",""); if (h === "editorial"){ S.ui.agClient = AGENCE; if (!S.ui.agLayers.includes("posts")) S.ui.agLayers = S.ui.agLayers.concat("posts"); h = "agenda"; } if (MERGED[h] && canSee(h)){ S.ui[MERGED[h][1]] = h; h = MERGED[h][0]; } S.view = RENDER[h] && canSee(h) ? h : "accueil"; }
-window.addEventListener("hashchange", () => { const go = () => { fromHash(); render(); window.scrollTo(0,0); }; if (document.startViewTransition && !matchMedia("(prefers-reduced-motion: reduce)").matches && !matchMedia("(max-width:640px)").matches) document.startViewTransition(go); else go(); });
+window.addEventListener("hashchange", () => { LAST_HASH = location.hash; const go = () => { fromHash(); render(); window.scrollTo(0,0); }; if (document.startViewTransition && !matchMedia("(prefers-reduced-motion: reduce)").matches && !matchMedia("(max-width:640px)").matches) document.startViewTransition(go); else go(); });
 const ICONS = {
   finance:'<rect x="3.5" y="6" width="17" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6.5 9v.01M17.5 15v.01"/>',
   chalet:'<path d="M3 19.5h18M5 19.5V11l7-6.5 7 6.5v8.5"/><path d="M10 19.5v-5h4v5M2.5 12.5 12 4l9.5 8.5"/>',
@@ -3832,8 +3850,8 @@ function openMore(){
   const wrap = el("div","dr-wrap"), pan = el("aside","dr"); pan.setAttribute("role","dialog"); pan.setAttribute("aria-label","Menu"); wrap.appendChild(pan);
   const sy = window.scrollY, B = document.body; B.style.position = "fixed"; B.style.top = (-sy) + "px"; B.style.left = "0"; B.style.right = "0"; B.classList.add("dr-lock"); // la page derrière ne défile plus
   const unlock = () => { B.style.position = B.style.top = B.style.left = B.style.right = ""; B.classList.remove("dr-lock"); window.scrollTo(0, sy); };
-  const close = () => { wrap.classList.remove("open"); setTimeout(() => wrap.remove(), 260); unlock(); document.removeEventListener("keydown", esc); };
-  const esc = e => { if (e.key === "Escape") close(); }; document.addEventListener("keydown", esc);
+  let LID = 0, shut = false; const close = () => { if (shut) return; shut = true; wrap.classList.remove("open"); setTimeout(() => wrap.remove(), 260); unlock(); document.removeEventListener("keydown", esc); layerClose(LID); };
+  const esc = e => { if (e.key === "Escape") close(); }; document.addEventListener("keydown", esc); LID = layerOpen(close);
   wrap.onclick = e => { if (e.target === wrap) close(); };
   const top = el("div","dr-top"); const av = avatarEl(me, 64); top.appendChild(av);
   const pb = el("button","dr-prof"); pb.type = "button"; pb.setAttribute("aria-label","Mon compte"); pb.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.6-2-3.4-2.4.9a7.6 7.6 0 0 0-2.6-1.5L14 2.4h-4l-.4 2.5A7.6 7.6 0 0 0 7 6.4l-2.4-.9-2 3.4 2 1.6a7.6 7.6 0 0 0 0 3l-2 1.6 2 3.4 2.4-.9a7.6 7.6 0 0 0 2.6 1.5l.4 2.5h4l.4-2.5a7.6 7.6 0 0 0 2.6-1.5l2.4.9 2-3.4z"/></svg>';
@@ -3890,6 +3908,9 @@ function render(){
   { const n = S.ready ? unreadRole() : 0; document.title = (n ? "(" + n + ") " : "") + "Gacolet"; }
   if (S.ready && !RTC_T) rtcTick();
   vcRender();
+  { const conv = S.ready && S.view === "messagerie" && !!S.ui.waConv && matchMedia("(max-width:900px)").matches;
+    if (conv && !CONV_L) CONV_L = layerOpen(() => { CONV_L = 0; S.ui.waConv = false; remember(); render(); });
+    else if (!conv && CONV_L){ const id = CONV_L; CONV_L = 0; layerClose(id); } }
 }
 
 /* ---------- Compte connecté ---------- */
