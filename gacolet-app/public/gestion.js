@@ -3550,7 +3550,9 @@ function vTournage(root){
       act.append(btn("Lancer le tournage", "sm lemon", () => tgLive(s)), btn("Aperçu", "sm", () => tgPdf(s, true)), btn("PDF", "sm", () => tgPdf(s)), btn("Modifier", "sm", () => tgEdit(s)));
       { let armed = false; const db = btn("Supprimer", "sm danger", async () => { if (!armed){ armed = true; db.textContent = "Confirmer la suppression"; setTimeout(() => { armed = false; db.textContent = "Supprimer"; }, 4000); return; } db.disabled = true; try { await remove("shoots", s.id); toast("Feuille supprimée (récupérable 30 jours dans la corbeille)."); } catch(e){ db.disabled = false; } }); db.disabled = !writable(); act.appendChild(db); }
       const sb = btn(s.sentAt ? "Renvoyer au client" : "Envoyer au client", "sm", () => tgSend(s)); sb.disabled = !writable(); act.appendChild(sb);
+      const fb = btn(s.doneAt ? "Annuler « fait »" : "Tournage fait", "sm" + (s.doneAt ? "" : " solid"), () => tgDone(s, fb)); fb.disabled = !writable(); act.prepend(fb);
       card.append(top, h, meta, cnt, bar, prog);
+      if (s.doneAt){ const ds = el("div","tg-cs ok"); ds.appendChild(el("span","pill ok", "Tournage fait")); ds.appendChild(el("span","note", [s.doneBy, fmtFR(s.doneAt.slice(0, 10))].filter(Boolean).join(", "))); card.appendChild(ds); card.classList.add("done"); }
       if (s.sentAt){ const st = s.clientStatus || "wait", cs = el("div","tg-cs " + st);
         cs.appendChild(el("span","pill" + (st === "ok" ? " ok" : st === "wait" ? " l2" : " no"), { wait: "Envoyée au client, en attente", ok: "Validée par le client", mod: "Retours du client", no: "Refusée par le client" }[st]));
         if (s.clientBy && st !== "wait") cs.appendChild(el("span","note", s.clientBy + ", " + fmtFR((s.clientAt || "").slice(0, 10))));
@@ -3667,6 +3669,20 @@ function tgSend(s){
     ok.onclick = async () => { ok.disabled = true; try { await patch("shoots", s.id, { sentAt: new Date().toISOString(), sentBy: S.me || "", clientStatus: "wait", clientNote: "", clientBy: "", clientAt: "" }); closeModal(); toast("Feuille envoyée à " + g.name + "."); } catch(e){ ok.disabled = false; } };
     a.append(c, ok); m.appendChild(a); });
 }
+/* Bouton « Tournage fait » : feuille marquée faite, agenda en Fait, message à l'équipe dans Général */
+async function tgDone(s, b){
+  if (!writable()) return; b.disabled = true;
+  const undo = !!s.doneAt, at = new Date().toISOString(), me = S.me || "";
+  try {
+    await patch("shoots", s.id, undo ? { doneAt: "", doneBy: "" } : { doneAt: at, doneBy: me });
+    if ((S.d.events || []).some(e => e.id === "tg-" + s.id)) await patch("events", "tg-" + s.id, { status: undo ? "Prévu" : "Fait" });
+    if (!undo){ const c = tgCount(s);
+      await save("messages", null, { ch: "general", who: me, text: "Tournage fait : " + (s.client || "") + (s.num ? " (" + s.num + ")" : "") + (c.all ? ", " + c.done + " fait" + (c.done > 1 ? "s" : "") + " sur " + c.all + (c.ko ? ", " + c.ko + " pas possible" + (c.ko > 1 ? "s" : "") : "") : "") + ".", at });
+      toast("Tournage marqué fait, l’équipe est prévenue dans Général."); }
+    else toast("Tournage repassé à faire.");
+  } catch(e){ b.disabled = false; toast("Échec : réessaie."); }
+}
+
 /* Le tournage apparaît dans l'agenda (événement Tournage « tg-<id> ») */
 async function tgSyncEvent(id, s){
   if (!isISO(s.date)) return;
