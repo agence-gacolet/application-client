@@ -3528,10 +3528,15 @@ const tgHref = u => /^https?:\/\//i.test(u) ? u : /^[\w.-]+\.[a-z]{2,}(\/|$)/i.t
 
 function vTournage(root){
   const all = (S.d.shoots || []).slice().sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-  const up = all.filter(s => !s.date || s.date >= today()).reverse(), past = all.filter(s => s.date && s.date < today());
-  root.appendChild(head("Feuilles de tournage", "Prépare le tournage et envoie le PDF au client. Sur place, coche chaque vidéo : elle arrive dans Rushs.",
+  const live = all.filter(s => !s.doneAt), arch = all.filter(s => s.doneAt).sort((a, b) => (b.doneAt || "").localeCompare(a.doneAt || ""));
+  const up = live.filter(s => !s.date || s.date >= today()).reverse(), past = live.filter(s => s.date && s.date < today());
+  root.appendChild(head("Feuilles de tournage", "Prépare le tournage et envoie le PDF au client. Sur place, coche chaque vidéo : elle arrive dans Rushs. Tournage fait : il part dans Archives.",
     [addBtn("Nouvelle feuille", () => tgEdit({}))]));
   if (!all.length){ root.appendChild(el("p","empty","Aucune feuille de tournage. Crée la première avec le bouton en haut.")); return; }
+  const view = S.ui.tgView === "arch" ? "arch" : "cours";
+  root.appendChild(segm([["cours","En cours (" + live.length + ")"],["arch","Archives (" + arch.length + ")"]], view, v => { S.ui.tgView = v; remember(); render(); }));
+  if (view === "arch" && !arch.length){ root.appendChild(el("p","empty","Aucun tournage archivé. Clique sur « Tournage fait » sur une feuille pour l’archiver.")); return; }
+  if (view === "cours" && !live.length){ root.appendChild(el("p","empty","Aucun tournage en cours. Les tournages faits sont dans Archives.")); return; }
   const block = (title, list) => {
     if (!list.length) return;
     root.appendChild(el("h2","fin-h", title));
@@ -3550,7 +3555,7 @@ function vTournage(root){
       act.append(btn("Lancer le tournage", "sm lemon", () => tgLive(s)), btn("Aperçu", "sm", () => tgPdf(s, true)), btn("PDF", "sm", () => tgPdf(s)), btn("Modifier", "sm", () => tgEdit(s)));
       { let armed = false; const db = btn("Supprimer", "sm danger", async () => { if (!armed){ armed = true; db.textContent = "Confirmer la suppression"; setTimeout(() => { armed = false; db.textContent = "Supprimer"; }, 4000); return; } db.disabled = true; try { await remove("shoots", s.id); toast("Feuille supprimée (récupérable 30 jours dans la corbeille)."); } catch(e){ db.disabled = false; } }); db.disabled = !writable(); act.appendChild(db); }
       const sb = btn(s.sentAt ? "Renvoyer au client" : "Envoyer au client", "sm", () => tgSend(s)); sb.disabled = !writable(); act.appendChild(sb);
-      const fb = btn(s.doneAt ? "Annuler « fait »" : "Tournage fait", "sm" + (s.doneAt ? "" : " solid"), () => tgDone(s, fb)); fb.disabled = !writable(); act.prepend(fb);
+      const fb = btn(s.doneAt ? "Remettre en cours" : "Tournage fait", "sm" + (s.doneAt ? "" : " solid"), () => tgDone(s, fb)); fb.disabled = !writable(); act.prepend(fb);
       card.append(top, h, meta, cnt, bar, prog);
       if (s.doneAt){ const ds = el("div","tg-cs ok"); ds.appendChild(el("span","pill ok", "Tournage fait")); ds.appendChild(el("span","note", [s.doneBy, fmtFR(s.doneAt.slice(0, 10))].filter(Boolean).join(", "))); card.appendChild(ds); card.classList.add("done"); }
       if (s.sentAt){ const st = s.clientStatus || "wait", cs = el("div","tg-cs " + st);
@@ -3562,7 +3567,7 @@ function vTournage(root){
     });
     root.appendChild(g);
   };
-  block("À venir", up); block("Passés", past);
+  if (view === "arch") block("Tournages faits", arch); else { block("À venir", up); block("Passés", past); }
 }
 
 /* Éditeur : fenêtre large, la liste des vidéos se construit sur place */
@@ -3678,8 +3683,8 @@ async function tgDone(s, b){
     if ((S.d.events || []).some(e => e.id === "tg-" + s.id)) await patch("events", "tg-" + s.id, { status: undo ? "Prévu" : "Fait" });
     if (!undo){ const c = tgCount(s);
       await save("messages", null, { ch: "general", who: me, text: "Tournage fait : " + (s.client || "") + (s.num ? " (" + s.num + ")" : "") + (c.all ? ", " + c.done + " fait" + (c.done > 1 ? "s" : "") + " sur " + c.all + (c.ko ? ", " + c.ko + " pas possible" + (c.ko > 1 ? "s" : "") : "") : "") + ".", at });
-      toast("Tournage marqué fait, l’équipe est prévenue dans Général."); }
-    else toast("Tournage repassé à faire.");
+      toast("Tournage fait : rangé dans Archives, l’équipe est prévenue dans Général."); }
+    else toast("Tournage remis dans En cours.");
   } catch(e){ b.disabled = false; toast("Échec : réessaie."); }
 }
 
@@ -3772,7 +3777,7 @@ function tgLive(s0){
     if (i < items.length){
       const v = items[i];
       const ko = el("button","tg-btn ko" + (v.status === "impossible" ? " on" : ""), v.status === "impossible" ? "Annuler « pas possible »" : "Pas possible"); ko.type = "button"; ko.onclick = () => mark("impossible");
-      const okb = el("button","tg-btn ok" + (v.status === "fait" ? " on" : ""), v.status === "fait" ? "Annuler « fait »" : "Fait"); okb.type = "button"; okb.onclick = () => mark("fait");
+      const okb = el("button","tg-btn ok" + (v.status === "fait" ? " on" : ""), v.status === "fait" ? "Remettre en cours" : "Fait"); okb.type = "button"; okb.onclick = () => mark("fait");
       if (!writable()){ ko.disabled = okb.disabled = true; }
       bot.append(bp, ko, okb, bn);
     } else bot.append(bp, el("span","tg-sp"), bn);
