@@ -419,7 +419,7 @@ function editEvent(e){
       {k:"files",label:"Fichiers (feuille de tournage, devis, photos…)",type:"files"}],
     onCancel: () => e.id ? openEvent(e) : closeModal(),
     onDelete: e.id ? () => remove("events", e.id) : null,
-    onSave: out => save("events", e.id || null, Object.assign(e.id ? strip(e) : {}, out)) });
+    onSave: out => save("events", e.id || null, Object.assign(e.id ? strip(e) : {}, out)).then(id => { tgFromEvent(e.id || id, out); return id; }) });
 }
 
 /* Tâches */
@@ -3528,6 +3528,7 @@ const tgHref = u => /^https?:\/\//i.test(u) ? u : /^[\w.-]+\.[a-z]{2,}(\/|$)/i.t
 
 function vTournage(root){
   const all = (S.d.shoots || []).slice().sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  tgSyncAgenda();
   const live = all.filter(s => !s.doneAt), arch = all.filter(s => s.doneAt).sort((a, b) => (b.doneAt || "").localeCompare(a.doneAt || ""));
   const up = live.filter(s => !s.date || s.date >= today()).reverse(), past = live.filter(s => s.date && s.date < today());
   root.appendChild(head("Feuilles de tournage", "Prépare le tournage et envoie le PDF au client. Sur place, coche chaque vidéo : elle arrive dans Rushs. Tournage fait : il part dans Archives.",
@@ -3680,7 +3681,7 @@ async function tgDone(s, b){
   const undo = !!s.doneAt, at = new Date().toISOString(), me = S.me || "";
   try {
     await patch("shoots", s.id, undo ? { doneAt: "", doneBy: "" } : { doneAt: at, doneBy: me });
-    if ((S.d.events || []).some(e => e.id === "tg-" + s.id)) await patch("events", "tg-" + s.id, { status: undo ? "Prévu" : "Fait" });
+    const ev = tgEvent(s); if (ev) await patch("events", ev.id, { status: undo ? "Prévu" : "Fait" });
     if (!undo){ const c = tgCount(s);
       await save("messages", null, { ch: "general", who: me, text: "Tournage fait : " + (s.client || "") + (s.num ? " (" + s.num + ")" : "") + (c.all ? ", " + c.done + " fait" + (c.done > 1 ? "s" : "") + " sur " + c.all + (c.ko ? ", " + c.ko + " pas possible" + (c.ko > 1 ? "s" : "") : "") : "") + ".", at });
       toast("Tournage fait : rangé dans Archives, l’équipe est prévenue dans Général."); }
@@ -3688,9 +3689,39 @@ async function tgDone(s, b){
   } catch(e){ b.disabled = false; toast("Échec : réessaie."); }
 }
 
-/* Le tournage apparaît dans l'agenda (événement Tournage « tg-<id> ») */
+/* L'agenda fait foi pour la date et l'heure (Matis, 25/11/2026). Une feuille suit son événement Tournage :
+   celui retenu (eventId), sinon un Tournage du même client posé à la main dans l'agenda (15 jours au plus d'écart), sinon « tg-<id> ». */
+function tgEvent(s){
+  const ev = S.d.events || [], ok = e => e && e.status !== "Annulé";
+  const own = ev.find(e => e.id === s.eventId); if (ok(own)) return own;
+  const d0 = isISO(s.date) ? Date.parse(s.date) : NaN, gap = e => Math.abs(Date.parse(e.date) - d0);
+  const manual = ev.filter(e => ok(e) && e.type === "Tournage" && !String(e.id).startsWith("tg-") && norm(e.client) === norm(s.client) && isISO(e.date) && gap(e) <= 15 * 864e5
+    && !(S.d.shoots || []).some(x => x.id !== s.id && x.eventId === e.id)).sort((a, b) => gap(a) - gap(b))[0];
+  return manual || ev.find(e => e.id === "tg-" + s.id && ok(e)) || null;
+}
+/* Ouverture de l'onglet : chaque feuille en cours reprend la date de l'agenda ; le doublon « tg-… » créé par la feuille part à la corbeille */
+async function tgSyncAgenda(){
+  if (S._tgSync || !writable()) return; S._tgSync = true;
+  try { for (const s of (S.d.shoots || []).filter(x => !x.doneAt)){
+    const e = tgEvent(s); if (!e) continue;
+    const b = {}; if (s.eventId !== e.id) b.eventId = e.id; if (e.date !== s.date) b.date = e.date; if (e.time && e.time !== s.time) b.time = e.time;
+    if (Object.keys(b).length) await patch("shoots", s.id, b);
+    if (e.id !== "tg-" + s.id && (S.d.events || []).some(x => x.id === "tg-" + s.id && x.status !== "Fait")) await S.db.collection("events").doc("tg-" + s.id).delete();
+  } } catch(e){} finally { S._tgSync = false; }
+}
+/* Date changée dans l'agenda : la feuille liée suit tout de suite */
+function tgFromEvent(eid, out){
+  if (!eid || !out || out.type !== "Tournage") return;
+  (S.d.shoots || []).filter(x => x.eventId === eid || "tg-" + x.id === eid).forEach(x => { if (x.date !== out.date || (out.time && x.time !== out.time)) patch("shoots", x.id, { date: out.date, time: out.time || x.time || "" }).catch(() => {}); });
+}
+
+/* Le tournage apparaît dans l'agenda : la feuille met à jour son événement (celui posé à la main s'il existe), sinon crée « tg-<id> » */
 async function tgSyncEvent(id, s){
   if (!isISO(s.date)) return;
+  const linked = tgEvent(Object.assign({}, s, { id }));
+  if (linked && linked.id !== "tg-" + id){
+    try { await patch("events", linked.id, { date: s.date, time: s.time || linked.time || "" }); if (s.eventId !== linked.id) await patch("shoots", id, { eventId: linked.id }); } catch(e){}
+    return; }
   const ev = (S.d.events || []).find(e => e.id === "tg-" + id) || {};
   const people = (s.team || []).filter(x => PEOPLE.includes(x));
   const body = Object.assign(strip(ev), { client: s.client, type: "Tournage", title: "Tournage " + (s.num || s.client), date: s.date, time: s.time || "", who: people,
