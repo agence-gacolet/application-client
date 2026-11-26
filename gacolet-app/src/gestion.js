@@ -21,7 +21,7 @@ const ACCESS = {
 /* Pages : chaque page donne accès aux données dont elle a besoin. Les rôles ont des pages par défaut,
    modifiables par les propriétaires (interrupteurs dans Paramètres), plus des pages données à une personne, pour toujours ou pour un temps. */
 const VIEW_COLLS = { agenda: ["events", "tasks", "cevents", "keydates", "posts"], taches: ["tasks"], messagerie: ["messages"], vocal: ["vrooms"], focus: [], formation: ["formations"],
-  commercial: ["commercial"], clients: ["clients", "cevents", "keydates"], montage: ["rushes"], tournage: ["shoots", "rushes", "events", "clients"], publications: ["publications", "posts", "edtodo"],
+  commercial: ["commercial"], clients: ["clients", "cevents", "keydates"], montage: ["rushes"], tournage: ["shoots", "rushes", "events", "clients", "idees"], publications: ["publications", "posts", "edtodo"],
   campagnes: ["campaigns", "meta", "msheets"], fiches: ["clients"], idees: ["idees"], strategie: ["strategies", "clients"] };
 const DEFAULT_VIEWS = { member: ["agenda", "taches", "messagerie", "vocal", "focus", "formation"],
   commercial: ["agenda", "taches", "messagerie", "vocal", "focus", "commercial", "clients", "montage", "publications", "idees", "campagnes", "formation"] };

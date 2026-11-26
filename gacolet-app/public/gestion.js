@@ -1995,11 +1995,11 @@ function vReels(root){
   dz.ondragover = e => { e.preventDefault(); dz.classList.add("on"); }; dz.ondragleave = () => dz.classList.remove("on");
   dz.ondrop = e => { e.preventDefault(); dz.classList.remove("on"); if (!S.ui.rfC){ toast("Choisis d’abord le client."); sel.focus(); return; } add(e.dataTransfer.files); };
   root.appendChild(dz);
-  // Liste : tous les clients, ou le client choisi
+  // Liste : tous les réels envoyés, tous clients confondus (le client choisi ne sert qu’au dépôt)
   const lim = Date.now() - RF_DAYS * 86400000, all = [];
-  Object.keys(PD.fin).forEach(c => PD.fin[c].slice().forEach(it => { if (it.url && !it.busy && it.at && Date.parse(it.at) < lim) return rfDelete(c, it, false); if (!S.ui.rfC || c === S.ui.rfC) all.push([c, it]); }));
+  Object.keys(PD.fin).forEach(c => PD.fin[c].slice().forEach(it => { if (it.url && !it.busy && it.at && Date.parse(it.at) < lim) return rfDelete(c, it, false); all.push([c, it]); }));
   if (!all.length){ root.appendChild(el("p","empty", PD.loaded ? "Aucun réel fini en attente." : "Lecture en cours…")); return; }
-  all.sort((a, b) => a[0].localeCompare(b[0], "fr") || String(a[1].at || "").localeCompare(String(b[1].at || "")));
+  all.sort((a, b) => String(b[1].at || "").localeCompare(String(a[1].at || "")) || a[0].localeCompare(b[0], "fr"));
   const grid = el("div","rf-grid");
   all.forEach(([c, it]) => { const t = el("div","rf-tile");
     if (it.url){ const v = el("video"); v.src = it.url; v.controls = true; v.preload = "metadata"; v.playsInline = true; t.appendChild(v); }
@@ -3406,6 +3406,18 @@ function editIdee(i){ if (!writable()) return;
       const b = Object.assign(i.id ? strip(i) : { internal: true, by: me, kind: "Idée interne", at: new Date().toISOString(), seen: [me], files: [] }, { client: String(out.client || "").trim(), text: String(out.text || "").trim() });
       return save("idees", i.id || null, b).then(() => toast(i.id ? "Idée modifiée." : "Idée ajoutée pour " + b.client + ".")); } });
 }
+/* Vidéo d'exemple d'un client (une tendance, un format) : un lien, affiché seulement en lecteur vidéo (Matis, 26/11/2026) */
+function editIdeeVideo(i){ if (!writable()) return;
+  openForm({ key:"idv", title: i.id ? "Modifier la vidéo" : "Nouvelle vidéo d’exemple", intro: i.id ? "" : "Colle le lien Instagram, TikTok ou YouTube : la vidéo s’affiche directement, et reste visible pendant le tournage.",
+    values: Object.assign({ client: S.ui.idClient || "" }, i),
+    fields: [{k:"client",label:"Client",list:clientNames(),req:"Indique le client."},{k:"link",label:"Lien de la vidéo",ph:"https://",req:"Colle le lien."},{k:"title",label:"Titre (facultatif)",ph:"Ex. Tendance assiette qui tombe"}],
+    onDelete: i.id ? () => remove("idees", i.id) : null,
+    onSave: out => { const me = S.me || "Gabriel", link = String(out.link || "").trim();
+      if (!tgEmbed(tgHref(link) || link)) { toast("Ce lien ne s’affiche pas en vidéo : Instagram, TikTok, YouTube, Vimeo ou Google Drive."); throw new Error("lien"); }
+      const b = Object.assign(i.id ? strip(i) : { internal: true, by: me, kind: "Vidéo", at: new Date().toISOString(), seen: [me], files: [] }, { client: String(out.client || "").trim(), link, title: String(out.title || "").trim(), text: "" });
+      return save("idees", i.id || null, b).then(() => toast(i.id ? "Vidéo modifiée." : "Vidéo ajoutée pour " + b.client + ".")); } });
+}
+const ID_SEL = new Set();
 function vIdees(root){
   const me = S.me || "Gabriel", all = (S.d.idees || []).slice().sort((a, b) => (b.at || "").localeCompare(a.at || ""));
   const names = [...new Set(all.map(i => i.client).filter(Boolean))].sort((a, b) => a.localeCompare(b, "fr"));
@@ -3415,7 +3427,13 @@ function vIdees(root){
   sel.onchange = () => { S.ui.idClient = sel.value; remember(); render(); };
   const unseen = all.filter(i => !(i.seen || []).includes(me));
   const markAll = unseen.length ? btn("Tout marquer comme vu","sm", () => unseen.forEach(i => patch("idees", i.id, { seen: [...new Set((i.seen || []).concat(me))] }))) : null;
-  root.appendChild(head("Idées", "Les idées des clients et les nôtres, rangées par client.", [addBtn("Ajouter une idée", () => editIdee({})), sel, markAll]));
+  root.appendChild(head("Idées", "Les idées des clients et les nôtres, rangées par client. Coche des idées pour en faire une feuille de tournage.", [addBtn("Ajouter une idée", () => editIdee({})), btn("Ajouter une vidéo","", () => editIdeeVideo({})), sel, markAll]));
+  [...ID_SEL].forEach(id => { if (!all.some(i => i.id === id)) ID_SEL.delete(id); });
+  if (ID_SEL.size){ const pk = all.filter(i => ID_SEL.has(i.id)), cls = [...new Set(pk.map(i => i.client))];
+    const bar = el("div","id-selbar"); bar.appendChild(el("b", null, plural(pk.length, "idée cochée", "idées cochées") + (cls.length === 1 ? " · " + cls[0] : "")));
+    const mk = btn("Créer la feuille de tournage","sm lemon", () => { if (cls.length !== 1) return toast("Coche des idées d’un seul client."); const it = pk.map(ideaToItem); ID_SEL.clear(); tgEdit({ client: cls[0], videos: it.filter(x => x.kind !== "photo"), photos: it.filter(x => x.kind === "photo") }); });
+    mk.disabled = cls.length !== 1 || !writable(); if (cls.length !== 1) mk.title = "Coche des idées d’un seul client.";
+    bar.append(mk, btn("Tout décocher","sm", () => { ID_SEL.clear(); render(); })); root.appendChild(bar); }
   const fl = el("div","filters"); fl.appendChild(segm([["","Toutes"],["equipe","Envoyées par l’équipe"],["client","Envoyées par le client"]], src, v => { S.ui.idSrc = v; remember(); render(); })); root.appendChild(fl);
   const list = all.filter(i => (!f || i.client === f) && (!src || (src === "equipe") === ideaInternal(i)));
   if (!list.length){ root.appendChild(el("p","empty", src === "equipe" ? "Aucune idée interne pour l’instant. Ajoute-en une avec le bouton en haut." : "Rien pour l’instant. Les envois des clients arrivent ici.")); return; }
@@ -3427,12 +3445,17 @@ function vIdees(root){
       const intl = ideaInternal(i);
       const c = el("article","id-card" + (intl ? " intl" : "") + ((i.seen || []).includes(me) ? "" : " new"));
       const h = el("header","id-h"); h.append(avatarEl(intl ? (i.by || "") : i.client, 34, { src: "", color: colorOf(intl ? (i.by || "") : i.client), soft: true }));
-      const t = el("div","id-ht"); t.append(el("b",null,ideaFrom(i)), el("small",null,(intl ? "" : (i.who ? i.who + ", " : "")) + waTime(i.at))); h.append(t, el("span","pill" + (intl ? " l1" : ""), intl ? "Interne" : (i.kind || "Idée"))); c.appendChild(h);
-      if (i.text) c.appendChild(el("p","id-tx",i.text));
+      const t = el("div","id-ht"); t.append(el("b",null,ideaFrom(i)), el("small",null,(intl ? "" : (i.who ? i.who + ", " : "")) + waTime(i.at))); h.append(t, el("span","pill" + (intl ? " l1" : ""), intl ? (i.link ? "Vidéo" : i.kind === "Pas tourné" ? "Pas tourné" : "Interne") : (i.kind || "Idée")));
+      { const cb = el("input","id-cb"); cb.type = "checkbox"; cb.checked = ID_SEL.has(i.id); cb.title = "Cocher pour la feuille de tournage"; cb.setAttribute("aria-label", cb.title); cb.disabled = !writable(); cb.onchange = () => { cb.checked ? ID_SEL.add(i.id) : ID_SEL.delete(i.id); render(); }; h.appendChild(cb); }
+      c.appendChild(h);
+      if (i.shoot){ const sh = (S.d.shoots || []).find(x => x.id === i.shoot); c.appendChild(el("p","note id-st", "Prévue dans la feuille " + (i.shootNum || (sh && sh.num) || "de tournage"))); }
+      else if (i.koShoot) c.appendChild(el("p","note id-st", "Pas faite au tournage " + i.koShoot));
+      if (i.link){ const src = tgEmbed(tgHref(i.link) || i.link); if (src){ const fr = document.createElement("iframe"); fr.src = src; fr.className = "id-vid"; fr.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen"; fr.allowFullscreen = true; fr.loading = "lazy"; c.appendChild(fr); } if (i.title) c.appendChild(el("p","id-tx", i.title)); }
+      else if (i.text) c.appendChild(el("p","id-tx",i.text));
       if ((i.files || []).length){ const m = el("div","id-media"); i.files.forEach(x => m.appendChild(attachEl(x))); c.appendChild(m); }
       const a = el("div","id-acts");
       if (!(i.seen || []).includes(me)) a.appendChild(btn("Marquer comme vu","sm", () => patch("idees", i.id, { seen: [...new Set((i.seen || []).concat(me))] })));
-      if (intl){ const e = btn("Modifier","sm", () => editIdee(i)); e.disabled = !writable(); a.appendChild(e); }
+      if (intl){ const e = btn("Modifier","sm", () => i.link ? editIdeeVideo(i) : editIdee(i)); e.disabled = !writable(); a.appendChild(e); }
       else { const g2 = (S.cgroups || []).find(x => x.name === i.client);
         if (g2) a.appendChild(btn("Répondre dans le groupe","sm lemon", () => { S.ui.msgMode = "main"; S.ui.msgCh = g2.ch; S.ui.waConv = true; remember(); go("messagerie"); })); }
       { let armed = false; const db = btn("Supprimer","sm danger", async () => { if (!armed){ armed = true; db.textContent = "Confirmer la suppression"; db.classList.add("armed"); setTimeout(() => { armed = false; db.textContent = "Supprimer"; db.classList.remove("armed"); }, 4000); return; } db.disabled = true; try { await remove("idees", i.id); toast("Idée supprimée (récupérable 30 jours dans la corbeille)."); } catch(e){ db.disabled = false; } }); db.disabled = !writable(); db.style.marginLeft = "auto"; a.appendChild(db); }
@@ -3635,6 +3658,19 @@ function tgEdit(s0){
       h.appendChild(a); f.append(h, lists[key]); draw(key);
     };
     sec("Vidéos", "videos", [["+ Réel parlé","parle"],["+ Réel sans paroles","muet"]]);
+    { // Reprendre des idées (et vidéos d'exemple) du client dans la feuille
+      const adds = f.querySelector(".tg-adds"), pick = el("div","tg-ipick"); pick.hidden = true; lists.videos.before(pick);
+      const ib = btn("+ Depuis les idées","sm", () => {
+        if (!pick.hidden){ pick.hidden = true; return; }
+        const cl = iClient.value.trim(); if (!cl){ toast("Indique d’abord le client."); iClient.focus(); return; }
+        const used = new Set(tgItems(s).map(v => v.fromIdea).filter(Boolean));
+        const free = (S.d.idees || []).filter(i => norm(i.client) === norm(cl) && !used.has(i.id) && (!i.shoot || i.shoot === s.id)).sort((a, b) => (b.at || "").localeCompare(a.at || ""));
+        pick.textContent = "";
+        if (!free.length) pick.appendChild(el("p","muted","Aucune idée libre pour " + cl + "."));
+        else { free.forEach(i => { const l = el("label","tg-ip"), cb = el("input"); cb.type = "checkbox"; cb.value = i.id; l.append(cb, el("span", null, ideaLabel(i)), el("small", null, i.link ? "Vidéo" : i.kind || "Idée")); pick.appendChild(l); });
+          const ok = btn("Ajouter à la feuille","sm lemon", () => { [...pick.querySelectorAll("input:checked")].forEach(cb => { const it = ideaToItem(free.find(x => x.id === cb.value)); s[it.kind === "photo" ? "photos" : "videos"].push(it); }); pick.hidden = true; draw("videos"); draw("photos"); }); ok.type = "button"; pick.appendChild(ok); }
+        pick.hidden = false; });
+      ib.type = "button"; adds.appendChild(ib); }
     sec("Photos", "photos", [["+ Photo","photo"]]);
     const iRoll = el("textarea"); iRoll.rows = 2; iRoll.value = s.broll != null ? s.broll : "B-roll : un maximum"; f.appendChild(field("À ramener", iRoll));
     const iRules = el("textarea"); iRules.rows = 3; iRules.value = s.rules || ""; iRules.placeholder = "3 règles du client au plus, une par ligne"; f.appendChild(field("À respecter", iRules));
@@ -3650,13 +3686,13 @@ function tgEdit(s0){
       const client = iClient.value.trim(); if (!client){ err.textContent = "Indique le client."; iClient.focus(); return; }
       if ([...f.querySelectorAll(".files")].some(x => x.dataset.busy)){ err.textContent = "Un fichier est encore en cours d’envoi."; return; }
       const clean = v => { const o = { id: v.id, kind: v.kind, title: (v.title || "").trim(), line: (v.line || "").trim(), status: v.status || "" };
-        if (v.doneAt) o.doneAt = v.doneAt; o.links = (v.links || "").trim(); o.files = v._ff ? v._ff._get() : (v.files || []); return o; };
+        if (v.doneAt) o.doneAt = v.doneAt; if (v.fromIdea) o.fromIdea = v.fromIdea; o.links = (v.links || "").trim(); o.files = v._ff ? v._ff._get() : (v.files || []); return o; };
       const body = Object.assign({}, s0 && s0.id ? strip(s0) : {}, {
         client, date: iDate.value, num: iNum.value.trim(), time: iTime.value, duration: iDur.value.trim(), place: iPlace.value.trim(), onCamera: iImg.value.trim(),
         team: [...team].concat(iTeamX.value.split(",").map(x => x.trim()).filter(Boolean)),
         videos: s.videos.map(clean), photos: s.photos.map(clean), broll: iRoll.value.trim(), rules: iRules.value.trim() });
       const id = s.id || tgId(); ok.disabled = true;
-      try { await save("shoots", id, body); await tgSyncEvent(id, body); closeModal(); toast("Feuille enregistrée, tournage ajouté à l’agenda."); }
+      try { await save("shoots", id, body); await tgSyncEvent(id, body); await tgMarkIdeas(id, body, s0); closeModal(); toast("Feuille enregistrée, tournage ajouté à l’agenda."); }
       catch(x){ ok.disabled = false; }
     };
     act.append(cancel, ok); m.appendChild(act);
@@ -3735,12 +3771,43 @@ async function tgSyncRush(s, v){
   const rid = "sh-" + s.id + "-" + v.id, cur = (S.d.rushes || []).find(r => r.id === rid);
   if (v.status === "fait"){
     if (cur) return;
-    await save("rushes", rid, { client: s.client, shotAt: v.doneAt || s.date || today(), shoot: s.num || ("Tournage du " + fmtFR(s.date)), content: v.title || TG_KINDS[v.kind],
-      editor: "", link: "", status: "À monter", kind: "", fromShoot: s.id, silent: v.kind === "muet",
-      note: [v.kind === "muet" ? "Réel sans paroles (édit)." : "Réel parlé.", v.line].filter(Boolean).join(" ") });
+    // Même nomenclature que les rushs saisis à la main : date du tournage, AAAA-MM_Tournage(n), titre de la vidéo, « Edit … » pour un réel sans paroles
+    const d = isISO(s.date) ? s.date : (v.doneAt || today()), t = (v.title || "").trim() || TG_KINDS[v.kind];
+    await save("rushes", rid, { client: s.client, shotAt: d, shoot: s.num || tgNum(s.client, d, s.id), content: v.kind === "muet" && !/^[ée]dit\b/i.test(t) ? "Edit " + t : t,
+      editor: (s.team || []).includes("Matis") ? "Matis" : "", link: "", status: "À monter", kind: "", fromShoot: s.id, silent: v.kind === "muet", note: (v.line || "").trim() });
   } else if (cur && cur.status === "À monter" && cur.fromShoot === s.id){
     try { await S.db.collection("rushes").doc(rid).delete(); } catch(e){}
   }
+}
+
+/* « Pas possible » au tournage → l'élément repart dans les Idées du client (Matis, 26/11/2026) ; annulé → retiré des Idées */
+async function tgSyncIdea(s, v){
+  const iid = "tg-" + s.id + "-" + v.id, ids = S.d.idees || [], cur = ids.find(i => i.id === iid), src = v.fromIdea && ids.find(i => i.id === v.fromIdea);
+  if (v.status === "impossible"){
+    if (src){ await patch("idees", src.id, { shoot: "", shootNum: "", koShoot: s.num || fmtFR(s.date) }); return; }
+    if (cur) return;
+    const me = S.me || "";
+    await save("idees", iid, { internal: true, by: me, kind: "Pas tourné", client: s.client, at: new Date().toISOString(), seen: [me], fromShoot: s.id,
+      text: [v.title || TG_KINDS[v.kind], v.line].filter(Boolean).join("\n"), title: v.title || "", line: v.line || "", links: v.links || "", files: v.files || [], tgKind: v.kind, koShoot: s.num || fmtFR(s.date) });
+  } else {
+    if (src && !src.shoot) await patch("idees", src.id, { shoot: s.id, shootNum: s.num || "", koShoot: "" });
+    if (cur && cur.fromShoot === s.id){ try { await S.db.collection("idees").doc(iid).delete(); } catch(e){} }
+  }
+}
+/* Idée → élément de feuille de tournage (titre, précision, liens et fichiers d'exemple repris) */
+function ideaToItem(i){
+  const t = String(i.text || "").trim(), lines = t.split("\n").map(x => x.trim()).filter(x => x && !/^https?:\/\//i.test(x));
+  const first = i.title || lines[0] || (i.link ? "Vidéo d’exemple" : "Idée");
+  const links = [i.link, i.links].concat(t.match(/https?:\/\/\S+/g) || []).filter(Boolean).join("\n").split("\n").filter((x, k, a) => x && a.indexOf(x) === k).join("\n");
+  return { id: tgId(), kind: ["parle","muet","photo"].includes(i.tgKind) ? i.tgKind : "parle", title: first.length > 90 ? first.slice(0, 87) + "…" : first,
+    line: i.title ? (i.line || "") : lines.slice(1).join(" ").slice(0, 200), links, files: i.files || [], status: "", fromIdea: i.id };
+}
+const ideaLabel = i => (i.title || String(i.text || "").split("\n")[0] || (i.link ? "Vidéo d’exemple" : "Idée")).slice(0, 110);
+/* Feuilles : chaque idée reprise est marquée « prévue » ; une idée retirée de la feuille redevient libre */
+async function tgMarkIdeas(id, body, s0){
+  const now = new Set(tgItems(body).map(v => v.fromIdea).filter(Boolean)), before = tgItems(s0 || {}).map(v => v.fromIdea).filter(Boolean);
+  for (const iid of now){ const i = (S.d.idees || []).find(x => x.id === iid); if (i && (i.shoot !== id || i.shootNum !== (body.num || ""))) await patch("idees", iid, { shoot: id, shootNum: body.num || "" }).catch(() => {}); }
+  for (const iid of before) if (!now.has(iid)){ const i = (S.d.idees || []).find(x => x.id === iid); if (i && i.shoot === id) await patch("idees", iid, { shoot: "", shootNum: "" }).catch(() => {}); }
 }
 
 /* Mode tournage : une slide par vidéo puis par photo, swipe, Fait / Pas possible, retour en arrière */
@@ -3758,7 +3825,7 @@ function tgLive(s0){
   const close = () => { ov.remove(); document.documentElement.classList.remove("tg-lock"); document.removeEventListener("keydown", key); };
   const persist = async v => {
     const body = { videos: s.videos || [], photos: s.photos || [] };
-    try { await patch("shoots", s.id, body); await tgSyncRush(s, v); } catch(e){ toast("Pas enregistré : vérifie la connexion, puis refais le choix."); throw e; }
+    try { await patch("shoots", s.id, body); await tgSyncRush(s, v); await tgSyncIdea(s, v); } catch(e){ toast("Pas enregistré : vérifie la connexion, puis refais le choix."); throw e; }
   };
   const mark = async (st) => {
     if (busy || i >= items.length) return; const v = items[i]; busy = true;

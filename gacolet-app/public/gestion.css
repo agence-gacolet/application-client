@@ -2339,6 +2339,11 @@ button.wi-p{cursor:pointer}button.wi-p:hover .wi-pt b{color:var(--lemon)}
 .wa-brow .wa-dots{align-self:center!important;margin:0!important;order:0!important}
 .wa-stime{display:none;font-size:11px;color:#8E8E93;white-space:nowrap;font-variant-numeric:tabular-nums}
 .wa-line:hover .wa-stime{display:inline}
+/* L'heure au survol ne prend aucune place : la bulle ne bouge plus (26/11/2026) */
+.wa-brow{position:relative}
+.wa-stime{position:absolute;top:50%;transform:translateY(-50%);pointer-events:none}
+.wa-line:not(.mine) .wa-stime{left:calc(100% + 2px)}
+.wa-line.mine .wa-stime{right:calc(100% + 2px)}
 .wa-line:hover .wa-time{display:none!important}
 @media (hover:none){ .wa-stime{display:none!important} }
 
@@ -2373,3 +2378,15 @@ button.rx-row:hover{background:var(--hover)}
   .rx-grip::before{content:"";display:block;width:38px;height:4px;border-radius:2px;background:var(--line-2);margin:0 auto}
   .rx-tabs{padding-top:2px}
 }
+/* Idées : sélection pour la feuille de tournage, vidéos d'exemple (26/11/2026) */
+.id-cb{width:18px;height:18px;margin-left:6px;accent-color:var(--lemon);cursor:pointer;flex:none}
+.id-selbar{position:sticky;top:8px;z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:10px 0;padding:10px 14px;border:1px solid rgba(198,255,51,.45);border-radius:14px;background:var(--card)}
+.id-selbar b{margin-right:auto}
+.id-vid{width:100%;aspect-ratio:9/16;max-height:560px;border:0;border-radius:12px;background:#000}
+.id-st{margin:-4px 0 0}
+.tg-ipick{display:flex;flex-direction:column;gap:6px;margin:6px 0 12px;padding:12px;border:1px dashed var(--line-2);border-radius:12px}
+.tg-ip{display:flex;align-items:center;gap:10px;cursor:pointer}
+.tg-ip input{width:18px;height:18px;flex:none;accent-color:var(--lemon)}
+.tg-ip span{flex:1;min-width:0;overflow-wrap:anywhere}
+.tg-ip small{color:var(--muted)}
+.tg-ipick .btn{align-self:flex-start;margin-top:4px}
