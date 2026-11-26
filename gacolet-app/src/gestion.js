@@ -6,7 +6,7 @@ const fs = require("fs");
 const crypto = require("crypto");
 const multer = require("multer");
 
-const COLLS = ["events", "tasks", "commercial", "campaigns", "rushes", "publications", "clients", "cevents", "keydates", "posts", "edtodo", "meta", "messages", "formations", "msheets", "idees", "pilotage", "ca", "finance", "strategies", "shoots", "vrooms"];
+const COLLS = ["events", "tasks", "commercial", "campaigns", "rushes", "publications", "clients", "cevents", "keydates", "posts", "edtodo", "meta", "messages", "formations", "msheets", "idees", "pilotage", "ca", "finance", "strategies", "shoots", "vrooms", "cnotes"];
 const ROLES = ["owner", "member", "commercial"];
 const ACCESS = {
   member: {
@@ -22,9 +22,11 @@ const ACCESS = {
    modifiables par les propriétaires (interrupteurs dans Paramètres), plus des pages données à une personne, pour toujours ou pour un temps. */
 const VIEW_COLLS = { agenda: ["events", "tasks", "cevents", "keydates", "posts"], taches: ["tasks"], messagerie: ["messages"], vocal: ["vrooms"], focus: [], formation: ["formations"],
   commercial: ["commercial"], clients: ["clients", "cevents", "keydates"], montage: ["rushes"], tournage: ["shoots", "rushes", "events", "clients", "idees"], publications: ["publications", "posts", "edtodo"],
-  campagnes: ["campaigns", "meta", "msheets"], fiches: ["clients"], idees: ["idees"], strategie: ["strategies", "clients"] };
+  campagnes: ["campaigns", "meta", "msheets"], fiches: ["clients"], idees: ["idees"], strategie: ["strategies", "clients"],
+  // Espace client (Matis, 26/11/2026) : notes d'équipe et bios par client ; le reste de la page suit les droits des autres onglets
+  espaces: ["clients", "cnotes"] };
 const DEFAULT_VIEWS = { member: ["agenda", "taches", "messagerie", "vocal", "focus", "formation"],
-  commercial: ["agenda", "taches", "messagerie", "vocal", "focus", "commercial", "clients", "montage", "publications", "idees", "campagnes", "formation"] };
+  commercial: ["agenda", "taches", "messagerie", "vocal", "focus", "commercial", "clients", "montage", "publications", "idees", "campagnes", "formation", "espaces"] };
 const SEED = [["Gabriel", "gabriel"], ["Matis", "matis"], ["Clara", "clara"]];
 // Le chiffre d'affaires et le plan chalet ne sont visibles que par Matis et Gabriel, quel que soit le rôle
 const DUO = ["Matis", "Gabriel"], DUO_COLS = ["ca", "finance"];

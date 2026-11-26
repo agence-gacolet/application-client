@@ -22,9 +22,9 @@ const DAYS = ["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"]
 const DEFAULT_COLORS = {"Agence Gacolet":"#1D1D1B","AR Climatisation":"#E8833A","Bonobo":"#2E9E5B","Delta Sud Formation":"#D6334A","Domaine Pagezi":"#7A1F3D","Flora Design":"#C25CC9","France Étanchéité":"#2F6FE4","Gaufrement Bon":"#E3B505","Hugo Maître Nageur":"#1BA6C9","Insolent":"#5C5C57","KR Thermolaquage":"#8C6239","La Vie La Construction":"#F06A1D","Le Petit Mas":"#6E8B3D","Locamex":"#E2559C","Meyer-Pic":"#3D4FB5","Only Clean":"#17A398","Paillotte Bassamoise":"#F2A93B","SOS Pare-Brise Codognan":"#9B2226","SOS Pare-Brise Vendargues":"#4A6C8C","Sport Défense":"#8E44AD","The New Me Montpellier":"#D98BA5","Total Habitat 360":"#6C7A2E"};
 const VIEWS = [
   ["accueil","Accueil"],["agenda","Agenda"],["taches","Tâches"],["messagerie","Messagerie"],["vocal","Vocal"],["commercial","Commercial"],["clients","Calendrier clients"],
-  ["montage","Rushs"],["tournage","Feuilles de tournage"],["publications","Publications"],["reels","Réels finis"],["atelier","Atelier montage"],["depot","Dépôt"],["campagnes","Campagnes"],["formation","Formation"],["parametres","Paramètres"],["fiches","Tableau clients"],["strategie","Stratégie"],["idees","Idées"],["focus","Focus"],["finance","Finance"],["chalet","Chalet"]
+  ["montage","Rushs"],["tournage","Feuilles de tournage"],["publications","Publications"],["reels","Réels finis"],["atelier","Atelier montage"],["depot","Dépôt"],["campagnes","Campagnes"],["formation","Formation"],["parametres","Paramètres"],["fiches","Tableau clients"],["strategie","Stratégie"],["idees","Idées"],["focus","Focus"],["finance","Finance"],["chalet","Chalet"],["espaces","Espaces clients"]
 ];
-const NAV_GROUPS = [["",["accueil"]],["Au quotidien",["agenda","taches","messagerie","vocal"]],["Production",["idees","strategie","tournage","montage","reels","atelier","depot","publications"]],["Clients",["commercial","fiches"]],["Publicité",["campagnes"]],["Ressources",["formation"]],["Compte",["parametres"]]];
+const NAV_GROUPS = [["",["accueil"]],["Au quotidien",["agenda","taches","messagerie","vocal"]],["Production",["idees","strategie","tournage","montage","reels","atelier","depot","publications"]],["Clients",["espaces","commercial","fiches"]],["Publicité",["campagnes"]],["Ressources",["formation"]],["Compte",["parametres"]]];
 /* Onglets fusionnés : le calendrier clients vit dans l’agenda, le montage dans les tâches. */
 const MERGED = { clients: ["agenda","agHub"] };
 /* Pages par défaut d’un compte sans réglage par prénom. Le serveur applique les mêmes limites aux données. */
@@ -36,12 +36,12 @@ const POSTES = ["Directeur","Direction","Responsable communication","Responsable
 function posteInput(id, value){ const i = el("input"); i.id = id; i.value = value || ""; i.placeholder = "Ex. Vidéaste"; i.maxLength = 60; const dl = el("datalist"); dl.id = id + "-l"; POSTES.forEach(x => { const o = el("option"); o.value = x; dl.appendChild(o); }); i.setAttribute("list", dl.id); return [i, dl]; }
 const ROLE_VIEWS = {
   member: ["accueil","agenda","taches","messagerie","vocal","focus","formation","parametres"],
-  commercial: ["accueil","agenda","taches","messagerie","vocal","focus","commercial","clients","montage","publications","idees","campagnes","formation","parametres"]
+  commercial: ["accueil","agenda","taches","messagerie","vocal","focus","commercial","clients","montage","publications","idees","campagnes","formation","espaces","parametres"]
 };
 const HIDDEN = ["finance","chalet","focus"]; // pages supprimées le 14/11/2026 (Matis)
 const canSee = k0 => { if (k0 === "reels" || k0 === "atelier") return canSee0("montage") || canSee0("publications"); const k = k0 === "depot" ? "publications" : k0; return canSee0(k); };
 const canSee0 = k => HIDDEN.includes(k) ? false : !S.role || S.role === "owner" || (Array.isArray(S.views) ? S.views : ["accueil","parametres"].concat(ROLE_VIEWS[S.role] || [])).includes(k);
-const COLLS = ["events","tasks","commercial","campaigns","rushes","publications","clients","cevents","keydates","posts","edtodo","meta","messages","formations","msheets","idees","pilotage","ca","finance","strategies","shoots","vrooms"];
+const COLLS = ["events","tasks","commercial","campaigns","rushes","publications","clients","cevents","keydates","posts","edtodo","meta","messages","formations","msheets","idees","pilotage","ca","finance","strategies","shoots","vrooms","cnotes"];
 const DUO = ["Matis","Gabriel"];
 
 /* ---------- Outils ---------- */
@@ -95,7 +95,14 @@ function colorOf(name){
   const k = Object.keys(DEFAULT_COLORS).find(n => name && (n.startsWith(name) || name.startsWith(n) || norm(n).replace(/[^a-z0-9]/g,"") === a));
   return k ? DEFAULT_COLORS[k] : "#8A8A84";
 }
-function clientTag(name){ const s = el("span","cl"); const d = el("span","dot"); d.style.setProperty("--c", colorOf(name)); s.append(d, el("span",null,name||"")); return s; }
+/* Espace client (Matis, 26/11/2026) : sur la page d’un client, les vues reprises (agenda, tournages, rushs, idées…) ne montrent que lui */
+const esC = () => S.view === "espaces" ? (S.ui.esClient || "") : "";
+const esReal = name => !!name && name !== AGENCE && S.d.clients.some(c => c.name === name && !c.archived);
+function openEspace(name, tab){ S.ui.esClient = name; S.ui.esTab = tab || "apercu"; remember(); if ($("#overlay").classList.contains("open")) closeModal(); const h = "#espaces/" + encodeURIComponent(name); if (location.hash !== h) location.hash = h; else render(); }
+function clientTag(name){ const s = el("span","cl"); const d = el("span","dot"); d.style.setProperty("--c", colorOf(name)); s.append(d, el("span",null,name||""));
+  // Un clic sur le nom ouvre l’espace du client (sauf sur sa propre page)
+  if (esReal(name) && canSee("espaces") && esC() !== name){ s.classList.add("cl-go"); s.title = "Ouvrir l’espace " + name; s.onclick = e => { e.stopPropagation(); e.preventDefault(); openEspace(name); }; }
+  return s; }
 
 /* ---------- Écriture ---------- */
 let toastT = null;
@@ -339,8 +346,9 @@ function agendaItems(){
     S.d.posts.forEach(p => { if (!isISO(p.date)) return; out.push({k:"posts", date:p.date, client:AGENCE, label:(p.type||"")+(p.client ? ", "+shortName(p.client) : ""), who:[postWho(p)], ref:p, cls:"ev k-post"+(postLate(p) ? " late" : ""), meta:["Com de l’agence", p.format, p.client, p.status].filter(Boolean).join(", "), tag:postLate(p) ? "Montage en retard" : p.status}); });
     S.d.edtodo.forEach(x => { if (x.done || !isISO(x.date)) return; const late = lateDays(x.date) > 0; out.push({k:"edtodo", date:x.date, client:AGENCE, label:x.title, who:x.who ? [x.who] : [], ref:x, cls:"ev k-task"+(late?" late":""), meta:"Com de l’agence, à faire"+(x.who ? ", "+x.who : ""), tag:late ? lateDays(x.date)+" j de retard" : "À faire"}); });
   }
+  const AC = esC() || S.ui.agClient;
   return out.filter(i =>
-    (!S.ui.agClient || i.client === S.ui.agClient || (i.k === "keydates" && (i.ref.clients||[]).some(c => c === S.ui.agClient || c === "Tous"))) &&
+    (!AC || i.client === AC || (i.k === "keydates" && (i.ref.clients||[]).some(c => c === AC || c === "Tous"))) &&
     (!S.ui.agWho || !i.who.length || i.who.includes(S.ui.agWho))
   ).sort((a,b) => (a.date+(a.time||"99")+a.k).localeCompare(b.date+(b.time||"99")+b.k));
 }
@@ -1556,14 +1564,14 @@ function rushToTask(r){ if (!writable()) return; openForm({ key:"rut", title: "T
   onSave: async out => { await save("tasks", null, { who: out.who, pole: "20", client: r.client, date: out.date, postDate: out.postDate || "", title: out.title, note: [r.shoot ? "Tournage : " + r.shoot : "", r.note || ""].filter(Boolean).join(". ") + (r.link ? (r.note ? " " : "") + "Rushs : " + r.link : ""), done: false, rushId: r.id });
     await patch("rushes", r.id, { status: "En montage", editor: out.who === "À attribuer" ? (r.editor || "") : out.who }); } }); }
 function vMontage(root){
-  const C = S.ui.ruClient || "", inC = r => !C || r.client === C, all = RUSHES();
+  const C = esC() || S.ui.ruClient || "", inC = r => !C || r.client === C, all = RUSHES();
   root.appendChild(head("Rushs", "À gauche, le stock à monter. À droite, ce qui est monté et prêt à poster.", [addBtn("Rushs disponibles", () => editRush({client:C}))]));
   const stock = all.filter(r => !rushReady(r) && !rushDone(r)), ready = all.filter(r => rushReady(r) && !rushDone(r));
   const f = el("div","filters"); const g = el("div","fgroup"); const lb = el("label","flabel","Client"); lb.htmlFor = "ru-client"; g.appendChild(lb);
   const sel = el("select","pick"); sel.id = "ru-client";
   const used = new Set(all.map(r => r.client).filter(Boolean)); const names = clientNames(); used.forEach(n => { if (!names.includes(n)) names.push(n); });
   [["","Tous les clients"]].concat(names.map(n => { const a = stock.filter(r => r.client === n).length, b = ready.filter(r => r.client === n).length; return [n, n + (a || b ? " (" + [a ? a + " en stock" : "", b ? b + " prêt" + (b > 1 ? "s" : "") : ""].filter(Boolean).join(", ") + ")" : "")]; })).forEach(([val,l]) => { const o = el("option",null,l); o.value = val; sel.appendChild(o); });
-  sel.value = C; sel.onchange = () => { S.ui.ruClient = sel.value; remember(); render(); }; g.appendChild(sel); f.appendChild(g); root.appendChild(f);
+  sel.value = C; sel.onchange = () => { S.ui.ruClient = sel.value; remember(); render(); }; g.appendChild(sel); f.appendChild(g); if (!esC()) root.appendChild(f);
   // Deux colonnes : stock à gauche, prêt à poster à droite (l'une sous l'autre sur petit écran)
   const cols = el("div"); cols.style.cssText = "display:grid;grid-template-columns:repeat(auto-fit,minmax(min(440px,100%),1fr));gap:24px;align-items:start"; const colA = el("section"), colB = el("section"); cols.append(colA, colB); root.appendChild(cols);
   const rows = stock.filter(inC).sort((a,b) => (a.client||"").localeCompare(b.client||"","fr") || (a.shotAt||"").localeCompare(b.shotAt||""));
@@ -1693,9 +1701,10 @@ function sxPdf(st){
   toast("Choisis « Enregistrer en PDF » dans la fenêtre d’impression.");
 }
 function vStrategie(root){
-  const all = STRATS(), cur = all.find(s => s.id === S.ui.sxId) || null;
+  const all = STRATS(), cur = esC() ? (all.find(s => s.client === esC()) || all.find(s => esSame(s.client, esC())) || null) : all.find(s => s.id === S.ui.sxId) || null;
   const sel = el("select","pick"); [["","Vue d’ensemble"]].concat(all.map(s => [s.id, s.client])).forEach(([v, l]) => { const o = el("option", null, l); o.value = v; sel.appendChild(o); }); sel.value = cur ? cur.id : ""; sel.onchange = () => { S.ui.sxId = sel.value; remember(); render(); };
-  root.appendChild(head("Stratégie", "Les objectifs de chaque client et où on en est. Interne.", [sel, addBtn("Importer", sxPick)]));
+  root.appendChild(head("Stratégie", "Les objectifs de chaque client et où on en est. Interne.", [esC() ? null : sel, addBtn("Importer", sxPick)]));
+  if (esC() && !cur){ root.appendChild(el("p","empty","Pas encore de fiche stratégie pour ce client. Importe son fichier CLIENT_Strategie.md (dossier 10_STRATEGIE-CONTENUS > clients) avec le bouton Importer.")); return; }
   if (!all.length){ root.appendChild(el("p","empty","Aucune fiche pour l’instant. Importe les fichiers CLIENT_Strategie.md du dossier 10_STRATEGIE-CONTENUS > clients.")); return; }
   if (!cur){
     const g = el("div","pb-grid");
@@ -1708,7 +1717,7 @@ function vStrategie(root){
       g.appendChild(card); });
     root.appendChild(g); return; }
   const p = sxParse(cur.raw), bar = el("div","fin-btns");
-  bar.append(btn("‹ Tous les clients","sm", () => { S.ui.sxId = ""; remember(); render(); }), btn("Point de la semaine","sm lemon", () => sxReading(cur)), btn("Changer de plan","sm", () => sxPlan(cur)), btn("PDF","sm", () => sxPdf(cur)));
+  bar.append(esC() ? null : btn("‹ Tous les clients","sm", () => { S.ui.sxId = ""; remember(); render(); }), btn("Point de la semaine","sm lemon", () => sxReading(cur)), btn("Changer de plan","sm", () => sxPlan(cur)), btn("PDF","sm", () => sxPdf(cur)));
   root.appendChild(bar);
   root.appendChild(el("p","muted", ["Plan " + (p.plan || "?"), p.end ? "cycle jusqu’au " + fmtFR(p.end) : "", "fiche mise à jour le " + (p.head["dernière mise à jour"] || "?")].filter(Boolean).join(" · ")));
   root.appendChild(el("h2","fin-h","Objectifs"));
@@ -1741,7 +1750,7 @@ const PD = { all: {}, fin: {}, sent: {}, redraw: null, t: 0, loaded: false,
   newId(){ return "d" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); },
   list(c){ return PD.all[c] || (PD.all[c] = []); }, count(c){ return (PD.all[c] || []).length; },
   flist(c){ return PD.fin[c] || (PD.fin[c] = []); },
-  changed(){ clearTimeout(PD.ct); PD.ct = setTimeout(() => { if ((S.view === "depot" || S.view === "reels") && !PD.typing()) render(); }, 500); },
+  changed(){ clearTimeout(PD.ct); PD.ct = setTimeout(() => { if ((S.view === "depot" || S.view === "reels" || S.view === "espaces") && !PD.typing()) render(); }, 500); },
   typing(){ const a = document.activeElement; return !!(a && /^(TEXTAREA|INPUT)$/.test(a.tagName) && a.closest(".pd-body, .pd-page, .pd-modal")); },
   ser(x){ const y = {}; ["client","name","kind","url","date","time","reco","text","props","transcript","wait","asked","err","pct","up","upAt","upDev","type","nets","fini"].forEach(k => { if (x[k] !== undefined) y[k] = x[k]; }); return y; },
   save(){ PD.changed(); clearTimeout(PD.st); PD.st = setTimeout(PD.flush, 400); },
@@ -1764,7 +1773,7 @@ const PD = { all: {}, fin: {}, sent: {}, redraw: null, t: 0, loaded: false,
       // Ancien dépôt gardé dans ce navigateur : remonté une fois sur le serveur
       const old = store.get("pdDrafts") || {}; let n = 0; Object.keys(old).forEach(c => (old[c] || []).forEach(x => { if (!x || !x.url || list.some(s => s.url === x.url)) return; const y = Object.assign({}, x, { id: PD.newId(), client: c, busy: false }); delete y._file; PD.list(c).push(y); n++; }));
       store.set("pdDrafts", null); store.set("pdItems", null); PD.flush(); }
-    if (JSON.stringify([PD.all, PD.fin]) !== before && !PD.typing()){ if (!(PD.redraw && PD.redraw()) && (S.view === "depot" || S.view === "reels")) render(); }
+    if (JSON.stringify([PD.all, PD.fin]) !== before && !PD.typing()){ if (!(PD.redraw && PD.redraw()) && (S.view === "depot" || S.view === "reels" || S.view === "espaces")) render(); }
     return ready; } };
 // Statut d'un fichier déposé, le même dans la fenêtre de dépôt et sur la page Dépôt
 function pdState(it){
@@ -1976,6 +1985,7 @@ function vAtelier(root){
 function vReels(root){
   if (!S.pdCl && !S.pdClLoad){ S.pdClLoad = true; GC.api("GET","/api/g-prod/clients").then(r => { S.pdCl = (r.clients || []).map(c => c.name); S.pdNets = {}; (r.clients || []).forEach(c => { S.pdNets[c.name] = c.nets || []; }); render(); }).catch(() => {}).then(() => { S.pdClLoad = false; }); }
   const clients = S.pdCl && S.pdCl.length ? S.pdCl : clientNames();
+  if (esC()) S.ui.rfC = esC();
   const fi = el("input"); fi.type = "file"; fi.multiple = true; fi.accept = "video/*"; fi.hidden = true;
   const pick = () => { if (!S.ui.rfC){ toast("Choisis d’abord le client."); const s = document.getElementById("rf-client"); if (s) s.focus(); return; } if (!S.assets){ toast("Envoi de fichiers indisponible ici."); return; } fi.click(); };
   root.appendChild(head("Réels finis", "Les réels montés, prêts à passer au Dépôt. Supprimés tout seuls après la publication, ou au bout de " + RF_DAYS + " jours.", [addBtn("Déposer des réels", pick)]));
@@ -1990,14 +2000,14 @@ function vReels(root){
   const f = el("div","filters"); const g = el("div","fgroup"); const lb = el("label","flabel","Client"); lb.htmlFor = "rf-client"; g.appendChild(lb);
   const sel = el("select","pick"); sel.id = "rf-client"; const o0 = el("option", null, "Choisir le client…"); o0.value = ""; sel.appendChild(o0);
   clients.forEach(n => { const k = PD.flist(n).length; const o = el("option", null, n + (k ? " (" + k + ")" : "")); o.value = n; sel.appendChild(o); });
-  sel.value = clients.includes(S.ui.rfC) ? S.ui.rfC : ""; sel.onchange = () => { S.ui.rfC = sel.value; remember(); render(); }; g.appendChild(sel); f.appendChild(g); root.appendChild(f);
+  sel.value = clients.includes(S.ui.rfC) ? S.ui.rfC : ""; sel.onchange = () => { S.ui.rfC = sel.value; remember(); render(); }; g.appendChild(sel); f.appendChild(g); if (!esC()) root.appendChild(f);
   const dz = el("div","pd-drop rf-drop"); dz.innerHTML = "<b>Choisir ou glisser les réels montés</b><span>MP4, MOV</span>"; dz.onclick = pick;
   dz.ondragover = e => { e.preventDefault(); dz.classList.add("on"); }; dz.ondragleave = () => dz.classList.remove("on");
   dz.ondrop = e => { e.preventDefault(); dz.classList.remove("on"); if (!S.ui.rfC){ toast("Choisis d’abord le client."); sel.focus(); return; } add(e.dataTransfer.files); };
   root.appendChild(dz);
   // Liste : tous les réels envoyés, tous clients confondus (le client choisi ne sert qu’au dépôt)
   const lim = Date.now() - RF_DAYS * 86400000, all = [];
-  Object.keys(PD.fin).forEach(c => PD.fin[c].slice().forEach(it => { if (it.url && !it.busy && it.at && Date.parse(it.at) < lim) return rfDelete(c, it, false); all.push([c, it]); }));
+  Object.keys(PD.fin).filter(c => !esC() || c === esC()).forEach(c => PD.fin[c].slice().forEach(it => { if (it.url && !it.busy && it.at && Date.parse(it.at) < lim) return rfDelete(c, it, false); all.push([c, it]); }));
   if (!all.length){ root.appendChild(el("p","empty", PD.loaded ? "Aucun réel fini en attente." : "Lecture en cours…")); return; }
   all.sort((a, b) => String(b[1].at || "").localeCompare(String(a[1].at || "")) || a[0].localeCompare(b[0], "fr"));
   const grid = el("div","rf-grid");
@@ -2024,8 +2034,8 @@ function vDepot(root){
   // Liste des clients relue au clic (elle arrive de Metricool après le premier affichage) ; une production ouverte seule n'a besoin que de son client
   const launch = (c, id) => { const R2 = (S.pubs || {})[mk], cl = S.pdCl && S.pdCl.length ? S.pdCl : R2 && (R2.rows || R2.plan) ? ["Agence Gacolet","Gabriel"].concat((R2.rows || R2.plan).filter(r => r.blogId).map(r => r.client)) : clients;
     prodDrop(cl.length ? cl : c ? [c] : cl, null, { client: c, only: id || "" }); };
-  root.appendChild(head("Dépôt", "Dépose les vidéos et visuels d’un client. Claude propose la date et trois descriptions, tu peux fermer la fenêtre.", [addBtn("Déposer des fichiers", () => launch(""))]));
-  const all = []; Object.keys(PD.all).forEach(c => PD.all[c].forEach(it => all.push([c, it])));
+  root.appendChild(head("Dépôt", "Dépose les vidéos et visuels d’un client. Claude propose la date et trois descriptions, tu peux fermer la fenêtre.", [addBtn("Déposer des fichiers", () => launch(esC()))]));
+  const all = []; Object.keys(PD.all).filter(c => !esC() || c === esC()).forEach(c => PD.all[c].forEach(it => all.push([c, it])));
   if (!all.length){ root.appendChild(el("p","empty", PD.loaded ? "Rien en cours. Clique sur « Déposer des fichiers » pour commencer." : "Lecture des dépôts en cours…")); return; }
   const st = pdState;
   const order = it => it.busy || it.wait ? 1 : it.props ? 0 : 2;
@@ -2261,7 +2271,7 @@ function lrow(i){
   r.appendChild(mid); r.appendChild(el("span","pill tag", i.tag || ""));
   r.onclick = () => openItem(i); return r;
 }
-function newOnDay(k, time, end){ if (!writable()) return; editEvent({date:k, time: time || "", end: end || "", repeat:"none", reminder:"30", client:S.ui.agClient||"", type: S.ui.agTypes.length === 1 ? S.ui.agTypes[0] : "Tournage", who: S.ui.agWho ? [S.ui.agWho] : [], status:"Prévu"}); }
+function newOnDay(k, time, end){ if (!writable()) return; editEvent({date:k, time: time || "", end: end || "", repeat:"none", reminder:"30", client:esC()||S.ui.agClient||"", type: S.ui.agTypes.length === 1 ? S.ui.agTypes[0] : "Tournage", who: S.ui.agWho ? [S.ui.agWho] : [], status:"Prévu"}); }
 /* Calendrier éditorial d'un client en PDF : une page A4 paysage par mois, aux couleurs de l'agence (impression du navigateur > Enregistrer en PDF) */
 function edPdf(y, m){
   const client = S.ui.agClient && S.ui.agClient !== AGENCE ? S.ui.agClient : "";
@@ -2302,7 +2312,7 @@ function vAgenda(root){
   const step = dir => { if (v === "week" || v === "day"){ S.ui.agSel = addDays(S.ui.agSel, (v === "day" ? 1 : 7)*dir); const s = parseISO(S.ui.agSel); S.ui.agCursor = new Date(s.getFullYear(), s.getMonth(), 1); } else { S.ui.agCursor = new Date(y, m+dir, 1); const s = parseISO(S.ui.agSel); if (s.getMonth() !== S.ui.agCursor.getMonth() || s.getFullYear() !== S.ui.agCursor.getFullYear()) S.ui.agSel = iso(S.ui.agCursor); } render(); };
   const prev = btn("‹","icon", () => step(-1)); prev.setAttribute("aria-label","Période précédente");
   const next = btn("›","icon", () => step(1)); next.setAttribute("aria-label","Période suivante");
-  root.appendChild(head(title, "Agenda de l’agence", [prev, btn("Aujourd’hui","", () => { S.ui.agSel = t0; S.ui.agCursor = null; render(); }), next,
+  root.appendChild(head(title, esC() ? "Tout ce qui concerne " + esC() + " : rendez-vous, tournages, temps forts, tâches." : "Agenda de l’agence", [prev, btn("Aujourd’hui","", () => { S.ui.agSel = t0; S.ui.agCursor = null; render(); }), next,
     segm([["day","Jour"],["week","Semaine"],["month","Mois"],["list","Liste"]], v, x => { S.ui.agView = x; remember(); render(); }), btn("En tâches","", itemsToTasks), btn("PDF","", () => edPdf(y, m)), btn("Google Agenda","", agIcsBox), addBtn("Ajouter", () => newOnDay(S.ui.agSel))]));
   root.lastChild.classList.add("ag-head");
   AG_KEYS.step = step; AG_KEYS.today = () => { S.ui.agSel = t0; S.ui.agCursor = null; render(); };
@@ -2310,7 +2320,7 @@ function vAgenda(root){
   const f = el("div","filters ag-f");
   const dd = (id, label, opts, val, on) => { const g = el("div","fgroup"); const lb = el("label","flabel",label); lb.htmlFor = id; const s = el("select","pick"); s.id = id;
     opts.forEach(([v,l]) => { const o = el("option",null,l); o.value = v; s.appendChild(o); }); s.value = val; s.onchange = () => { on(s.value); remember(); render(); }; g.append(lb, s); f.appendChild(g); };
-  dd("ag-client","Client", [["","Tous les clients"]].concat(clientNames().map(n => [n,n])), S.ui.agClient, x => { S.ui.agClient = x; if (x === AGENCE && !S.ui.agLayers.includes("posts")) S.ui.agLayers = S.ui.agLayers.concat("posts"); });
+  if (!esC()) dd("ag-client","Client", [["","Tous les clients"]].concat(clientNames().map(n => [n,n])), S.ui.agClient, x => { S.ui.agClient = x; if (x === AGENCE && !S.ui.agLayers.includes("posts")) S.ui.agLayers = S.ui.agLayers.concat("posts"); });
   dd("ag-who","Qui", [["","Tout le monde"]].concat(PEOPLE.map(p => [p,p])), S.ui.agWho, x => { S.ui.agWho = x; });
   /* Un seul menu « Afficher » : tout, un type d’événement, ou une autre catégorie */
   const allL = LAYERS.map(x => x[0]);
@@ -2373,7 +2383,7 @@ function vAgenda(root){
     days.forEach(k => { const d = parseISO(k); const row = el("div","lday"); const dd = el("div","ldate"); dd.append(el("b",null,fmtD(k)), el("span",null,dow(k)));
       const its = el("div","litems"); map[k].forEach(i => its.appendChild(lrow(i))); row.append(dd, its); root.appendChild(row); });
   }
-  if (S.ui.agClient === AGENCE) agAgence(root, iso(new Date(y, m, 1)).slice(0,7));
+  if (!esC() && S.ui.agClient === AGENCE) agAgence(root, iso(new Date(y, m, 1)).slice(0,7));
 }
 /* Com de l'agence : ce qui était l'onglet Éditorial agence, affiché quand le filtre Client est sur Agence Gacolet */
 function agAgence(root, m){
@@ -3399,7 +3409,7 @@ const ideaInternal = i => !!i.internal;
 const ideaFrom = i => ideaInternal(i) ? "Envoyé par " + (i.by || "l’équipe") : "Envoyé par le client";
 function editIdee(i){ if (!writable()) return;
   openForm({ key:"idi", title: i.id ? "Modifier l’idée" : "Nouvelle idée interne", intro: i.id ? "" : "Visible par l’équipe seulement, jamais par le client.",
-    values: Object.assign({ client: S.ui.idClient || "" }, i),
+    values: Object.assign({ client: esC() || S.ui.idClient || "" }, i),
     fields: [{k:"client",label:"Client",list:clientNames(),req:"Indique le client."},{k:"text",label:"L’idée",type:"textarea",rows:5,req:"Écris l’idée."}],
     onDelete: i.id ? () => remove("idees", i.id) : null,
     onSave: out => { const me = S.me || "Gabriel";
@@ -3409,7 +3419,7 @@ function editIdee(i){ if (!writable()) return;
 /* Vidéo d'exemple d'un client (une tendance, un format) : un lien, affiché seulement en lecteur vidéo (Matis, 26/11/2026) */
 function editIdeeVideo(i){ if (!writable()) return;
   openForm({ key:"idv", title: i.id ? "Modifier la vidéo" : "Nouvelle vidéo d’exemple", intro: i.id ? "" : "Colle le lien Instagram, TikTok ou YouTube : la vidéo s’affiche directement, et reste visible pendant le tournage.",
-    values: Object.assign({ client: S.ui.idClient || "" }, i),
+    values: Object.assign({ client: esC() || S.ui.idClient || "" }, i),
     fields: [{k:"client",label:"Client",list:clientNames(),req:"Indique le client."},{k:"link",label:"Lien de la vidéo",ph:"https://",req:"Colle le lien."},{k:"title",label:"Titre (facultatif)",ph:"Ex. Tendance assiette qui tombe"}],
     onDelete: i.id ? () => remove("idees", i.id) : null,
     onSave: out => { const me = S.me || "Gabriel", link = String(out.link || "").trim();
@@ -3421,13 +3431,13 @@ const ID_SEL = new Set();
 function vIdees(root){
   const me = S.me || "Gabriel", all = (S.d.idees || []).slice().sort((a, b) => (b.at || "").localeCompare(a.at || ""));
   const names = [...new Set(all.map(i => i.client).filter(Boolean))].sort((a, b) => a.localeCompare(b, "fr"));
-  const f = S.ui.idClient && names.includes(S.ui.idClient) ? S.ui.idClient : "";
+  const f = esC() || (S.ui.idClient && names.includes(S.ui.idClient) ? S.ui.idClient : "");
   const src = ["equipe","client"].includes(S.ui.idSrc) ? S.ui.idSrc : "";
   const sel = el("select","pick"); [["","Tous les clients"]].concat(names.map(n => [n, n])).forEach(([v, l]) => { const o = el("option", null, l); o.value = v; if (v === f) o.selected = true; sel.appendChild(o); });
   sel.onchange = () => { S.ui.idClient = sel.value; remember(); render(); };
   const unseen = all.filter(i => !(i.seen || []).includes(me));
   const markAll = unseen.length ? btn("Tout marquer comme vu","sm", () => unseen.forEach(i => patch("idees", i.id, { seen: [...new Set((i.seen || []).concat(me))] }))) : null;
-  root.appendChild(head("Idées", "Les idées des clients et les nôtres, rangées par client. Coche des idées pour en faire une feuille de tournage.", [addBtn("Ajouter une idée", () => editIdee({})), btn("Ajouter une vidéo","", () => editIdeeVideo({})), sel, markAll]));
+  root.appendChild(head("Idées", "Les idées des clients et les nôtres, rangées par client. Coche des idées pour en faire une feuille de tournage.", [addBtn("Ajouter une idée", () => editIdee({})), btn("Ajouter une vidéo","", () => editIdeeVideo({})), esC() ? null : sel, markAll]));
   [...ID_SEL].forEach(id => { if (!all.some(i => i.id === id)) ID_SEL.delete(id); });
   if (ID_SEL.size){ const pk = all.filter(i => ID_SEL.has(i.id)), cls = [...new Set(pk.map(i => i.client))];
     const bar = el("div","id-selbar"); bar.appendChild(el("b", null, plural(pk.length, "idée cochée", "idées cochées") + (cls.length === 1 ? " · " + cls[0] : "")));
@@ -3439,7 +3449,7 @@ function vIdees(root){
   if (!list.length){ root.appendChild(el("p","empty", src === "equipe" ? "Aucune idée interne pour l’instant. Ajoute-en une avec le bouton en haut." : "Rien pour l’instant. Les envois des clients arrivent ici.")); return; }
   const byClient = {}; list.forEach(i => (byClient[i.client || "Sans client"] = byClient[i.client || "Sans client"] || []).push(i));
   Object.keys(byClient).sort((a, b) => a.localeCompare(b, "fr")).forEach(cn => {
-    root.appendChild(el("h2","fin-h id-cl", cn + " (" + byClient[cn].length + ")"));
+    if (!esC()) root.appendChild(el("h2","fin-h id-cl", cn + " (" + byClient[cn].length + ")"));
     const g = el("div","id-grid");
     byClient[cn].forEach(i => {
       const intl = ideaInternal(i);
@@ -3550,12 +3560,12 @@ const tgLinks = t => String(t || "").split(/\s*\n\s*/).map(x => x.trim()).filter
 const tgHref = u => /^https?:\/\//i.test(u) ? u : /^[\w.-]+\.[a-z]{2,}(\/|$)/i.test(u) ? "https://" + u : "";
 
 function vTournage(root){
-  const all = (S.d.shoots || []).slice().sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  const all = (S.d.shoots || []).filter(s => !esC() || s.client === esC()).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
   tgSyncAgenda();
   const live = all.filter(s => !s.doneAt), arch = all.filter(s => s.doneAt).sort((a, b) => (b.doneAt || "").localeCompare(a.doneAt || ""));
   const up = live.filter(s => !s.date || s.date >= today()).reverse(), past = live.filter(s => s.date && s.date < today());
   root.appendChild(head("Feuilles de tournage", "Prépare le tournage et envoie le PDF au client. Sur place, coche chaque vidéo : elle arrive dans Rushs. Tournage fait : il part dans Archives.",
-    [addBtn("Nouvelle feuille", () => tgEdit({}))]));
+    [addBtn("Nouvelle feuille", () => tgEdit(esC() ? { client: esC() } : {}))]));
   if (!all.length){ root.appendChild(el("p","empty","Aucune feuille de tournage. Crée la première avec le bouton en haut.")); return; }
   const view = S.ui.tgView === "arch" ? "arch" : "cours";
   root.appendChild(segm([["cours","En cours (" + live.length + ")"],["arch","Archives (" + arch.length + ")"]], view, v => { S.ui.tgView = v; remember(); render(); }));
@@ -3805,7 +3815,8 @@ function ideaToItem(i){
 const ideaLabel = i => (i.title || String(i.text || "").split("\n")[0] || (i.link ? "Vidéo d’exemple" : "Idée")).slice(0, 110);
 /* Feuilles : chaque idée reprise est marquée « prévue » ; une idée retirée de la feuille redevient libre */
 async function tgMarkIdeas(id, body, s0){
-  const now = new Set(tgItems(body).map(v => v.fromIdea).filter(Boolean)), before = tgItems(s0 || {}).map(v => v.fromIdea).filter(Boolean);
+  // Un élément « Pas possible » laisse son idée libre : elle reste dans les Idées du client
+  const now = new Set(tgItems(body).filter(v => v.status !== "impossible").map(v => v.fromIdea).filter(Boolean)), before = tgItems(s0 || {}).concat(tgItems(body)).map(v => v.fromIdea).filter(Boolean);
   for (const iid of now){ const i = (S.d.idees || []).find(x => x.id === iid); if (i && (i.shoot !== id || i.shootNum !== (body.num || ""))) await patch("idees", iid, { shoot: id, shootNum: body.num || "" }).catch(() => {}); }
   for (const iid of before) if (!now.has(iid)){ const i = (S.d.idees || []).find(x => x.id === iid); if (i && i.shoot === id) await patch("idees", iid, { shoot: "", shootNum: "" }).catch(() => {}); }
 }
@@ -3975,7 +3986,301 @@ function vAgendaHub(root){
 function vTachesHub(root){
   vTaches(root);
 }
-const RENDER = {strategie:vStrategie, fiches:vFiches, parametres:vParametres, accueil:vAccueil, agenda:vAgendaHub, taches:vTachesHub, commercial:vCommercial, campagnes:vMeta, montage:vMontage, tournage:vTournage, publications:vPublications, depot:vDepot, reels:vReels, atelier:vAtelier, clients:vClients, messagerie:vMessagerie, vocal:vVocal, formation:vFormation, idees:vIdees};
+/* ---------- Espaces clients (Matis, 26/11/2026) : une page par client, dans ses couleurs, avec tout ce qui le concerne ----------
+   On y retrouve, déjà filtrées sur lui, les vues de l’appli (agenda, tournages, rushs, idées, stratégie, réels finis, dépôt),
+   son calendrier éditorial (Metricool, temps forts, dates clés), ses bios réseau par réseau et les notes de l’équipe.
+   Chaque onglet suit les droits de la page d’origine. Notes et bios : collection « cnotes » (kind note, bio, biotmp). */
+const ES_NETS = [["instagram","Instagram",150],["tiktok","TikTok",80],["facebook","Facebook",101],["linkedin","LinkedIn",120]];
+// Chartes relevées dans les fiches clients (00_COMMUN > clients, 26/11/2026). Police web la plus proche quand la police du client n’est pas libre.
+const ES_CHARTE = { "bonobo":["#00335A","#FF3131","Jost"], "delta sud":["#D77011","#DBA905",""], "flora design":["#183020","#B05830","Poppins"],
+  "france etancheite":["#273F63","#B3D7ED","Barlow Condensed"], "gaufrement bon":["#473A2F","#DFB160","Fraunces"], "kr thermolaquage":["#206491","#3DAAD1","League Gothic"],
+  "la vie la construction":["#323232","#FAB500","League Spartan"], "le petit mas":["#491B2D","#87977B","EB Garamond"], "locamex":["#2A505B","#3FAECC","Barlow"],
+  "meyer":["#791F11","#E9B8A8",""], "only clean":["#111111","#1E40F0",""], "paillotte":["#4D6823","#FE9800","Paytone One"], "sos pare":["#0D1660","#FFD000","Outfit"],
+  "sta group":["#4A4A4A","#5FA9B8","Lato"], "sport defense":["#141414","#DFB059","Barlow"] };
+const ES_FONTS = ["Poppins","Montserrat","Jost","Barlow","Barlow Condensed","League Spartan","League Gothic","Lato","Outfit","Fraunces","EB Garamond","Paytone One","Bebas Neue","Oswald","Playfair Display","Inter"];
+const ES_W = ["Poppins","Montserrat","Jost","Barlow","Barlow Condensed","League Spartan","Lato","Outfit","Fraunces","EB Garamond","Oswald","Playfair Display","Inter"];
+const ES_LOADED = {};
+const esLink = (u, l) => { const n = linkNode(u, l); const w = el("p","es-lnk"); if (n instanceof Node) w.appendChild(n); else w.textContent = n; return w; };
+const esKey = n => norm(n || "").replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
+const esSame = (a, b) => { const x = esKey(a), y = esKey(b); return !!x && !!y && (x === y || x.startsWith(y) || y.startsWith(x)); };
+function esDa(c){ const d = c.da || {}, k = esKey(c.name), hit = Object.keys(ES_CHARTE).find(x => k.startsWith(x) || k.includes(x)), ch = hit ? ES_CHARTE[hit] : null;
+  return { c1: d.c1 || (ch && ch[0]) || colorOf(c.name), c2: d.c2 || (ch && ch[1]) || colorOf(c.name), font: d.font != null ? d.font : (ch && ch[2]) || "", logo: d.logo || c.logo || "" }; }
+function esFont(f){ if (!f || ES_LOADED[f] || f === "Bebas Neue" || f === "Inter") return; ES_LOADED[f] = 1; const l = document.createElement("link"); l.rel = "stylesheet";
+  l.href = "https://fonts.googleapis.com/css2?family=" + f.replace(/ /g, "+") + (ES_W.includes(f) ? ":wght@400;700" : "") + "&display=swap"; document.head.appendChild(l); }
+function esLum(hex){ const m = /^#?([0-9a-f]{6})$/i.exec(hex || ""); if (!m) return .5; const n = parseInt(m[1], 16), ch = [n >> 16, (n >> 8) & 255, n & 255].map(v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); }); return .2126 * ch[0] + .7152 * ch[1] + .0722 * ch[2]; }
+// Couleur trop claire pour un fond sous du texte blanc : assombrie jusqu’à un contraste lisible
+function esDark(hex){ let h = hex; for (let i = 0; i < 12 && esLum(h) > .16; i++){ const n = parseInt(h.slice(1), 16); h = "#" + [n >> 16, (n >> 8) & 255, n & 255].map(v => Math.round(v * .85).toString(16).padStart(2, "0")).join(""); } return h; }
+function esVars(node, da){ node.style.setProperty("--es1", /^#[0-9a-f]{6}$/i.test(da.c1) ? esDark(da.c1) : da.c1); node.style.setProperty("--es2", da.c2); node.style.setProperty("--es-on2", esLum(da.c2) > .45 ? "#121211" : "#fff");
+  node.style.setProperty("--es-font", da.font ? "\"" + da.font + "\", var(--text)" : "var(--display)"); if (da.font) esFont(da.font); }
+const esNotes = (cn, kind) => (S.d.cnotes || []).filter(n => n.client === cn && (n.kind || "note") === kind);
+// Onglets de l’espace, chacun ouvert seulement si la page d’origine est ouverte à la personne
+const ES_TABS = [["apercu","Aperçu",() => true],["agenda","Agenda",() => canSee("agenda")],["editorial","Éditorial",() => canSee("publications") || canSee("clients") || canSee("agenda")],
+  ["tournage","Tournages",() => canSee("tournage")],["rushs","Rushs",() => canSee("montage")],["idees","Idées",() => canSee("idees")],["strategie","Stratégie",() => canSee("strategie")],
+  ["depot","Dépôt",() => canSee("depot") || canSee("reels")],["bios","Bios",() => true],["notes","Notes",() => true]];
+
+function vEspaces(root){
+  const list = S.d.clients.filter(c => c.name !== AGENCE && !c.archived).sort((a, b) => a.name.localeCompare(b.name, "fr"));
+  let c = list.find(x => x.name === S.ui.esClient) || (S.ui.esClient ? list.find(x => esSame(x.name, S.ui.esClient)) : null);
+  if (!c) return esHome(root, list);
+  if (c.name !== S.ui.esClient) S.ui.esClient = c.name;
+  const da = esDa(c), wrap = el("div","es"); esVars(wrap, da); root.appendChild(wrap);
+  wrap.appendChild(esHero(c, da, list));
+  const tabs = ES_TABS.filter(t => t[2]()), cur = tabs.some(t => t[0] === S.ui.esTab) ? S.ui.esTab : "apercu";
+  const nNotes = esNotes(c.name, "note").length, nIdeas = (S.d.idees || []).filter(i => i.client === c.name && !(i.seen || []).includes(S.me || "Gabriel")).length;
+  const bar = el("nav","es-tabs"); bar.setAttribute("role","tablist");
+  tabs.forEach(([k, l]) => { const b = el("button", null, l); b.type = "button"; b.setAttribute("role","tab"); b.setAttribute("aria-selected", String(k === cur));
+    const n = k === "notes" ? nNotes : k === "idees" ? nIdeas : 0; if (n) b.appendChild(el("span","es-n", String(n)));
+    b.onclick = () => { S.ui.esTab = k; remember(); render(); }; bar.appendChild(b); });
+  wrap.appendChild(bar);
+  requestAnimationFrame(() => { const on = bar.querySelector("[aria-selected=true]"); if (on && bar.scrollWidth > bar.clientWidth) bar.scrollLeft = on.offsetLeft - (bar.clientWidth - on.offsetWidth) / 2; });
+  const body = el("div","es-body es-t-" + cur); wrap.appendChild(body);
+  ({ apercu: esApercu, agenda: vAgenda, editorial: esEditorial, tournage: vTournage, rushs: vMontage, idees: vIdees, strategie: vStrategie, depot: esDepot, bios: esBios, notes: esNotesView })[cur](body, c, da);
+}
+
+/* Accueil des espaces : une tuile par client, dans ses couleurs */
+function esHome(root, list){
+  root.appendChild(head("Espaces clients", "Une page par client : son agenda, ses tournages, ses idées, sa stratégie, ses bios et les notes de l’équipe. Clique sur un client."));
+  if (!list.length){ root.appendChild(el("p","empty","Aucun client pour l’instant.")); return; }
+  const g = el("div","es-home"), t0 = today();
+  list.forEach(c => { const da = esDa(c), b = el("button","es-tile"); b.type = "button"; esVars(b, da);
+    const lg = el("span","es-tl"); if (da.logo){ const i = document.createElement("img"); i.src = da.logo; i.alt = ""; i.loading = "lazy"; lg.appendChild(i); } else lg.textContent = initials(c.name);
+    const nx = S.d.events.filter(e => e.client === c.name && isISO(e.date) && e.date >= t0 && e.status !== "Annulé").sort((a, x) => (a.date + (a.time || "")).localeCompare(x.date + (x.time || "")))[0];
+    const sub = nx ? (nx.type || "Rendez-vous") + " le " + fmtD(nx.date) : (c.metier || noPrice(c.formula) || "");
+    b.append(lg, el("b","es-tn", c.name), el("span","es-ts", sub === "—" ? "" : sub));
+    b.onclick = () => openEspace(c.name); g.appendChild(b); });
+  root.appendChild(g);
+}
+
+/* Bandeau du client : logo, nom dans sa police, métier, services, réseaux, et les réglages de l’espace */
+function esHero(c, da, list){
+  const h = el("header","es-hero");
+  const lg = el("div","es-logo"); if (da.logo){ const i = document.createElement("img"); i.src = da.logo; i.alt = ""; lg.appendChild(i); } else lg.textContent = initials(c.name);
+  const tx = el("div","es-ht"); tx.appendChild(el("h1","es-name", c.name));
+  const since = c.since ? "client depuis le " + fmtFR(c.since) : "", fz = noPrice(c.formula);
+  const line = [c.metier ? c.metier.replace(/^./, x => x.toUpperCase()) : "", fz && fz !== "—" ? fz : "", since].filter(Boolean).join(" · "); if (line) tx.appendChild(el("p","es-line", line));
+  const so = svOf(c), ks = SV_KEYS.filter(k => k in so); if (ks.length){ const sv = el("div","es-sv"); ks.forEach(k => { const s = SERVICES.find(x => x[0] === k); sv.appendChild(el("span","es-chip", s[2])); }); tx.appendChild(sv); }
+  const nl = netLinks(c, true); if (nl.childNodes.length) tx.appendChild(nl);
+  const side = el("div","es-hs");
+  const sel = el("select","pick es-pick"); sel.setAttribute("aria-label","Changer de client"); list.forEach(x => { const o = el("option", null, x.name); o.value = x.name; sel.appendChild(o); }); sel.value = c.name; sel.onchange = () => openEspace(sel.value, S.ui.esTab);
+  const acts = el("div","es-acts");
+  acts.appendChild(btn("‹ Tous","sm es-b", () => { S.ui.esClient = ""; remember(); go("espaces"); }));
+  const g = (S.cgroups || []).find(x => x.name === c.name); if (g && canSee("messagerie")) acts.appendChild(btn("Groupe","sm es-b", () => { S.ui.msgMode = "main"; S.ui.msgCh = g.ch; S.ui.waConv = true; remember(); go("messagerie"); }));
+  if (S.role === "owner" || canSee("fiches")) acts.appendChild(btn("Fiche","sm es-b", () => editClient(c)));
+  const db = btn("Couleurs et logo","sm es-b", () => esDaForm(c)); db.disabled = !writable() || !c.id; acts.appendChild(db);
+  side.append(sel, acts);
+  h.append(lg, tx, side); return h;
+}
+function esDaForm(c){ const da = esDa(c);
+  openForm({ key:"esda", title: "Espace " + c.name, intro: "Couleurs, police et logo de la page du client. Repris de sa charte quand elle est dans sa fiche.",
+    values: { c1: da.c1, c2: da.c2, font: da.font, logo: (c.da || {}).logoFile || [] },
+    fields: [{k:"c1",label:"Couleur principale",type:"color",half:true},{k:"c2",label:"Couleur d’accent",type:"color",half:true},{k:"font",label:"Police des titres",list:ES_FONTS,ph:"Ex. Poppins (Google Fonts)"},{k:"logo",label:"Logo (une image)",type:"files"}],
+    onSave: out => { const f = (out.logo || []).filter(isImg).slice(-1);
+      return patch("clients", c.id, { da: { c1: out.c1, c2: out.c2, font: String(out.font || "").trim(), logo: f.length ? fileUrl(f[0]) : "", logoFile: f } }); } });
+}
+/* Carte de l’aperçu, avec un lien vers l’onglet complet */
+function esCard(title, tab, cls){ const s = el("section","es-card" + (cls ? " " + cls : "")); const h = el("div","es-ch"); h.appendChild(el("h3", null, title));
+  if (tab && ES_TABS.some(t => t[0] === tab && t[2]())){ const a = el("button","es-more","Tout voir ›"); a.type = "button"; a.onclick = () => { S.ui.esTab = tab; remember(); render(); window.scrollTo(0, 0); }; h.appendChild(a); }
+  s.appendChild(h); return s; }
+function esAll(fn){ const kL = S.ui.agLayers, kT = S.ui.agTypes; S.ui.agLayers = LAYERS.map(x => x[0]); S.ui.agTypes = EV_TYPES.slice(); try { return fn(); } finally { S.ui.agLayers = kL; S.ui.agTypes = kT; } }
+
+function esApercu(root, c, da){
+  const g = el("div","es-grid"), t0 = today(), me = S.me || "Gabriel"; root.appendChild(g);
+  // À venir : agenda du client sur 6 semaines
+  if (canSee("agenda")){ const s = esCard("À venir", "agenda"), its = esAll(agendaItems).filter(i => i.date >= t0 && i.date <= addDays(t0, 42) && i.k !== "relances").slice(0, 7);
+    if (!its.length) s.appendChild(el("p","empty","Rien de prévu dans les six semaines."));
+    its.forEach(i => { const r = lrow(i); r.querySelector(".lm").textContent = fmtD(i.date) + (i.time ? " " + fmtTime(i.time) : ""); s.appendChild(r); });
+    const a = addBtn("Ajouter à l’agenda", () => newOnDay(t0)); a.classList.add("es-add"); s.appendChild(a); g.appendChild(s); }
+  // Notes de l’équipe
+  { const s = esCard("Notes de l’équipe", "notes"); s.appendChild(esComposer(c));
+    const ns = esNotes(c.name, "note").sort(esNoteSort).slice(0, 3); ns.forEach(n => s.appendChild(esNoteEl(n, true)));
+    if (!ns.length) s.appendChild(el("p","note","Ce qu’il faut savoir sur le client, ce qu’il a dit, ce qu’on a décidé.")); g.appendChild(s); }
+  // Prochain tournage
+  if (canSee("tournage")){ const s = esCard("Prochain tournage", "tournage"), sh = (S.d.shoots || []).filter(x => x.client === c.name && !x.doneAt).sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999"));
+    const nx = sh.find(x => !x.date || x.date >= t0) || sh[sh.length - 1];
+    if (!nx){ s.appendChild(el("p","empty","Aucune feuille de tournage en cours.")); s.appendChild(addBtn("Nouvelle feuille", () => tgEdit({ client: c.name }))); }
+    else { const k = tgCount(nx); s.appendChild(el("p","es-big", nx.date ? fmtDL(nx.date) : "Date à fixer"));
+      s.appendChild(el("p","note", [nx.num, nx.time ? fmtTime(nx.time) : "", nx.place, (nx.team || []).join(", ")].filter(Boolean).join(" · ")));
+      s.appendChild(el("p","note", k.all ? k.all + " élément" + (k.all > 1 ? "s" : "") + " à tourner" + (k.done ? ", " + k.done + " fait" + (k.done > 1 ? "s" : "") : "") : "Feuille vide"));
+      const a = el("div","es-row"); a.append(btn("Lancer le tournage","sm lemon", () => tgLive(nx)), btn("Modifier","sm", () => tgEdit(nx))); s.appendChild(a); }
+    g.appendChild(s); }
+  // Production : rushs, réels finis, dépôt
+  if (canSee("montage") || canSee("reels") || canSee("depot")){ const s = esCard("Production", canSee("depot") || canSee("reels") ? "depot" : "rushs"), st = el("div","es-stats");
+    const ru = canSee("montage") ? RUSHES().filter(r => r.client === c.name) : [];
+    const tiles = [];
+    if (canSee("montage")) tiles.push([ru.filter(r => !rushReady(r) && !rushDone(r)).length, "rushs à monter", "rushs"], [ru.filter(r => rushReady(r) && !rushDone(r)).length, "prêts à poster", "rushs"]);
+    if (canSee("reels") || canSee("depot")) tiles.push([(PD.fin[c.name] || []).length, "réels finis", "depot"], [(PD.all[c.name] || []).length, "au Dépôt", "depot"]);
+    tiles.forEach(([n, l, tab]) => { const b = el("button","es-stat"); b.type = "button"; b.append(el("b", null, String(n)), el("span", null, l)); b.onclick = () => { S.ui.esTab = tab; remember(); render(); }; st.appendChild(b); });
+    s.appendChild(st); g.appendChild(s); }
+  // Idées
+  if (canSee("idees")){ const s = esCard("Idées", "idees"), ids = (S.d.idees || []).filter(i => i.client === c.name).sort((a, b) => (b.at || "").localeCompare(a.at || ""));
+    const free = ids.filter(i => !i.shoot);
+    s.appendChild(el("p","note", ids.length ? plural(free.length, "idée libre", "idées libres") + (ids.length - free.length ? ", " + (ids.length - free.length) + " déjà dans une feuille" : "") : "Aucune idée pour l’instant."));
+    const ul = el("ul","es-list"); free.slice(0, 4).forEach(i => { const li = el("li"); li.append(el("span","pill" + (ideaInternal(i) ? " l1" : ""), ideaInternal(i) ? (i.link ? "Vidéo" : "Équipe") : "Client"), el("span", null, (i.title || i.text || i.kind || "Idée").slice(0, 110))); ul.appendChild(li); }); s.appendChild(ul);
+    const a = el("div","es-row"); const b1 = addBtn("Ajouter une idée", () => editIdee({ client: c.name })); const b2 = btn("Ajouter une vidéo","sm", () => editIdeeVideo({ client: c.name })); b2.disabled = !writable(); a.append(b1, b2); s.appendChild(a); g.appendChild(s); }
+  // Stratégie
+  if (canSee("strategie")){ const st = STRATS().find(x => x.client === c.name) || STRATS().find(x => esSame(x.client, c.name)), s = esCard("Stratégie", "strategie");
+    if (!st) s.appendChild(el("p","empty","Pas encore de fiche stratégie."));
+    else { const p = sxParse(st.raw); s.appendChild(el("p","note", ["Plan " + (p.plan || "?"), p.end ? "cycle jusqu’au " + fmtFR(p.end) : ""].filter(Boolean).join(" · ")));
+      const ul = el("ul","sx-goals"); p.goals.slice(0, 4).forEach(gl => { const x = sxState(st, gl), li = el("li"); li.append(el("span", null, gl.ind), el("span","pill " + x.cls, x.label + (x.last ? " (" + sxFmt(x.last.val) + ")" : ""))); ul.appendChild(li); }); s.appendChild(ul); }
+    g.appendChild(s); }
+  // Bio du moment
+  { const s = esCard("Bio Instagram", "bios"), tmp = esTmpNow(c.name, "instagram"), bio = esNotes(c.name, "bio").find(b => b.net === "instagram");
+    if (tmp){ s.appendChild(el("span","pill l2","Bio du moment jusqu’au " + fmtD(tmp.to))); s.appendChild(el("p","es-bio", tmp.text)); }
+    else if (bio && bio.text) s.appendChild(el("p","es-bio", bio.text));
+    else s.appendChild(el("p","empty","Bio pas encore écrite dans l’appli."));
+    g.appendChild(s); }
+  // À retenir (fiche)
+  if (c.remember || c.ask || c.contact || c.tel){ const s = esCard("À retenir"); const dl = el("dl","es-dl");
+    [["Contact", [c.contact, c.tel].filter(Boolean).join(", ")],["À retenir", c.remember],["À demander", c.ask],["Tournage", c.shoot],["Publications / mois", c.perMonth]].forEach(([k, v]) => { if (!v) return; dl.append(el("dt", null, k), el("dd", null, v)); });
+    s.appendChild(dl); g.appendChild(s); }
+}
+
+/* Éditorial : publications du mois lues sur Metricool, événements éditoriaux, temps forts et dates clés du client */
+function esEditorial(root, c){
+  const mk = S.ui.esM || monthKey(), t0 = today();
+  const nav = [btn("‹","icon", () => { S.ui.esM = addMonths(mk + "-01", -1).slice(0, 7); render(); }), btn("Ce mois","", () => { S.ui.esM = ""; render(); }), btn("›","icon", () => { S.ui.esM = addMonths(mk + "-01", 1).slice(0, 7); render(); })];
+  root.appendChild(head(["Calendrier éditorial", monthLabel(mk)], "Ce qui est posté et programmé sur Metricool, les événements éditoriaux et les temps forts du client.", nav));
+  const map = {}, put = (d, x) => { (map[d] = map[d] || []).push(x); };
+  let R = null, row = null;
+  if (canSee("publications")){ loadPubs(mk); R = (S.pubs || {})[mk]; row = R && (R.rows || R.plan || []).find(r => r.client === c.name) || (R && (R.rows || R.plan || []).find(r => esSame(r.client, c.name)));
+    (row && row.items || []).forEach(x => { if (x.d) put(x.d.slice(0, 10), { k: "pub", x }); }); }
+  if (canSee("agenda")) S.d.events.filter(e => e.client === c.name && e.type === "Éditorial" && isISO(e.date) && e.date.slice(0, 7) === mk).forEach(e => put(e.date, { k: "ev", e }));
+  if (canSee("clients")) S.d.cevents.filter(e => e.client === c.name && isISO(e.date) && e.date.slice(0, 7) === mk).forEach(e => put(e.date, { k: "ce", e }));
+  // Bilan du mois
+  if (canSee("publications")){ const st = el("div","es-stats");
+    if (!R) st.appendChild(el("p","note","Lecture de Metricool…"));
+    else if (!row) st.appendChild(el("p","note","Ce client n’est pas dans le plan de publication de Metricool."));
+    else { const plan = (Number(row.stat) || 0) + (Number(row.video) || 0), done = (row.statDone || 0) + (row.vidDone || 0), sched = (row.statSched || 0) + (row.vidSched || 0);
+      [[R.ok ? done + " / " + plan : "— / " + plan, "publiées"], [R.ok ? sched : "—", "programmées"], [R.ok ? Math.max(0, plan - done - sched) : "—", "à programmer"]].forEach(([n, l]) => { const s = el("div","es-stat"); s.append(el("b", null, String(n)), el("span", null, l)); st.appendChild(s); });
+      const b = btn("Récap du mois","sm", () => pubRecap(row, mk, R.ok)); b.style.alignSelf = "center"; st.appendChild(b); }
+    root.appendChild(st); }
+  // Grille du mois
+  { const d0 = parseISO(mk + "-01"), off = (d0.getDay() + 6) % 7, nd = new Date(d0.getFullYear(), d0.getMonth() + 1, 0).getDate();
+    const dw = el("div","dow"); ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"].forEach(d => dw.appendChild(el("span", null, d)));
+    const g = el("div","cal es-cal");
+    for (let i = 0; i < Math.ceil((off + nd) / 7) * 7; i++){ const d = new Date(d0); d.setDate(1 - off + i); const k = iso(d), cell = el("div","day");
+      if (d.getMonth() !== d0.getMonth()) cell.classList.add("out"); if (k === t0) cell.classList.add("today"); cell.appendChild(el("span","num", String(d.getDate())));
+      (map[k] || []).forEach(o => { let n;
+        if (o.k === "pub"){ const x = o.x; n = el(x.url ? "a" : "span","es-pub " + (x.st === "done" ? "ok" : x.st === "err" ? "err" : "sched")); if (x.url){ n.href = x.url; n.target = "_blank"; n.rel = "noopener"; }
+          if (x.img){ const im = el("img"); im.src = x.img; im.alt = ""; im.loading = "lazy"; n.appendChild(im); } else n.appendChild(el("i", null, x.vid ? "▶" : "■"));
+          n.appendChild(el("span", null, (x.sub === "bio" ? "Lire la bio · " : "") + (x.text || (x.vid ? "Réel" : "Post")).slice(0, 60))); n.title = (x.st === "done" ? "Postée" : x.st === "err" ? "Erreur" : "Programmée") + " · " + (x.text || ""); }
+        else if (o.k === "ev"){ n = el("button","es-ev", (o.e.time ? fmtTime(o.e.time) + " " : "") + (o.e.title || "Éditorial")); n.type = "button"; n.onclick = () => openEvent(o.e); }
+        else { n = el("button","es-ev ce", o.e.subject || "Temps fort"); n.type = "button"; n.onclick = () => openCevent(o.e); }
+        cell.appendChild(n); });
+      g.appendChild(cell); }
+    root.append(dw, g); }
+  // Temps forts du client
+  if (canSee("clients")){ const h = el("h2","fin-h","Temps forts"); root.appendChild(h);
+    const tl = el("div","filters"); tl.appendChild(addBtn("Ajouter un temps fort", () => editCevent({ client: c.name }))); tl.appendChild(el("span","muted","Préparer " + (c.leadWeeks || 3) + " semaines avant la date.")); root.appendChild(tl);
+    const rows = S.d.cevents.filter(e => e.client === c.name && (e.date || "") >= addDays(t0, -31)).sort((a, b) => a.date.localeCompare(b.date));
+    const {w, tb} = table(["Date","Quoi","À faire","Préparer avant le","Fait"]);
+    rows.forEach(e => { const pb = prepBy(e), late = !e.done && pb && pb < t0 && e.date >= t0; const tr = el("tr","row" + (e.done || e.date < t0 ? " done" : "") + (late ? " r3" : "")); tr.onclick = () => openCevent(e);
+      td(tr, fmtD(e.date),"nw"); const q = td(tr, el("span","ttl", e.subject),"w"); if (e.piste){ q.appendChild(document.createTextNode(" ")); q.appendChild(el("span","pill","Piste")); }
+      td(tr, el("div","note", e.todo)); td(tr, fmtD(pb),"nw"); td(tr, checkbox(e.done, v => patch("cevents", e.id, { done: v }))); tb.appendChild(tr); });
+    root.appendChild(rows.length ? w : el("p","empty","Aucun temps fort à venir pour ce client.")); }
+  // Dates clés qui le concernent
+  if (canSee("agenda") || canSee("clients")){ const ks = S.d.keydates.filter(k => (k.clients || []).some(x => x === c.name || x === "Tous") && (k.end || k.date) >= t0).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 8);
+    if (ks.length){ root.appendChild(el("h2","fin-h","Dates clés")); const {w, tb} = table(["Date","Événement","Préparer avant le"]);
+      ks.forEach(k => { const tr = el("tr","row"); tr.onclick = () => openKeydate(k); td(tr, fmtD(k.date) + (k.end ? " → " + fmtD(k.end) : ""),"nw"); td(tr, k.label,"ttl w"); td(tr, fmtD(addDays(k.date, -21)),"nw"); tb.appendChild(tr); });
+      root.appendChild(w); } }
+}
+
+/* Dépôt : réels finis puis dépôts en cours, filtrés sur le client */
+function esDepot(root){ if (canSee("reels")) vReels(root); if (canSee("depot")){ const box = el("div","es-sub"); root.appendChild(box); vDepot(box); } }
+
+/* Bios : la bio habituelle de chaque réseau (aperçu comme sur le téléphone) et les bios du moment (offre, réel « lire la bio ») */
+function esTmpNow(cn, net){ const t = today(); return esNotes(cn, "biotmp").filter(b => (!net || b.net === net) && b.from <= t && (!b.to || b.to >= t)).sort((a, b) => (b.from || "").localeCompare(a.from || ""))[0] || null; }
+function esBios(root, c, da){
+  root.appendChild(head("Bios", "La bio de chaque réseau, prête à copier, et les bios du moment pour une offre ou un réel « lire la bio ».", [addBtn("Bio du moment", () => esTmpForm(c, {}))]));
+  const t0 = today(), tmps = esNotes(c.name, "biotmp").sort((a, b) => (a.from || "").localeCompare(b.from || "")), live = tmps.filter(b => !b.to || b.to >= t0);
+  // Bios du moment
+  if (live.length){ root.appendChild(el("h2","fin-h","Bios du moment")); const ul = el("div","es-tmps");
+    live.forEach(b => { const on = b.from <= t0, card = el("article","es-tmp" + (on ? " on" : "")); const h = el("div","es-ch");
+      h.append(el("b", null, b.title || "Bio du moment"), el("span","pill " + (on ? "l2" : "l1"), on ? "En ligne jusqu’au " + fmtD(b.to) : "Du " + fmtD(b.from) + " au " + fmtD(b.to))); card.appendChild(h);
+      card.appendChild(el("p","note", (ES_NETS.find(n => n[0] === b.net) || [0, b.net])[1] + " · mettre en ligne le " + fmtD(b.from) + ", remettre la bio habituelle le " + fmtD(addDays(b.to, 1))));
+      card.appendChild(el("p","es-bio", b.text)); if (b.link) card.appendChild(esLink(b.link, b.link));
+      const a = el("div","es-row"); a.append(btn("Copier","sm", () => esCopy(b.text)), btn("Rappels en tâches","sm", () => esTmpTasks(c, b)), btn("Modifier","sm", () => esTmpForm(c, b))); card.appendChild(a); ul.appendChild(card); });
+    root.appendChild(ul); }
+  // Réels « lire la bio » du mois (Metricool)
+  if (canSee("publications")){ const mk = monthKey(); loadPubs(mk); const R = (S.pubs || {})[mk], row = R && (R.rows || R.plan || []).find(r => esSame(r.client, c.name));
+    const lb = (row && row.items || []).filter(x => x.sub === "bio" && x.d && x.d.slice(0, 10) >= t0);
+    if (lb.length){ const p = el("p","status", "Réels « lire la bio » à venir : " + lb.map(x => fmtD(x.d.slice(0, 10))).join(", ") + ". Prévois la bio du moment pour ces dates."); root.appendChild(p); } }
+  // Bios habituelles
+  root.appendChild(el("h2","fin-h","Bios habituelles"));
+  const docs = esNotes(c.name, "bio"), nets = ES_NETS.filter(([k]) => c[k] || docs.some(d => d.net === k));
+  const g = el("div","es-bios");
+  (nets.length ? nets : ES_NETS.slice(0, 2)).forEach(([k, l, max]) => { const d = docs.find(x => x.net === k) || null, tmp = esTmpNow(c.name, k);
+    const card = el("article","es-phone"); esVars(card, da);
+    const top = el("div","es-ph-top"); top.append(el("b", null, l), el("span","note", c[k] ? "@" + String(c[k]).replace(/^https?:\/\/(www\.)?[^/]+\//, "").replace(/^@/, "").replace(/\/$/, "") : ""));
+    card.appendChild(top);
+    const pr = el("div","es-ph"); const av = el("div","es-logo sm"); if (da.logo){ const i = document.createElement("img"); i.src = da.logo; i.alt = ""; av.appendChild(i); } else av.textContent = initials(c.name);
+    const id = el("div"); id.append(el("b", null, (d && d.name) || c.name)); if (d && d.cat) id.appendChild(el("div","note", d.cat)); pr.append(av, id); card.appendChild(pr);
+    if (d && d.text){ card.appendChild(el("p","es-bio", d.text)); const n = [...d.text].length; card.appendChild(el("p","note" + (n > max ? " es-over" : ""), n + " / " + max + " caractères")); }
+    else card.appendChild(el("p","empty","Bio à écrire."));
+    if (d && d.link) card.appendChild(esLink(d.link, d.link.replace(/^https?:\/\//, "")));
+    if (d && d.cta) card.appendChild(el("span","es-cta", d.cta));
+    if (d && d.highlights){ const hl = el("div","es-hl"); d.highlights.split("\n").map(x => x.trim()).filter(Boolean).forEach(x => { const s = el("span"); s.append(el("i"), el("small", null, x)); hl.appendChild(s); }); card.appendChild(hl); }
+    if (d && d.note) card.appendChild(el("p","note es-reg", "Réglages : " + d.note));
+    if (tmp) card.appendChild(el("p","status", "En ce moment, bio du moment « " + (tmp.title || "") + " » jusqu’au " + fmtD(tmp.to) + "."));
+    const a = el("div","es-row"); if (d && d.text) a.appendChild(btn("Copier la bio","sm", () => esCopy(d.text))); const e = btn(d ? "Modifier" : "Écrire la bio","sm" + (d ? "" : " lemon"), () => esBioForm(c, k, d)); e.disabled = !writable(); a.appendChild(e); card.appendChild(a);
+    g.appendChild(card); });
+  root.appendChild(g);
+  const rest = ES_NETS.filter(([k]) => !nets.some(n => n[0] === k) && (nets.length || !ES_NETS.slice(0, 2).some(n => n[0] === k)));
+  if (rest.length){ const r = el("div","filters"); r.appendChild(el("span","muted","Ajouter un réseau :")); rest.forEach(([k, l]) => { const b = btn(l,"sm", () => esBioForm(c, k, null)); b.disabled = !writable(); r.appendChild(b); }); root.appendChild(r); }
+  const old = tmps.filter(b => b.to && b.to < t0).reverse(); if (old.length){ const det = el("details","box"); det.appendChild(el("summary", null, "Bios du moment passées (" + old.length + ")"));
+    old.forEach(b => { const it = el("p","note"); it.textContent = fmtD(b.from) + " → " + fmtD(b.to) + " · " + (b.title || "") + " : " + (b.text || ""); it.style.cursor = "pointer"; it.onclick = () => esTmpForm(c, b); det.appendChild(it); }); root.appendChild(det); }
+}
+function esCopy(t){ (navigator.clipboard ? navigator.clipboard.writeText(t || "") : Promise.reject()).then(() => toast("Copié.")).catch(() => toast("Copie impossible ici.")); }
+function esCounter(id, max){ setTimeout(() => { const ta = document.getElementById(id); if (!ta) return; const s = el("small","es-count"); ta.after(s); const up = () => { const n = [...ta.value].length; s.textContent = n + " / " + max + " caractères"; s.classList.toggle("es-over", n > max); }; ta.addEventListener("input", up); up(); }, 0); }
+function esBioForm(c, net, d){ if (!writable()) return; const [, l, max] = ES_NETS.find(n => n[0] === net);
+  openForm({ key:"esb", title: "Bio " + l + ", " + c.name, values: Object.assign({ name: c.name }, d || {}),
+    fields: [{k:"name",label:"Nom affiché",half:true},{k:"cat",label:"Catégorie affichée",half:true,ph:"Ex. Paysagiste"},{k:"text",label:"Bio (" + max + " caractères au plus)",type:"textarea",rows:5},{k:"link",label:"Lien",ph:"https://"},{k:"cta",label:"Bouton d’action",half:true,ph:"Ex. Appeler, Devis, Itinéraire"},{k:"highlights",label:"Stories à la une (une par ligne)",type:"textarea",rows:3,half:true},{k:"note",label:"Réglages et remarques",type:"textarea",rows:2,ph:"Ex. compte professionnel, catégorie masquée, lien vers le formulaire de devis"}],
+    onDelete: d ? () => remove("cnotes", d.id) : null,
+    onSave: out => save("cnotes", d ? d.id : null, Object.assign(d ? strip(d) : { kind: "bio", client: c.name, net }, out, { by: S.me || "", at: new Date().toISOString() })) });
+  esCounter("f-esb-text", max); }
+function esTmpForm(c, b){ if (!writable()) return; const t = today();
+  openForm({ key:"est", title: b.id ? "Bio du moment" : "Nouvelle bio du moment", intro: b.id ? "" : "Pour une offre, un événement ou un réel « lire la bio ». La bio habituelle revient à la date de fin.",
+    values: Object.assign({ net: "instagram", from: t, to: addDays(t, 7) }, b),
+    fields: [{k:"title",label:"Pour quoi",ph:"Ex. Offre de Noël, réel lire la bio du 04/12",req:"Indique pour quoi."},{k:"net",label:"Réseau",type:"select",options:ES_NETS.map(n => [n[0], n[1]])},{k:"from",label:"Du",type:"date",half:true,req:"Indique la date de début."},{k:"to",label:"Au",type:"date",half:true,req:"Indique la date de fin."},{k:"text",label:"Bio du moment",type:"textarea",rows:5,req:"Écris la bio."},{k:"link",label:"Lien",ph:"https://"},{k:"note",label:"Note",type:"textarea",rows:2}],
+    onDelete: b.id ? () => remove("cnotes", b.id) : null,
+    onSave: out => { if (out.to < out.from){ toast("La date de fin est avant le début."); return Promise.reject(new Error("dates")); }
+      return save("cnotes", b.id || null, Object.assign(b.id ? strip(b) : { kind: "biotmp", client: c.name, by: S.me || "", at: new Date().toISOString() }, out)); } });
+  esCounter("f-est-text", (ES_NETS.find(n => n[0] === (b.net || "instagram")) || [0, 0, 150])[2]); }
+function esTmpTasks(c, b){ if (!writable()) return;
+  openForm({ key:"estt", title: "Rappels pour la bio du moment", intro: "Deux tâches : mettre la bio en ligne le " + fmtD(b.from) + ", remettre la bio habituelle le " + fmtD(addDays(b.to, 1)) + ".", values: { who: "Clara" },
+    fields: [{k:"who",label:"Qui",type:"select",options:OWNERS}],
+    onSave: async out => { const net = (ES_NETS.find(n => n[0] === b.net) || [0, b.net])[1];
+      await save("tasks", null, { who: out.who, pole: "99", client: c.name, date: b.from, title: "Bio " + net + " : mettre « " + (b.title || "bio du moment") + " »", note: b.text + (b.link ? " Lien : " + b.link : ""), done: false });
+      await save("tasks", null, { who: out.who, pole: "99", client: c.name, date: addDays(b.to, 1), title: "Bio " + net + " : remettre la bio habituelle", note: "Fin de « " + (b.title || "bio du moment") + " ».", done: false }); },
+    done: "Deux tâches créées." }); }
+
+/* Notes de l’équipe sur le client : épinglées en haut, puis les plus récentes */
+const esNoteSort = (a, b) => (!!b.pin - !!a.pin) || (b.at || "").localeCompare(a.at || "");
+function esComposer(c){ const f = el("form","es-comp"); const ta = el("textarea"); ta.rows = 2; ta.placeholder = "Écrire une note sur " + c.name + "…"; ta.id = "es-note-" + c.id; ta.disabled = !writable();
+  const b = el("button","btn sm lemon","Ajouter"); b.type = "submit"; b.disabled = !writable();
+  f.onsubmit = async e => { e.preventDefault(); const t = ta.value.trim(); if (!t) return; b.disabled = true; try { await save("cnotes", null, { kind: "note", client: c.name, text: t, by: S.me || "", at: new Date().toISOString(), pin: false, files: [] }); ta.value = ""; toast("Note ajoutée."); } finally { b.disabled = false; } };
+  ta.onkeydown = e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) f.requestSubmit(); };
+  f.append(ta, b); return f; }
+function esNoteEl(n, compact){ const a = el("article","es-note" + (n.pin ? " pin" : ""));
+  const h = el("div","es-nh"); h.append(avatarEl(n.by || "?", 26), el("b", null, n.by || ""), el("small", null, waTime(n.at) + (n.editedAt ? " (modifiée)" : ""))); if (n.pin) h.appendChild(el("span","pill l2","Épinglée")); a.appendChild(h);
+  const p = el("p","es-nt"); linkify(p, n.text || ""); a.appendChild(p);
+  if ((n.files || []).length){ const m = el("div","id-media"); n.files.forEach(x => m.appendChild(attachEl(x))); a.appendChild(m); }
+  if (!compact){ const r = el("div","es-row"); const pb = btn(n.pin ? "Désépingler" : "Épingler","sm", () => patch("cnotes", n.id, { pin: !n.pin })); pb.disabled = !writable(); const eb = btn("Modifier","sm", () => esNoteForm(n)); eb.disabled = !writable(); r.append(pb, eb); a.appendChild(r); }
+  else { a.style.cursor = "pointer"; a.onclick = () => esNoteForm(n); }
+  return a; }
+function esNoteForm(n){ if (!writable()) return;
+  openForm({ key:"esn", title: "Note sur " + n.client, values: n, fields: [{k:"text",label:"Note",type:"textarea",rows:7,req:"Écris la note."},{k:"pin",label:"Épinglée en haut",type:"check"},{k:"files",label:"Fichiers (images, PDF)",type:"files"}],
+    onDelete: () => remove("cnotes", n.id),
+    onSave: out => save("cnotes", n.id, Object.assign(strip(n), out, { editedAt: new Date().toISOString(), editedBy: S.me || "" })) }); }
+function esNotesView(root, c){
+  root.appendChild(head("Notes de l’équipe", "Ce qu’on sait du client, ce qu’il a dit, ce qu’on a décidé. Visible par l’équipe seulement."));
+  root.appendChild(esComposer(c));
+  const ns = esNotes(c.name, "note").sort(esNoteSort);
+  if (!ns.length){ root.appendChild(el("p","empty","Aucune note pour l’instant.")); return; }
+  const g = el("div","es-notes"); ns.forEach(n => g.appendChild(esNoteEl(n, false))); root.appendChild(g);
+}
+
+const RENDER = {espaces:vEspaces, strategie:vStrategie, fiches:vFiches, parametres:vParametres, accueil:vAccueil, agenda:vAgendaHub, taches:vTachesHub, commercial:vCommercial, campagnes:vMeta, montage:vMontage, tournage:vTournage, publications:vPublications, depot:vDepot, reels:vReels, atelier:vAtelier, clients:vClients, messagerie:vMessagerie, vocal:vVocal, formation:vFormation, idees:vIdees};
 /* Chargement progressif : des blocs gris qui respirent à la place de « Chargement… » */
 function skeleton(n){ const w = el("div","sk-wrap"); w.setAttribute("aria-busy","true"); w.setAttribute("aria-label","Chargement");
   if (!n){ const t = el("div","sk sk-bar"); w.appendChild(t); n = 7; }
@@ -3986,7 +4291,7 @@ let SRCH = null;
 function srchItems(){
   const me = S.me || "Gabriel", out = [], add = (kind, label, sub, words, act) => out.push({ kind, label: label || "", sub: sub || "", key: norm([label, sub, words].join(" ")), act });
   Object.keys(RENDER).filter(canSee).forEach(v => add("Onglet", SHORT[v] || v, "Aller à l’onglet", "", () => go(v)));
-  (S.d.clients || []).filter(c => c.name !== AGENCE).forEach(c => add("Client", c.name, [c.formula, c.contact].filter(Boolean).join(" · "), [c.remember, c.ask].join(" "), () => { go("fiches"); if (S.role === "owner") setTimeout(() => editClient(c), 60); }));
+  (S.d.clients || []).filter(c => c.name !== AGENCE).forEach(c => add("Client", c.name, [c.formula, c.contact].filter(Boolean).join(" · "), [c.remember, c.ask].join(" "), () => { if (canSee("espaces")) return openEspace(c.name); go("fiches"); if (S.role === "owner") setTimeout(() => editClient(c), 60); }));
   (S.d.tasks || []).forEach(t => add("Tâche", t.title, [t.who, t.client, t.done ? "terminée" : t.date ? fmtD(t.date) : ""].filter(Boolean).join(" · "), t.note, () => { go("taches"); setTimeout(() => openTask(t), 60); }));
   (S.d.commercial || []).forEach(c => add("Commercial", c.company, [c.kind, c.stage, coOwner(c)].filter(Boolean).join(" · "), [c.notes, c.contact, c.nextAction].join(" "), () => { go("commercial"); setTimeout(() => openCommercial(c), 60); }));
   (S.d.idees || []).forEach(i => add("Idée", (i.text || i.kind || "Idée").slice(0, 90), [i.client, ideaFrom(i)].join(" · "), "", () => { S.ui.idClient = i.client || ""; remember(); go("idees"); }));
@@ -4020,11 +4325,12 @@ function openSearch(){
 document.addEventListener("keydown", e => { if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K") && S.ready !== undefined && S.d){ e.preventDefault(); SRCH ? null : openSearch(); } });
 { const a = document.getElementById("srch"), b = document.getElementById("msrch"); if (a) a.onclick = openSearch; if (b) b.onclick = openSearch; }
 function go(v){ if (BK_PENDING){ BK_PENDING.then(() => go(v)); return; } if (MERGED[v]){ S.ui[MERGED[v][1]] = v; remember(); v = MERGED[v][0]; } if (location.hash !== "#"+v) location.hash = v; else { S.view = v; render(); } }
-function fromHash(){ let h = (location.hash||"").replace("#",""); if (h === "editorial"){ S.ui.agClient = AGENCE; if (!S.ui.agLayers.includes("posts")) S.ui.agLayers = S.ui.agLayers.concat("posts"); h = "agenda"; } if (MERGED[h] && canSee(h)){ S.ui[MERGED[h][1]] = h; h = MERGED[h][0]; } S.view = RENDER[h] && canSee(h) ? h : "accueil"; }
+function fromHash(){ let h = (location.hash||"").replace("#",""); if (h === "espaces") S.ui.esClient = ""; else if (h.startsWith("espaces/")){ try { S.ui.esClient = decodeURIComponent(h.slice(8)); } catch(e){} h = "espaces"; } if (h === "editorial"){ S.ui.agClient = AGENCE; if (!S.ui.agLayers.includes("posts")) S.ui.agLayers = S.ui.agLayers.concat("posts"); h = "agenda"; } if (MERGED[h] && canSee(h)){ S.ui[MERGED[h][1]] = h; h = MERGED[h][0]; } S.view = RENDER[h] && canSee(h) ? h : "accueil"; }
 window.addEventListener("hashchange", () => { LAST_HASH = location.hash; const go = () => { fromHash(); render(); window.scrollTo(0,0); }; if (document.startViewTransition && !matchMedia("(prefers-reduced-motion: reduce)").matches && !matchMedia("(max-width:640px)").matches) document.startViewTransition(go); else go(); });
 const ICONS = {
   finance:'<rect x="3.5" y="6" width="17" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6.5 9v.01M17.5 15v.01"/>',
   chalet:'<path d="M3 19.5h18M5 19.5V11l7-6.5 7 6.5v8.5"/><path d="M10 19.5v-5h4v5M2.5 12.5 12 4l9.5 8.5"/>',
+  espaces:'<rect x="3.5" y="4" width="17" height="16" rx="3"/><circle cx="12" cy="10" r="2.8"/><path d="M7.2 17c.8-2 2.6-3.1 4.8-3.1s4 1.1 4.8 3.1"/>',
   fiches:'<rect x="4" y="4.5" width="16" height="15" rx="1.5"/><path d="M4 9.5h16M9.5 9.5v10"/>',
   parametres:'<circle cx="12" cy="12" r="3.2"/><path d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6 6l1.6 1.6M16.4 16.4 18 18M6 18l1.6-1.6M16.4 7.6 18 6"/>',
   accueil:'<path d="M4 11.2 12 4.8l8 6.4V20h-5.6v-5.2H9.6V20H4z"/>',
@@ -4047,7 +4353,7 @@ const ICONS = {
   idees:'<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>',
   focus:'<path d="M12 21c-3.6 0-6.5-2.6-6.5-6.2 0-3.4 2.6-5.2 3.6-8.3.9 1.4 1.4 2.7 1.4 4 1.3-1.1 2.3-3.2 2.1-6 3 2.4 5.9 6 5.9 10.3 0 3.6-2.9 6.2-6.5 6.2z"/><path d="M12 21c-1.6 0-2.8-1.2-2.8-2.8 0-1.7 1.6-2.6 2.8-4.2 1.2 1.6 2.8 2.5 2.8 4.2 0 1.6-1.2 2.8-2.8 2.8z"/>'
 };
-const SHORT = {finance:"Finance", strategie:"Stratégie", chalet:"Chalet", fiches:"Tableau clients", parametres:"Paramètres", accueil:"Accueil", agenda:"Agenda", taches:"Tâches", commercial:"Commercial", campagnes:"Campagnes", depot:"Dépôt", reels:"Réels finis", atelier:"Atelier", montage:"Rushs", tournage:"Tournage", publications:"Publications", clients:"Calendrier clients", messagerie:"Messagerie", vocal:"Vocal", formation:"Formation", idees:"Idées", focus:"Focus"};
+const SHORT = {espaces:"Espaces clients", finance:"Finance", strategie:"Stratégie", chalet:"Chalet", fiches:"Tableau clients", parametres:"Paramètres", accueil:"Accueil", agenda:"Agenda", taches:"Tâches", commercial:"Commercial", campagnes:"Campagnes", depot:"Dépôt", reels:"Réels finis", atelier:"Atelier", montage:"Rushs", tournage:"Tournage", publications:"Publications", clients:"Calendrier clients", messagerie:"Messagerie", vocal:"Vocal", formation:"Formation", idees:"Idées", focus:"Focus"};
 const MOBILE_MAIN = ["accueil","agenda","taches","messagerie"];
 const ico = k => { const s = document.createElementNS("http://www.w3.org/2000/svg","svg"); s.setAttribute("viewBox","0 0 24 24"); s.setAttribute("aria-hidden","true"); s.classList.add("ico"); s.innerHTML = ICONS[k] || ""; return s; };
 function renderTabs(){
@@ -4810,7 +5116,7 @@ function pmEquipe(w){
 }
 /* Pages par rôle : un interrupteur par page et par rôle. Le serveur applique les mêmes règles aux données. */
 const PAGE_LIST = [["agenda","Agenda"],["taches","Tâches"],["messagerie","Messagerie"],["vocal","Vocal"],["focus","Focus"],["clients","Calendrier clients"],["montage","Rushs"],["tournage","Feuilles de tournage"],
-  ["fiches","Tableau clients"],["strategie","Stratégie"],["commercial","Commercial"],["publications","Publications"],["idees","Idées"],["campagnes","Campagnes Meta"],["formation","Formation"]];
+  ["fiches","Tableau clients"],["espaces","Espaces clients"],["strategie","Stratégie"],["commercial","Commercial"],["publications","Publications"],["idees","Idées"],["campagnes","Campagnes Meta"],["formation","Formation"]];
 function swEl(on, fn, label, locked){ const l = el("label","sw" + (locked ? " locked" : "")); const i = el("input"); i.type = "checkbox"; i.checked = !!on; i.disabled = !!locked || !writable(); i.setAttribute("aria-label", label); i.onchange = () => fn(i.checked); l.append(i, el("span")); return l; }
 async function loadAccess(){ try { S.access = await GC.api("GET","/api/g-access"); } catch(e){ S.access = { roles: {}, people: {} }; } render(); }
 async function saveAccess(msg){ try { await GC.api("PUT","/api/g-access", { roles: S.access.roles, people: S.access.people }); if (msg) toast(msg); } catch(e){ toast(e.message); loadAccess(); } }
