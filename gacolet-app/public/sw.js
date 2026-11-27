@@ -32,8 +32,9 @@ self.addEventListener("notificationclick", e => {
   const data = e.notification.data || {}, url = data.url || "/gestion";
   e.waitUntil((async () => {
     const wins = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-    const w = wins.find(c => new URL(c.url).pathname.startsWith(url.split("#")[0]));
-    if (w){ await w.focus(); w.postMessage({ type: "open-chat", ch: data.ch || "" }); return; }
+    // Fenêtre de la même appli : l’équipe (/gestion) ou le client (le reste)
+    const team = url.startsWith("/gestion"), w = wins.find(c => new URL(c.url).pathname.startsWith("/gestion") === team);
+    if (w){ await w.focus(); if (data.ch) w.postMessage({ type: "open-chat", ch: data.ch }); else if (url.includes("#") && w.navigate) await w.navigate(url).catch(() => {}); return; }
     await self.clients.openWindow(url + (data.ch ? (url.includes("#") ? "" : "#messagerie") : ""));
   })());
 });

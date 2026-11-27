@@ -1285,6 +1285,7 @@ module.exports = function (app, { db, wrap, root }) {
       doc.sent = { at: new Date().toISOString(), by: req.user.name, html }; }
     await put("_bilans", bilanId(cid, m), doc);
     res.json({ ok: true, saved: doc });
+    if (b.send) app.locals.pushClient(cid, { title: "Votre bilan est arrivé", body: "Le point du mois préparé par l’agence vous attend dans Bilans.", url: "/#bilans", tag: "bilan-" + m }).catch(() => {});
   }));
 
   require("./bilangen")({ app, auth, ownerOnly, wrap, db, put, bilanData, normName, perOf });
@@ -1345,6 +1346,14 @@ module.exports = function (app, { db, wrap, root }) {
   setTimeout(() => agendaTick().catch(() => {}), 15000).unref();
   app.post("/api/g-push/off", auth, wrap(async (req, res) => { await PUSH.remove((req.body || {}).endpoint || ""); res.json({ ok: true }); }));
   app.post("/api/g-push/test", auth, wrap(async (req, res) => res.json({ sent: await PUSH.send("g", [req.user.name], { title: "Agence Gacolet", body: "Les notifications marchent sur cet appareil.", url: "/gestion#parametres", tag: "test" }) })));
+  /* Notifications push des clients (Matis, 27/11) : chaque personne du client abonne ses appareils dans Paramètres ; abonnement rangé sous « u<id> » */
+  app.get("/api/c-push/key", cauth, wrap(async (req, res) => res.json({ key: await PUSH.key() })));
+  app.post("/api/c-push", cauth, wrap(async (req, res) => { await PUSH.save("c", "u" + req.cu.id, (req.body || {}).sub); res.json({ ok: true }); }));
+  app.post("/api/c-push/off", cauth, wrap(async (req, res) => { await PUSH.remove((req.body || {}).endpoint || ""); res.json({ ok: true }); }));
+  app.post("/api/c-push/test", cauth, wrap(async (req, res) => res.json({ sent: await PUSH.send("c", ["u" + req.cu.id], { title: "Agence Gacolet", body: "Les notifications marchent sur cet appareil.", url: "/#parametres", tag: "test" }) })));
+  // Personnes d’un client à prévenir (sans l’aperçu de l’agence ni les accès retirés)
+  async function clientOwners(cid){ return (await db.all("SELECT id FROM users WHERE client_id = ? AND email <> ? AND token NOT LIKE 'retire-%'", [Number(cid), PREVIEW_MAIL])).map(r => "u" + r.id); }
+  app.locals.pushClient = async (cid, data) => PUSH.send("c", await clientOwners(cid), data);
   async function pushMsg(d, cl) {
     const ch = String(d.ch || ""), who = String(d.who || "Quelqu’un");
     const team = (await db.all("SELECT name FROM gusers WHERE disabled = 0")).map(r => r.name);
@@ -1360,6 +1369,8 @@ module.exports = function (app, { db, wrap, root }) {
     const what = d.audio ? "Message vocal" : String(d.text || "").trim() || (f.length > 1 ? f.length + " fichiers" : f.length ? (/^image\//.test(f[0].type || "") ? "Photo" : /^video\//.test(f[0].type || "") ? "Vidéo" : "Fichier") : "Nouveau message");
     const body = (dm ? "" : who + " : ") + what.slice(0, 300);
     await PUSH.send("g", to, { title, body, url: "/gestion#messagerie", ch, tag: "ch-" + ch });
+    if (!d.ext) { const m = ch.match(/^(?:tg:)?cg:(\d+)$/) || ch.match(/^cdm:(\d+)\|/);
+      if (m) await PUSH.send("c", await clientOwners(m[1]), { title: ch.startsWith("cdm:") ? who + ", Agence Gacolet" : shoot ? "Agence Gacolet, tournages" : "Agence Gacolet", body: (ch.startsWith("cdm:") ? "" : who + " : ") + what.slice(0, 300), url: "/#messagerie", ch, tag: "ch-" + ch }); }
   }
 
   // ---------- Prélèvements, contrats et factures : le propriétaire saisit, le client consulte ----------

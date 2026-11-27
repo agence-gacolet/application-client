@@ -877,6 +877,34 @@ function docRow(d){
   if (d.url) end.appendChild(el("span","bl-open", d.kind === "contrat" ? "Ouvrir" : "PDF"));
   r.appendChild(end); return r;
 }
+/* ---------- Notifications push du client (Matis, 27/11) ---------- */
+const pushKey = () => "gc-push-" + ((S.f && S.f.client && S.f.client.id) || "") + "-" + ((S.f && S.f.me && S.f.me.name) || "");
+const pushOk = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const pushOn = () => pushOk() && ls.get(pushKey()) === "1" && Notification.permission === "granted";
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
+const standaloneApp = () => window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+async function pushEnable(){
+  if (S.f && S.f.preview){ toast("Aperçu en lecture seule."); return false; }
+  if (!pushOk()){ toast(isIOS() && !standaloneApp() ? "Sur iPhone : installez d’abord l’application sur l’écran d’accueil, puis ouvrez-la depuis l’icône." : "Cet appareil ne gère pas les notifications."); return false; }
+  const p = await Notification.requestPermission();
+  if (p !== "granted"){ toast("Notifications refusées : autorisez-les dans les réglages de l’appareil."); return false; }
+  try {
+    const reg = await navigator.serviceWorker.register("/sw.js"); await navigator.serviceWorker.ready;
+    const { key } = await api("/api/c-push/key");
+    const raw = atob(key.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((key.length + 3) % 4)), k = new Uint8Array([...raw].map(c => c.charCodeAt(0)));
+    let sub = await reg.pushManager.getSubscription(); if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: k });
+    await api("/api/c-push", { body: { sub: sub.toJSON() } });
+    ls.set(pushKey(), "1"); syncBadge(); toast("Notifications activées sur cet appareil."); return true;
+  } catch(e){ toast("Activation impossible : " + e.message); return false; }
+}
+async function pushDisable(quiet){
+  try { const reg = await navigator.serviceWorker.getRegistration("/"); const sub = reg && await reg.pushManager.getSubscription(); if (sub){ await api("/api/c-push/off", { body: { endpoint: sub.endpoint } }).catch(() => {}); await sub.unsubscribe(); } } catch(e){}
+  ls.del(pushKey()); if (!quiet) toast("Notifications coupées sur cet appareil.");
+}
+/* Pastille de l’icône = messages non lus ; le service worker repart de ce chiffre */
+function syncBadge(){ if (!S.f) return; const n = unread();
+  try { if (navigator.setAppBadge){ n ? navigator.setAppBadge(n) : navigator.clearAppBadge(); } } catch(e){}
+  try { navigator.serviceWorker && navigator.serviceWorker.controller && navigator.serviceWorker.controller.postMessage({ type: "badge", n }); } catch(e){} }
 /* ---------- Paramètres du client : son prénom, son compte, l’application ---------- */
 function vParametres(root){
   root.appendChild(head("Paramètres", "Votre profil et l’application."));
@@ -905,7 +933,17 @@ function vParametres(root){
   const co = card("Votre compte"); const dl = el("dl","cl-dl");
   [["Entreprise", (S.f && S.f.client && S.f.client.name) || c.name || ""], ["Formule", c.formula || ""]].filter(x => x[1]).forEach(([k, v]) => dl.append(el("dt",null,k), el("dd",null,v)));
   co.appendChild(dl); const a2 = el("div","actions"); a2.appendChild(btn("Écrire à l’agence","", () => { S.mmode = "main"; S.mch = "grp"; S.conv = true; go("messagerie"); })); co.appendChild(a2);
-  const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+  /* Notifications push (Matis, 27/11) : messages de l’agence et bilans, même application fermée */
+  const nt = card("Notifications", "Recevez sur cet appareil les messages de l’agence et l’arrivée de vos bilans, même quand l’application est fermée.");
+  const on = pushOn(), st = !pushOk() ? (isIOS() && !standaloneApp() ? "Sur iPhone : installez d’abord l’application sur l’écran d’accueil (Safari, Partager, « Sur l’écran d’accueil »), puis ouvrez-la depuis l’icône." : "Cet appareil ne gère pas les notifications.")
+    : Notification.permission === "denied" ? "Les notifications sont bloquées pour l’application : autorisez-les dans les réglages de l’appareil." : on ? "Activées sur cet appareil." : "Désactivées sur cet appareil.";
+  nt.appendChild(el("p","cl-nt-st" + (on ? " on" : ""), st));
+  const a4 = el("div","actions");
+  if (on) a4.append(btn("Envoyer une notification de test","", async () => { try { const r = await api("/api/c-push/test", { body: {} }); toast(r.sent ? "Envoyée, elle arrive dans quelques secondes." : "Aucun appareil abonné : désactivez puis réactivez."); } catch(e){ toast(e.message); } }),
+    btn("Couper sur cet appareil","", async () => { await pushDisable(); render(); }));
+  else if (pushOk() && Notification.permission !== "denied") a4.appendChild(btn("Activer les notifications","lemon", async () => { if (await pushEnable()) render(); }));
+  if (a4.childNodes.length) nt.appendChild(a4);
+  const standalone = standaloneApp();
   const ap = card("L’application", standalone ? "Installée sur cet appareil. Elle se met à jour toute seule." : "Pour la garder à portée de main : dans Safari, bouton Partager puis « Sur l’écran d’accueil ».");
   const a3 = el("div","actions"); a3.append(btn("Actualiser","", () => location.reload()), btn("Se déconnecter","", () => $("#logout").click())); ap.appendChild(a3);
 }
@@ -979,7 +1017,7 @@ function render(){
   if (enter) window.scrollTo(0, 0);
   const keepY = chat ? 0 : window.scrollY;
   renderTabs(); root.textContent = ""; document.body.classList.toggle("chat-full", chat); document.body.classList.toggle("cl-home", S.view === "accueil"); /* Accueil immobile (Matis, 17/11) */
-  R[S.view](root);
+  R[S.view](root); syncBadge();
   window.scrollTo(0, keepY);
   if (fid){ const n = document.getElementById(fid); if (n){ n.focus({ preventScroll: true }); try { if (caret != null) n.setSelectionRange(caret, caret); } catch(e){} } }
   { const conv = chat && !!S.conv && matchMedia("(max-width:900px)").matches;
@@ -1034,7 +1072,7 @@ function startPoll(){ clearInterval(poll); poll = setInterval(() => { if (docume
   vv.addEventListener("resize", ask); vv.addEventListener("scroll", ask); document.addEventListener("focusin", () => setTimeout(ask, 50)); document.addEventListener("focusout", () => setTimeout(ask, 50));
 })();
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && TOKEN && S.d) { reloadMe().then(() => render()).catch(() => {}); loadFeed().catch(() => {}); } });
-$("#logout").onclick = () => confirmBox("Se déconnecter ?", "Il faudra saisir à nouveau votre code sur cet appareil.", "Se déconnecter", () => { TOKEN = null; ls.del("gc-token"); ls.del(CACHE_KEY); start(); });
+$("#logout").onclick = () => confirmBox("Se déconnecter ?", "Il faudra saisir à nouveau votre code sur cet appareil.", "Se déconnecter", async () => { if (pushOn()) await pushDisable(true); TOKEN = null; ls.del("gc-token"); ls.del(CACHE_KEY); start(); });
 
 /* ---------- Inscription avec le code de l’agence ---------- */
 const TOUCH = navigator.maxTouchPoints > 0 || "ontouchstart" in window;
@@ -1090,6 +1128,10 @@ function start(){
 if (APERCU){ const b = el("div","cl-apercu", "Aperçu de l’agence : vous voyez l’espace de ce client, en lecture seule. ");
   const back = el("a", null, "Retour à l’espace équipe"); back.href = "/gestion#parametres"; back.style.cssText = "color:inherit;text-decoration:underline;white-space:nowrap"; b.appendChild(back);
   document.body.appendChild(b); document.body.classList.add("has-apercu"); }
-if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
+if ("serviceWorker" in navigator){
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
+  navigator.serviceWorker.addEventListener("message", ev => { const d = ev.data || {}; if (d.type !== "open-chat" || !S.f) return; const ch = String(d.ch || "");
+    if (!ch){ return; } S.mmode = ch.startsWith("tg:") ? "shoot" : "main"; S.mch = ch.startsWith("cdm:") ? "dm:" + ch.split("|")[1] : "grp"; S.conv = true; go("messagerie"); });
+}
 start();
 })();
